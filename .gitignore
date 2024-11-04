@@ -1,7 +1,7 @@
 # Byte-compiled files
 __pycache__/
 *.py[cod]
-.log
+*.log
 
 # Virtual environments
 venv/
@@ -19,3 +19,7 @@ staticfiles/
 
 # Docker-related files
 docker-compose.override.yml
+
+
+# Ignore celery beat schedule files
+celerybeat-schedule
