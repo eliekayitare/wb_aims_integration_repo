@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     'authentications',
     'aimsintegration',
     'channels',
+    'whitenoise',  # For serving static files
     'django_celery_beat',       # For periodic tasks
 ]
 
