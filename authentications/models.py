@@ -66,7 +66,7 @@ class User(AbstractBaseUser):
     position = models.CharField(max_length=255)
     personal_email = models.EmailField(unique=True, null=True, blank=True)
     personal_email = models.EmailField(unique=False, null=True, blank=True)
-    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True,default=get_staff_role)
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True)
     department = models.CharField(max_length=255)
     section = models.CharField(max_length=255, null=True, blank=True)
     station = models.CharField(max_length=255, null=True, blank=True)
