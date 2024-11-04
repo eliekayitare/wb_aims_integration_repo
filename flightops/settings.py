@@ -80,7 +80,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost','wbhub@rwandair.com','10.0.0.120']
+ALLOWED_HOSTS = ['web', '10.0.0.120', 'localhost', '127.0.0.1']
 
 # Allowed Hosts
 # ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
