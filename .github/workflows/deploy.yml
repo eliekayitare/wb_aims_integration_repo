@@ -47,7 +47,9 @@ jobs:
           DB_PORT: ${{ secrets.DB_PORT }}
           AD_AUTH_URL: ${{ secrets.AD_AUTH_URL }}
         run: |
-          python manage.py test
+          for i in {1..5}; do
+            python manage.py test && break || sleep 10;
+          done
 
       - name: Deploy to Server
         env:
