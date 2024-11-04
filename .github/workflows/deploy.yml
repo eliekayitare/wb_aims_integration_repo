@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.10
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
@@ -39,10 +39,16 @@ jobs:
           echo "${SSH_PRIVATE_KEY}" > id_rsa
           chmod 600 id_rsa
           ssh -o StrictHostKeyChecking=no -i id_rsa ${SERVER_USER}@${SERVER_HOST} << 'EOF'
-            cd /home/administrator/wb_aims_integrations
-            git pull origin main
-            docker-compose down
-            docker-compose up -d --build
-            docker-compose exec web python manage.py migrate
-            docker-compose exec web python manage.py collectstatic --no-input
+            echo "Navigating to project directory"
+            cd /home/administrator/wb_aims_integrations || exit 1
+            echo "Pulling latest changes"
+            git pull origin main || exit 1
+            echo "Bringing down existing Docker containers"
+            docker-compose down || exit 1
+            echo "Rebuilding and starting Docker containers"
+            docker-compose up -d --build || exit 1
+            echo "Running database migrations"
+            docker-compose exec web python manage.py migrate || exit 1
+            echo "Collecting static files"
+            docker-compose exec web python manage.py collectstatic --no-input || exit 1
           EOF
