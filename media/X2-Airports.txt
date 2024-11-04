@@ -1,0 +1,358 @@
+﻿030       HT                                          E039120945   S06524120    
+132  HRZA HR kamembe                                  E028543035   S02273353    
+AAN  OMAL OM AL AIN INTL                              E055363300   N24154200    
+ABJ  DIAP DI ABIDJAN,FELIX HOUPHOUET-BOIGNY           W003554320   N05151620    
+ABV  DNAA DN ABUJA,NNAMDI AZIKIWE INTL                E007154800   N09002400    
+ACC  DGAA DG ACCRA,KOTOKA INTL                        W000101200   N05354700    
+ADD  HAAB HA ADDIS ABEBA,BOLE INTL                    E038475403   N08584305    
+ADJ  OJAM OJ AMMAN,MARKA INTL                         E035592966   N31582173    
+AEH  FTTC FT ABECHE                                   E020505600   N13505000    
+AER  URSS U  SOCHI                                    E039565400   N43264200    
+AGB  EDMA ED AUGSBURG                                 E010555435   N48253057    
+AGP  LEMG LE MALAGA                                   W004295715   N36402990    
+AHB  OEAB OE ABHA                                     E042392005   N18142402    
+AID  KAID K  ANDERSON MUN-DARLINGTON,IN               W085364678   N40063104    
+ALG  DAAG DA ALGIERS,HOUARI BOUMEDIENE                E003130100   N36414000    
+ALJ  FAAB FA ALEXANDER BAY                            E016320600   S28342200    
+AMD  VAAH V  AHMEDABAD                                E072373510   N23041630    
+AMM  OJAI OJ AMMAN,QUEEN ALIA INTL                    E035593557   N31432120    
+AMS  EHAM EH AMSTERDAM,SCHIPHOL                       E004455100   N52182900    
+AQJ  OJAQ OJ AQABA INTL                               E035010504   N29364183    
+ASK  DIYO DI YAMOUSSOUKRO                             W005215000   N06542100    
+ASM  HHAS HH ASMARA INTL                              E038540600   N15170600    
+ASN  KASN K  TALLADEGA MUN,AL                         W086030309   N33341168    
+ASW  HESN HE ASWAN INTL                               E032491900   N23575000    
+ATH  LGAV LG ATHENS,ELEFTHERIOS V                     E023564020   N37561212    
+ATL  KATL K  ATLANTA, THE HARTSFIELD INTL,GA          W084253700   N33382560    
+ATS  KATS MM ARTESIA MUN,NM                           W104280367   N32510910    
+AUH  OMAA OM ABU DHABI INTL                           E054390400   N24255900    
+AYT  LTAI LT ANTALYA                                  E030473400   N36540100    
+BAH  OBBI OB BAHRAIN INTL                             E050380100   N26161500    
+BAT  SBBT SB BARRETOS,CHAFEI AMSEI                    W048354500   S20350800    
+BBU  LRBS LR BUCHAREST,BANEASA                        E026061294   N44301254    
+BEG  LYBE LY BELGRADE                                 E020182544   N44490978    
+BEK       V  RAE BARELI                               E081140000   N26130000    
+BEY  OLBA OL BEIRUT INTL                              E035292410   N33490858    
+BFX  FKKU FK Bafoussam Airport                        E010212400   N05315400    
+BGF  FEFF FE BANGUI,M'POKO                            E018311100   N04235200    
+BGO  ENBR EN BERGEN,FLESLAND                          E005130500   N60173700    
+BGR  KBGR K  BANGOR INTL,ME                           W068494130   N44482680    
+BGW       OR BAGHDAD                                  E044210000   N33020000    
+BJL  GBYD GB BANJUL INTL                              W016392813   N13203308    
+BJM  HBBA HB BUJUMBURA INTL                           E029190388   S03191366    
+BJV  LTFE LT MILAS,BODRUM                             E027405300   N37145000    
+BKK  VTBS VT BANGKOK INTL                             E100445000   N13405200    
+BKO  GABS GA BAMAKO,SENOU                             W007563570   N12321630    
+BLR  VOBG V  BANGALORE                                E077395698   N12570339    
+BOD  LFBD LF BORDEAUX,MERIGNAC                        W000425500   N44494300    
+BOJ  LBBG LB BURGAS                                   E027310000   N42340000    
+BOM  VABB V  MUMBAI,CHHATRAPATI SHIVAJI INTL          E072520000   N19052700    
+BOO  ENBO EN BODO                                     E014215500   N67160900    
+BQH  EGKB EG BIGGIN HILL                              E000015700   N51195100    
+BRG       K  WHITESBURG                               W0825200.00  N371300.00   
+BRU  EBBR EB BRUSSELS NATIONAL                        E004290400   N50540500    
+BSL       LS BASEL / MULHOUSE                         E0073200.00  N473500.00   
+BTL  KBTL K  BATTLE CREEK,MI,KELLOGG                  W085150533   N42182620    
+BUD  LHBP LH BUDAPEST,FERIHEGY                        E019154251   N47262158    
+BWI  KBWI K  BALTIMORE-WASHINGTON INTL,MD             W076400600   N39103130    
+BZV  FCBB FC BRAZZAVILLE,MAYA-MAYA                    E015145400   S04152000    
+CAI  HECA HE CAIRO INTL                               E031245000   N30064100    
+CAN  ZGGG Z  GUANGZHOU,BAIYUN                         E113160000   N23110000    
+CBH       DA BECHAR                                   W0021600.00  N313900.00   
+CBI       Y  CAPE BARREN ISLAND                       E1480100.00  S400200.00   
+CCU  VECC V  KOLKATA,NETAJI SUBHASH CHANDRA BOSE IN   E088265700   N22391100    
+CDG  LFPG LF PARIS, CHARLES DE GAULLE                 E002325200   N49003500    
+CDJ  SBAA SB CONCEICAO DO ARAGUAIA                    W049181100   S08205500    
+CEQ  LFMD LF CANNES,MANDELIEU                         E006571900   N43325100    
+CGB  SBCY SB CUIABA,MARECHAL RONDON INTL              W056070300   S15390000    
+CGD       Z  CHANGDE                                  E1114100.00  N290200.00   
+CHP       K  CIRCLE HOT SPGS.                         W1443600.00  N652900.00   
+CHQ  LGSA LG CHANIA,SOUDA AB                          E024090600   N35315600    
+CHR  LFLX LF CHATEAUROUX,DEOLS                        E001431600   N46513700    
+CHX       MP CHANGUINOLA                              W0820300.00  N092700.00   
+CIA  LIRA LI ROME,CIAMPINO                            E012354114   N41475744    
+CKY  GUCY GU CONAKRY,GBESSIA                          W013364306   N09343680    
+CLE  KCLE K  CLEVELAND-HOPKINS INTL,OH                W081505783   N41243922    
+CMB  VCBI VC COLOMBO,BANDARANAIKE INTL                E079530708   N07104868    
+CMN  GMMN GM CASABLANCA,MOHAMED V                     W007345400   N33215100    
+CNX  VTCC VT CHIANG MAI INTL                          E098574600   N18461700    
+COO  DBBB DB COTONOU,CADJEHOUN                        E002230000   N06212300    
+CPT  FACT FA CAPE TOWN INTL                           E018361670   S33580532    
+CRA  LRCV LR CRAIOVA                                  E023531872   N44190532    
+CRK  RPLC RP LUZON ISLAND                             E1203300.00  N151100.00   
+CTA  LICC LI CATANIA,FONTANAROSSA                     E015034944   N37275842    
+CTU  ZUUU Z  CHENGDU,SHUANGLIU                        E103565400   N30344800    
+CVO  KCVO K  CORVALLIS MUN,OR                         W123172339   N44294990    
+CZL  DABC DA CONSTANTINE,MOHAMED BOUDIAF              E006371800   N36171200    
+DAC  VGZR VG DHAKA,ZIA INTL                           E090235202   N23503605    
+DAR  HTDA HT DAR-ES-SALAAM INTL                       E039120945   S06524120    
+DEL  VIDP V  DELHI,INDIRA GANDHI INTL                 E077064800   N28340700    
+DFW  KDFW K  DALLAS-FT WORTH INTL,TX                  W097021392   N32534542    
+DHR       EH DEN HELDER                               E0044600.00  N525500.00   
+DIA  OTBD OT Doha International Airport               E051335420   N25153949    
+DJE  DTTJ DT DJERBA,ZARZIS                            E010463800   N33523200    
+DKR  GOOY GO DAKAR,LEOPOLD SEDAR SENGHOR              W017284550   N14443780    
+DLA  FKKD FK DOUALA                                   E009423000   N04004200    
+DLM  LTBS LT MUGLA,DALAMAN                            E028472938   N36424523    
+DME  UUDD U  MOSCOW,DOMODEDOVO                        E037543000   N55243000    
+DMK  VTBD VT DON MUANG                                E100362400   N13544500    
+DMM  OEDF OE DAMMAM,KING FAHD INTL                    E049475400   N26281400    
+DOD  HTDO HT DODOMA                                   E035445796   S06101329    
+DOH  OTHH OT DOHA INTL                                E051335420   N25154005    
+DPS  WRRR W  DEN PASAR,BALI INTL                      E115100869   S08445076    
+DSS  GOBD GO BLAISE DIAGNE INTERNATIONAL                                        
+DUB  EIDW EI DUBLIN INTL                              W006161200   N53251700    
+DUR  FADN FA DURBAN INTL                              E030565734   S29575608    
+DUS  EDDL ED DUSSELDORF                               E006452600   N51165100    
+DWC  OMDW OM JABAL ALI                                                          
+DXB  OMDB OM DUBAI INTL                               E055215200   N25151000    
+EBB  HUEN HU ENTEBBE INTL                             E032262595   N00022693    
+EBL  ORER OR ERBIL                                    E043564800   N36141700    
+EGN  HSGN HS GENEINA                                  E022270000   N13292000    
+ELF  HSFS HS EL FASHER                                E025190000   N13370000    
+ELG  DAUE DA EL GOLEA                                 E002515300   N30340800    
+ELQ  OEGS OE GASSIM                                   E043462608   N26181017    
+EPK       LC EPISKOPI                                 E0325400.00  N340400.00   
+ESB  LTAC LT ANKARA,ESENBOGA                          E032594262   N40074169    
+EWR  KEWR K  NEWARK INTL,NJ                           W074100718   N40413299    
+FAB  EGLF EG FARNBOROUGH                              W000463500   N51163300    
+FAN  ENLI EN LISTA                                    E006373000   N58060100    
+FBM  FZQA FZ LUBUMBASHI INTL                          E027315123   S11352863    
+FCO  LIRF LI ROME,FIUMICINO                           E012150811   N41484243    
+FEZ  GMFF GM FES,SAISS                                W004575400   N33555000    
+FIH  FZAA FZ KINSHASA,N'DJILI INTL                    E015264088   S04230813    
+FJR  OMFJ OM FUJAIRAH INTL                            E056195000   N25063500    
+FLL  KFLL K  FT LAUDERDALE-HOLLYWOOD INTL,FL          W080090990   N26042130    
+FRA  EDDF ED FRANKFURT, MAIN                          E008341400   N50020000    
+FRU  UAFM UY BISHKEK,MANAS                            E074284200   N43034200    
+GBE  FBSK FB GABORONE,SIR SERETSE KHAMA INTL          E025550800   S24332100    
+GCI  EGJB EG GUERNSEY                                 W002360709   N49260584    
+GED  KGED K  GEORGETOWN,DE,SUSSEX CO                  W075213200   N38412110    
+GIZ  OEGN OE JAZAN                                    E042350891   N16540365    
+GNA  UMMG UM GRODNO                                   E024031800   N53360600    
+GOA  VOGO LI GENOA,SESTRI                             E008501523   N44244853    
+GOI  VAGO V  GOA,DABOLIM NAVY                         E073493300   N15222700    
+GOM  FZNA FZ GOMA INTL                                E029140000   S01400000    
+GRR  KGRR K  GRAND RAPIDS,MI,GERALD R. FORD INTL      W085312210   N42525100    
+GVA  LSGG LS GENEVA, COINTRIN                         E006063200   N46141700    
+GYD  UBBB UB BAKU INTL, HEYDAR ALIYEV                 E050024800   N40280300    
+HAH  FMCH KM MORONI,PRINCE SAID IBRAHIM               E043161677   S11321147    
+HAJ  EDDV ED HANNOVER                                 E009410068   N52273677    
+HAM  EDDH ED HAMBURG                                  E009591800   N53374900    
+HAS  OEHL OE HAIL                                     E041411400   N27262300    
+HBE  HEBA HE ALEXANDRIA, BORG EL ARAB INTL            E029414400   N30550400    
+HDY  VTSS VT SONGKHLA,HAT YAI INTL                    E100234200   N06555800    
+HEB       VY HENZADA                                  E0952700.00  N173600.00   
+HER  LGIR LG IRAKLION,NIKOS KAZANTZAKIS               E025103900   N35201700    
+HKT  VTSP VT PHUKET INTL                              E098183337   N08064513    
+HLA  FALA FA LANSERIA                                 E027552883   S25562296    
+HME  DAUH DA OUED IRARA-KRIM BELKACEM                 E006082600   N31402600    
+HOF  OEAH OE HOFUF                                    E0490525.00  N250325.00   
+HRE  FVHA FV HARARE INTL                              E031053800   S17555800    
+HRG  HEGN HE HURGHADA INTL                            E033480300   N27104300    
+HRY       Y  HENBURY                                  E1331400.00  S243500.00   
+HSV  KHSV K  HUNTSVILLE INTL-JONES,AL                 W086462319   N34382561    
+HUE       HA HUMERA                                   E0363400.00  N141600.00   
+HYD  VOHS V  RAJIV GANDHI INTL                        E078257000   N17141000    
+IAD  KIAD K  WASHINGTON DULLES INTL,VA                W077272092   N38564032    
+IAH  KIAH K  HOUSTON,TX,G BUSH INTERCONTINENTAL/HOUST W095202300   N29584970    
+IBZ  LEIB LE IBIZA                                    E001222322   N38522229    
+ICN  RKSI RK SEOUL/INCHEON,INCHEON INTL               E126263500   N37277500    
+ICT  KICT K  WICHITA MID-CONTINENT,KS                 W097255890   N37385980    
+IND  KIND K  INDIANAPOLIS INTL,IN                     W086173978   N39430239    
+IOM  EGNS EG ISLE OF MAN                              W004372600   N54050000    
+ISB  OPRN OP ISLAMABAD,CHACKLALA INTL                 E073055546   N33370036    
+IST  LTBA LT ISTANBUL,ATATURK                         E028485074   N40583420    
+IXG  VABM V  BELGAUM                                  E074370700   N15512700    
+JAX  KJAX K  JACKSONVILLE INTL,FL                     W081411630   N30293860    
+JED  OEJN OE JEDDAH,KING ABDULAZIZ INTL               E039091850   N21405200    
+JFK  KJFK K  NEW YORK,NY,KENNEDY INTL                 W073464413   N40382310    
+JIB  HDAM HD Djibouti-Ambouli International Airport   E000000000   N00000000    
+JMK  LGMK LG MIKONOS                                  E025205020   N37261430    
+JNB  FAOR FA JOHANNESBURG INTL                        E028143234   S26080130    
+JRO  HTKJ HT KILIMANJARO INTL                         E037042806   S03254587    
+JUB  HSSJ HS JUBA                                     E031353500   N04522000    
+KAB  FVKB FV KARIBA                                   E028530800   S16310900    
+KAD  DNKA DN NEW KADUNA                               E007191000   N10414200    
+KAN  DNKN DN Mallam Aminu Kano International Airport  E008312400   N12025400    
+KBF       W  KARUBAGA                                 E1380200.00  S034500.00   
+KBP  UKBB UK KYIV,BORYSPIL'                           E030534200   N50204200    
+KDH  OAKN OA KANDAHAR                                 E065504100   N31301600    
+KEF  BIKF BI KEFLAVIK                                 W022362000   N63590600    
+KGK       K  KOLIGANEK                                W1571700.00  N594300.00   
+KGL  HRYR HR KIGALI INTERNATIONAL AIRPORT             E030075925   S01575961    
+KHI  OPKC OP KARACHI,QUAID-E-AZAM INTL                E067094594   N24543081    
+KMC  OEKK K  KING KHALID MILITARY CITY                E045314099   N27540343    
+KME  HRZA HR KAMEMBE                                  E028543035   S02273353    
+KMG  ZPPP Z  KUNMING,WUJIABA                          E102450000   N25000000    
+KRP  EKKA EK KARUP AB                                 E009072866   N56175085    
+KRT  HSSK HS KHARTOUM                                 E032332500   N15350500    
+KSE       HU KASESE                                   E0300600.00  N001100.00   
+KUF  UWWW U  SAMARA,KURUMOCH                          E050091800   N53300600    
+KUL  WMKK WM KUALA LUMPUR INTL - SEPANG               E101415265   N02443581    
+KWI  OKBK OK KUWAIT INTL                              E047580814   N29133564    
+KZN  UWKD U  KAZAN                                    E049165400   N55362400    
+LAD  FNLU FN LUANDA,4TH OF FEBRUARY                   E013140208   S08511977    
+LBG  LFPB LF PARIS,LE BOURGET                         E002262937   N48581029    
+LBJ       W  LABUAN BAJO                              E1195300.00  S082900.00   
+LBV  FOOL FO LIBREVILLE,LEON M'BA                     E009244400   N00273000    
+LCA  LCLK LC LARNACA INTL                             E033374920   N34524380    
+LCY  EGLC EG LONDON CITY                              E000031573   N51301892    
+LED  ULLI U  ST PETERSBURG,PULKOVO                    E030155400   N59480000    
+LFLX CHR  LF Aéroport de Châteauroux-Centre           E000000000   N00000000    
+LFW  DXXX DX LOME,TOKOIN                              E001151550   N06095740    
+LGG  EBLG EB LIEGE                                    E005263400   N50381100    
+LGW  EGKK EG LONDON, GATWICK                          W000112500   N51085300    
+LHE  OPLA OP LAHORE INTL                              E074240941   N31311763    
+LHR  EGLL EG LONDON, HEATHROW                         W000274100   N51283900    
+LIL  LFQQ LF LILLE,LESQUIN                            E003051300   N50334800    
+LIM  SPIM SP LIMA-CALLAO,JORGE CHAVEZ INTL            W077064400   S12010600    
+LIN  LIML LI MILAN, LINATE                            E009164219   N45265764    
+LLW  FWLI FW LILONGWE INTL                            E033463928   S13470039    
+LNG       AY LESE                                     E146160000   S08160000    
+LNK  KLNK K  LINCOLN MUN,NE                           W096453330   N40510350    
+LNN  KLNN K  WILLOUGHBY LOST NATION MUN,OH            W081232510   N41410210    
+LNZ  LOWL LO LINZ                                     E014111700   N48140700    
+LOS  DNMM DN LAGOS,MURTALA MUHAMMED                   E003190700   N06342900    
+LTN  EGGW EG LONDON, LUTON                            W000220600   N51522800    
+LUN  FLKK FL LUSAKA INTL                              E028272100   S15193600    
+LVI  FLLI FL LIVINGSTONE                              E025490700   S17490800    
+LXR  HELX HE LUXOR INTL                               E032422300   N25401500    
+MAB  SBMA SB MARABA                                   W049081700   S05220500    
+MAD  LEMD LE MADRID,BARAJAS                           W003333940   N40282003    
+MAN  EGCC EG MANCHESTER                               W002162982   N53211348    
+MAP       AY MAMAI                                    E1493100.00  S101700.00   
+MBA  HKMO HK MOMBASA,MOI                              E039355747   S04013508    
+MCO  KMCO K  ORLANDO INTL,FL                          W081185770   N28254400    
+MCT  OOMS OO MUSCAT,SEEB INTL                         E058165400   N23353400    
+MDL  VYCZ VY MANDALAY,CHANMYATHAZI                    E096052447   N21564047    
+MED  OEMA OE MADINAH,PR MOHAMMAD BIN ABDULAZIZ INTL   E039422013   N24330847    
+MEM  KMEM K  MEMPHIS INTL,TN                          W089583635   N35023668    
+MEZ       FA MESSINA                                  E0295900.00  S222100.00   
+MGQ  HCMM HC MOGADISHU                                E0451800.00  N020000.00   
+MIA  KMIA K  MIAMI INTL,FL                            W080172600   N25473570    
+MIR  DTMB DT MONASTIR,HABIB BOURGUIBA                 E010451700   N35452900    
+MLA  LMML LM MALTA,LUQA                               E014284100   N35513100    
+MLE  VRMM VR MALE INTL                                E073314492   N04112994    
+MLH  LFSB LF MULHOUSE / BASLE                         E007314500   N47352400    
+MLL       K  MARSHALL                                 W1620400.00  N615200.00   
+MNC  FQNC FQ NACALA                                   E0404300.00  S142900.00   
+MNL  RPLL RP MANILA,NINOY AQUINO INTL                 E1210110.49  N143031.13   
+MPL  LFMT LF MONTPELLIER/MEDITERRANEE                 E003574100   N43350000    
+MPM  FQMA FQ MAPUTO                                   E032342333   S25551181    
+MRS  LFML LF MARSEILLE/PROVENCE                       E005125400   N43261200    
+MRU  FIMP FI MAURITIUS INTL                           E057405900   S20254800    
+MSB       TF MARIGOT                                  W0630600.00  N180200.00   
+MST  EHBK EH MAASTRICHT-AACHEN                        E005463700   N50545700    
+MSW       HH MASSAWA                                  E0392600.00  N153600.00   
+MTS  FDMS FD MANZINI,MATSAPHA INTL                    E031182800   S26314300    
+MUC  EDDM ED MUNICH                                   E011471000   N48211400    
+MWZ  HTMW HT MWANZA                                   E032555496   S02263886    
+MXB       W  MASAMBA                                  E1201900.00  S023300.00   
+MXP  LIMC LI MILAN, MALPENSA                          E008432314   N45374764    
+NBO  HKJK HK NAIROBI,JOMO KENYATTA                    E036553999   S01190927    
+NCE  LFMN LF NICE/COTE D'AZUR                         E007125400   N43395500    
+NDJ  FTTJ FT N'DJAMENA                                E015012900   N12073000    
+NIM  DRRN DR NIAMEY,DIORI HAMANI                      E002101300   N13285400    
+NKC  GQNO GQ NOUAKCHOTT                               W015570000   N18054400    
+NLA  FLND FL NDOLA                                    E028395600   S12594400    
+NMT       VY NAMTU                                    E0972400.00  N230400.00   
+NOS  FMNN FM NOSY-BE,FASCENE                          E048183300   S13190500    
+NSI  FKYS FK YAOUNDE,NSIMALEN                         E011330900   N03430200    
+OLB  LIEO LI OLBIA,COSTA SMERALDA                     E009310383   N40535540    
+ORD  KORD K  CHICAGO-O'HARE INTL,IL                   W087541507   N41584654    
+ORY  LFPO LF PARIS,ORLY                               E002224600   N48432400    
+OSS  UAFO UY OSH                                      E072473600   N40363000    
+OTP  LROP LR BUCHAREST,OTOPENI                        E026050643   N44341557    
+OUA  DFFD DF OUAGADOUGOU                              W001304300   N12211300    
+OUD  GMFO GM Oujda - Angads Airport                   W001553200   N34471000    
+OVB  UNNT U  NOVOSIBIRSK,TOLMACHEVO                   E082390600   N55004200    
+OXB  GGOV GG BISSAU,OSVALDO VIEIRA                    W015392700   N11531900    
+PAD  EDLP ED PADERBORN-LIPPSTADT                      E008365874   N51365072    
+PEK  ZBAA Z  BEIJING CAPITAL                          E116352400   N40043000    
+PHC  DNPO DN PORT HARCOURT                            E006570100   N05005200    
+PHL  KPHL K  PHILADELPHIA INTL,PA                     W075142811   N39521903    
+PIT  KPIT K  PITTSBURGH INTL,PA                       W080135834   N40292928    
+PLZ  FAPE FA PORT ELIZABETH                           E025363700   S33592400    
+PMI  LEPA LE PALMA DE MALLORCA                        E002441971   N39330603    
+PML       K  PORT MOLLER                              W1603300.00  N560000.00   
+PMO  LICJ LI PALERMO,PUNTA RAISI                      E013055724   N38105541    
+PMP       AY PIMAGA                                   E1430300.00  S062900.00   
+PNO       MM PINOTEPA NACIONAL                        W0980300.00  N162100.00   
+PNQ       V  POONA                                    E0735500.00  N183500.00   
+PNR  FCPP FC POINTE NOIRE                             E000000000   N00000000    
+POL       FQ PEMBA                                    E0403100.00  S125900.00   
+POS  TTPP TT PORT OF SPAIN,PIARCO INTL                W061201400   N10354300    
+PSA  LIRP LI PISA,SAN GIUSTO                          E010233888   N43410144    
+PSD  HEPS HE PORT SAID                                E032142400   N31164600    
+PZU  HSPN HS PORT SUDAN                               E037135900   N19255900    
+QUO       FT UYO AKWA IBOM                            E020505600   N13505000    
+RAI       GV PRAIA                                    W0230300.00  N145500.00   
+RAK  GMMX GM MARRAKECH,MENARA                         W008022700   N31363100    
+RBA  GMME GM RABAT,SALE                               W006452500   N34030000    
+REP  VDSR VD SIEM REAP, CAMBODIA,SIEM REAP            E103484272   N13243720    
+RGN  VYYY VY YANGON INTL                              E096080571   N16542441    
+RIY  OYRN OY MUKALLA,RIYAN                            E049223000   N14394400    
+RKT  OMRK OM RAS AL KHAIMAH INTL                      E055562000   N25364800    
+RKV  BIRK BI REYKJAVIK                                W0215600.00  N640700.00   
+ROM       LI ROME                                     E0121500.00  N414800.00   
+RSA  SAZR SA SANTA ROSA                               W064164300   S36352900    
+RTM  EHRD EH ROTTERDAM                                E004261400   N51572500    
+RUH  OERK OE RIYADH,KING KHALED INTL                  E046422895   N24574552    
+SAH  OYSN OY SANAA INTL                               E044131100   N15284500    
+SAT  KSAT K  SAN ANTONIO INTL,TX                      W098281120   N29320130    
+SAW  LTFJ LT ISTANBUL, SABIHA GOKCEN                  E029185500   N40539000    
+SEA  KSEA K  SEATTLE-TACOMA INTL,WA                   W122183353   N47265634    
+SEX  ETAS ED SEMBACH                                  E0075200.00  N490300.00   
+SEZ  FSIA FS SEYCHELLES INTL                          E055311868   S04402764    
+SFO  KSFO K  SAN FRANCISCO INTL,CA                    W122222940   N37370840    
+SHF       Z  SHANHAIGUAN                              E1194500.00  N395900.00   
+SHG       K  SHUNGNAK                                 W1570900.00  N665300.00   
+SHJ  OMSJ OM SHARJAH INTL                             E055305800   N25194500    
+SHW  OESH OE SHARURAH                                 E047071300   N17280200    
+SID  GVAC GV SAL,AMILCAR CABRAL                       W022565800   N16442900    
+SKG  LGTS LG THESSALONIKI,MAKEDON                     E022581530   N40311100    
+SKJ       K  SITKINAK                                 W1540600.00  N563100.00   
+SLL  OOSA OO SALALAH                                  E054052867   N17021939    
+SNN  EINN EI SHANNON                                  W008552934   N52420712    
+SOF  LBSF LB SOFIA                                    E023243000   N42414200    
+SSG  FGSL FG MALABO                                   E008423100   N03451900    
+SSH  HESH HE SHARM EL SHEIKH INTL                     E034233600   N27584300    
+STL  KSTL K  LAMBERT-ST LOUIS INTL,MO                 W090213596   N38445167    
+STN  EGSS EG LONDON, STANSTED                         E000140600   N51530600    
+SXF  EDDB ED BERLIN,SCHONEFELD                        E013311400   N52224300    
+SXR  VISR V  SRINAGAR                                 E0744600.00  N335900.00   
+SYZ  OISS OI SHIRAZ,SHAHID DASTGHAIB INTL             E052351900   N29322500    
+SZB  WMSA WM SULTAN ABDUL AZIZ, KUALA LUMPUR          E101329000   N03079000    
+TEB  KTEB K  TETERBORO,NJ                             W074033901   N40510037    
+THR  OIII OI TEHRAN,MEHRABAD INTL                     E051185300   N35412000    
+TIP  HLLT HL TRIPOLI INTL                             E013092400   N32401000    
+TLS  LFBO LF TOULOUSE,BLAGNAC                         E001220400   N43380600    
+TLV  LLBG LL TEL AVIV,BEN GURION                      E034523800   N32003800    
+TMM  FMMT FM TOAMASINA                                E049233600   S18065700    
+TMR  DAAT DA TAMANRASSET,AGUENAR                      E005270300   N22484000    
+TMS  FPST FP SAO TOME INTERNATIONAL                   E006424734   N00224047    
+TNG  GMTT GM TANGER,IBN BATOUTA                       W005551600   N35435400    
+TNR  FMMI FM ANTANANARIVO,IVATO                       E047283400   S18474700    
+TOE  DTTZ DT NEFTA                                    E008063800   N33562300    
+TOJ  LETO LE MADRID,TORREJON                          W003272990   N40291250    
+TUN  DTTA DT TUNIS,CARTHAGE                           E010133700   N36510400    
+TUU  OETB OE TABUK                                    E036373000   N28221800    
+TXL  EDDT ED BERLIN TEGEL                                                       
+UTB       Y  MUTTABURRA                               E1443200.00  S223500.00   
+UYL       HS NYALA                                    E0245300.00  N120400.00   
+VAOZ      V  OZAR AIRPORT                                                       
+VCE  LIPZ LI VENICE,TESSERA                           E012210606   N45301849    
+VFA  FVFA FV VICTORIA FALLS                           E025502400   S18053900    
+VIE  LOWW LO VIENNA,SCHWECHAT                         E016341100   N48063700    
+VLC  LEVC LE VALENCIA,MANISES                         W000285385   N39292153    
+VNO  EYVI EY VILNIUS INTL                             E025171609   N54381347    
+WDH  FYWH FY WINDHOEK, HOSEA KUTAKO INTL              E017281500   S22284800    
+WIL  HKNW HK NAIROBI,WILSON                           E036485388   S01191658    
+WOE  EHWO EH WOENSDRECHT AB                           E004203170   N51265640    
+WUU       HS WAU                                      E0275800.00  N074300.00   
+YLW  CYLW CY KELOWNA,BC                               W119224000   N49572200    
+YYR  CYYR CY GOOSE BAY,NF                             W060253300   N53190900    
+YZD  CYZD CY DOWNSVIEW AIRPORT                        W060253300   N53190900    
+ZNZ  HTZA HT ZANZIBAR,KISAUNI                         E039132839   S06130751    
+ZRH  LSZH LS ZURICH                                   E008325280   N47272950    

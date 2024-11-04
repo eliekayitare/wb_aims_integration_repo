@@ -1,0 +1,170 @@
+{% extends 'base.html' %} {% load static %}
+
+<!-- Page-specific CSS for Dashboard -->
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+<style>
+  /* Toast styling */
+  .toast {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    color: white;
+    width: 250px;
+    opacity: 0.9;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+  }
+
+  .toast.success {
+    background-color: green;
+  }
+
+  .toast.error {
+    background-color: red;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <ul>
+      <li><a href="{% url 'dashboard' %}">AIMS Data</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="search-filter-container">
+      <input type="text" placeholder="Search" class="search-input" />
+      <button class="search-btn"><i class="fas fa-search"></i></button>
+      <select class="filter-select">
+        <option>Filter by</option>
+        <option value="date">Date</option>
+        <option value="iata">IATA</option>
+      </select>
+    </div>
+
+    <!-- Flight Data Table -->
+    <div class="table-container">
+      <table id="flight-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Flt No.</th>
+            <th>Dep IATA</th>
+            <th>Dep ICAO</th>
+            <th>Arr IATA</th>
+            <th>Arr ICAO</th>
+            <th>STD</th>
+            <th>ATD</th>
+            <th>Take Off</th>
+            <th>Touch Down</th>
+            <th>ATA</th>
+            <th>STA</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="flight-data">
+          {% for flight in schedules %}
+          <tr>
+            <td>{{ flight.date_utc }}</td>
+            <td>{{ flight.flight_no }}</td>
+            <td>{{ flight.dep_code_iata }}</td>
+            <td>{{ flight.dep_code_icao }}</td>
+            <td>{{ flight.arr_code_iata }}</td>
+            <td>{{ flight.arr_code_icao }}</td>
+            <td>{{ flight.std_utc }}</td>
+            <td>{{ flight.atd_utc|default:'' }}</td>
+            <td>{{ flight.takeoff_utc|default:'' }}</td>
+            <td>{{ flight.touchdown_utc|default:'' }}</td>
+            <td>{{ flight.ata_utc|default:'' }}</td>
+            <td>{{ flight.sta_utc|default:'' }}</td>
+
+            <td><button class="btn-action">View</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container for displaying messages -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- WebSocket and Toast Script -->
+<script>
+  // Establish WebSocket connection
+  const socket = new WebSocket('ws://' + window.location.host + '/ws/flight-data/');
+
+  // Function to dynamically update flight table
+  function updateFlightTable(flightData) {
+    const tableBody = document.getElementById("flight-data");
+    tableBody.innerHTML = ''; // Clear the current table content
+
+    flightData.forEach(flight => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${flight.date_utc}</td>
+        <td>${flight.flight_no}</td>
+        <td>${flight.dep_code_iata}</td>
+        <td>${flight.dep_code_icao}</td>
+        <td>${flight.arr_code_iata}</td>
+        <td>${flight.arr_code_icao}</td>
+        <td>${flight.std_utc}</td>
+        <td>{{ flight.atd_utc|default:'' }}</td>
+        <td>{{ flight.takeoff_utc|default:'' }}</td>
+        <td>{{ flight.touchdown_utc|default:'' }}</td>
+        <td>{{ flight.ata_utc|default:'' }}</td>
+        <td>{{ flight.sta_utc|default:'' }}</td>
+        <td><button class="btn-action">View</button></td>
+      `;
+      tableBody.appendChild(row);
+    });
+  }
+
+  // Handle incoming WebSocket messages
+  socket.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    updateFlightTable(data);  // Update flight data table with the received data
+  };
+
+  socket.onclose = function(event) {
+    console.error('WebSocket closed unexpectedly');
+  };
+
+  // Function to show toast messages
+  function showToast(message, type = "info") {
+    const toastContainer = document.getElementById("toast-container");
+    if (!toastContainer) return; // Exit if no container is found
+
+    // Create the toast element
+    const toast = document.createElement("div");
+    toast.classList.add("toast", type); // Add 'success', 'error', etc. based on the type
+    toast.innerText = message;
+
+    // Append the toast to the container
+    toastContainer.appendChild(toast);
+
+    // Automatically remove the toast after 5 seconds
+    setTimeout(() => {
+      toast.remove();
+    }, 5000); // Remove the toast after 5 seconds
+  }
+
+  // Handle displaying toast messages based on Django's messages framework
+  {% if messages %}
+  {% for message in messages %}
+    {% if message.tags == 'success' %}
+      showToast("{{ message }}", "success");
+    {% elif message.tags == 'error' %}
+      showToast("{{ message }}", "error");
+    {% endif %}
+  {% endfor %}
+  {% endif %}
+</script>
+
+{% endblock %}
