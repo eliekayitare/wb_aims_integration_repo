@@ -12,14 +12,11 @@ my_env/
 .env
 db.sqlite3
 
-# Static and media files
-static/
+# Static and media files (keep only media)
 media/
-staticfiles/
 
 # Docker-related files
 docker-compose.override.yml
-
 
 # Ignore celery beat schedule files
 celerybeat-schedule
