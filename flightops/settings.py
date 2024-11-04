@@ -83,7 +83,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 # Allowed Hosts
-# ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
 
 AD_AUTH_URL = config('AD_AUTH_URL')
 # Application definition
@@ -100,6 +100,7 @@ INSTALLED_APPS = [
     'channels',
     'django_celery_beat',       # For periodic tasks
 ]
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -138,25 +139,24 @@ WSGI_APPLICATION = 'flightops.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': config('DB_NAME', default='default_db_name'),
-        'USER': config('DB_USER', default='default_user'),
-        'PASSWORD': config('DB_PASSWORD', default='default_password'),
-        'HOST': config('DB_HOST', default='db'),  # Default to 'db' if not set
-        'PORT': config('DB_PORT', default='5432'),
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',  # Your primary DB (Postgres, for example)
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT'),
     },
     'mssql': {
         'ENGINE': 'mssql',
-        'NAME': config('MSSQL_DB_NAME', default=''),
-        'USER': config('MSSQL_DB_USER', default=''),
-        'PASSWORD': config('MSSQL_DB_PASSWORD', default=''),
-        'HOST': config('MSSQL_DB_HOST', default=''),
+        'NAME': config('MSSQL_DB_NAME'),
+        'USER': config('MSSQL_DB_USER'),
+        'PASSWORD': config('MSSQL_DB_PASSWORD'),
+        'HOST': config('MSSQL_DB_HOST'),
         'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
+            'driver': 'ODBC Driver 17 for SQL Server',  # Make sure you have this ODBC driver installed
         },
     },
 }
-
 
 
 
