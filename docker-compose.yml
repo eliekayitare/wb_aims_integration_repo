@@ -24,10 +24,10 @@ services:
   # Django application service
   web:
     build: .
-    command: bash -c "sleep 5 && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: bash -c "sleep 5 && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
-      - static_volume:/app/static
+      - static_volume:/app/staticfiles
       - media_volume:/app/media
     ports:
       - "8000:8000"
