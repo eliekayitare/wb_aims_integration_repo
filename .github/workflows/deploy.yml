@@ -27,6 +27,11 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           python manage.py test
 
@@ -58,17 +63,35 @@ jobs:
           chmod 600 id_rsa
           ssh -o StrictHostKeyChecking=no -i id_rsa ${SERVER_USER}@${SERVER_HOST} << 'EOF'
             echo "Navigating to project directory"
+            mkdir -p /home/administrator/wb_aims_integrations
             cd /home/administrator/wb_aims_integrations || exit 1
 
-            # Write the environment variables to a .env file on the server
-            echo "Writing environment variables to .env file"
-            cat <<EOT > .env
-            SECRET_KEY=${SECRET_KEY}
-            DB_NAME=${DB_NAME}
-            DB_USER=${DB_USER}
-            DB_PASSWORD=${DB_PASSWORD}
-            # Add additional environment variables here
-            EOT
+            # Check if .env exists, if not, create and populate it
+            if [ ! -f .env ]; then
+              echo "Creating .env file on server"
+              cat <<EOT > .env
+              SECRET_KEY=${SECRET_KEY}
+              MSSQL_DB_USER=${MSSQL_DB_USER}
+              MSSQL_DB_PASSWORD=${MSSQL_DB_PASSWORD}
+              MSSQL_DB_NAME=${MSSQL_DB_NAME}
+              MSSQL_DB_HOST=${MSSQL_DB_HOST}
+              EXCHANGE_EMAIL_USER=${EXCHANGE_EMAIL_USER}
+              EXCHANGE_EMAIL_PASSWORD=${EXCHANGE_EMAIL_PASSWORD}
+              EXCHANGE_EMAIL_SERVER=${EXCHANGE_EMAIL_SERVER}
+              EMAIL_HOST=${EMAIL_HOST}
+              EMAIL_PORT=${EMAIL_PORT}
+              EMAIL_HOST_USER=${EMAIL_HOST_USER}
+              EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+              DB_USER=${DB_USER}
+              DB_PASSWORD=${DB_PASSWORD}
+              DB_NAME=${DB_NAME}
+              DB_HOST=${DB_HOST}
+              DB_PORT=${DB_PORT}
+              AD_AUTH_URL=${AD_AUTH_URL}
+              EOT
+            else
+              echo ".env file already exists on server, skipping creation."
+            fi
 
             echo "Pulling latest changes"
             git pull origin main || exit 1
