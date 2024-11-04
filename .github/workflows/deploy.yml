@@ -69,25 +69,25 @@ jobs:
             # Write the .env file to the server with the necessary environment variables
             echo "Creating and updating .env file on server"
             cat > .env <<EOT
-SECRET_KEY=${SECRET_KEY}
-MSSQL_DB_USER=${MSSQL_DB_USER}
-MSSQL_DB_PASSWORD=${MSSQL_DB_PASSWORD}
-MSSQL_DB_NAME=${MSSQL_DB_NAME}
-MSSQL_DB_HOST=${MSSQL_DB_HOST}
-EXCHANGE_EMAIL_USER=${EXCHANGE_EMAIL_USER}
-EXCHANGE_EMAIL_PASSWORD=${EXCHANGE_EMAIL_PASSWORD}
-EXCHANGE_EMAIL_SERVER=${EXCHANGE_EMAIL_SERVER}
-EMAIL_HOST=${EMAIL_HOST}
-EMAIL_PORT=${EMAIL_PORT}
-EMAIL_HOST_USER=${EMAIL_HOST_USER}
-EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
-DB_USER=${DB_USER}
-DB_PASSWORD=${DB_PASSWORD}
-DB_NAME=${DB_NAME}
-DB_HOST=${DB_HOST}
-DB_PORT=${DB_PORT}
-AD_AUTH_URL=${AD_AUTH_URL}
-EOT
+            SECRET_KEY=${SECRET_KEY}
+            MSSQL_DB_USER=${MSSQL_DB_USER}
+            MSSQL_DB_PASSWORD=${MSSQL_DB_PASSWORD}
+            MSSQL_DB_NAME=${MSSQL_DB_NAME}
+            MSSQL_DB_HOST=${MSSQL_DB_HOST}
+            EXCHANGE_EMAIL_USER=${EXCHANGE_EMAIL_USER}
+            EXCHANGE_EMAIL_PASSWORD=${EXCHANGE_EMAIL_PASSWORD}
+            EXCHANGE_EMAIL_SERVER=${EXCHANGE_EMAIL_SERVER}
+            EMAIL_HOST=${EMAIL_HOST}
+            EMAIL_PORT=${EMAIL_PORT}
+            EMAIL_HOST_USER=${EMAIL_HOST_USER}
+            EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+            DB_USER=${DB_USER}
+            DB_PASSWORD=${DB_PASSWORD}
+            DB_NAME=${DB_NAME}
+            DB_HOST=${DB_HOST}
+            DB_PORT=${DB_PORT}
+            AD_AUTH_URL=${AD_AUTH_URL}
+            EOT
 
             echo "Pulling latest changes"
             git pull origin main || exit 1
