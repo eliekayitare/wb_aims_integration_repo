@@ -32,6 +32,20 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MSSQL_DB_USER: ${{ secrets.MSSQL_DB_USER }}
+          MSSQL_DB_PASSWORD: ${{ secrets.MSSQL_DB_PASSWORD }}
+          MSSQL_DB_NAME: ${{ secrets.MSSQL_DB_NAME }}
+          MSSQL_DB_HOST: ${{ secrets.MSSQL_DB_HOST }}
+          EXCHANGE_EMAIL_USER: ${{ secrets.EXCHANGE_EMAIL_USER }}
+          EXCHANGE_EMAIL_PASSWORD: ${{ secrets.EXCHANGE_EMAIL_PASSWORD }}
+          EXCHANGE_EMAIL_SERVER: ${{ secrets.EXCHANGE_EMAIL_SERVER }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
+          EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          AD_AUTH_URL: ${{ secrets.AD_AUTH_URL }}
         run: |
           python manage.py test
 
@@ -61,7 +75,7 @@ jobs:
         run: |
           echo "${SSH_PRIVATE_KEY}" > id_rsa
           chmod 600 id_rsa
-          ssh -o StrictHostKeyChecking=no -i id_rsa ${SERVER_USER}@${SERVER_HOST} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i id_rsa ${SERVER_USER}@${SERVER_HOST} << EOF
             echo "Navigating to project directory"
             mkdir -p /home/administrator/wb_aims_integrations
             cd /home/administrator/wb_aims_integrations || exit 1
