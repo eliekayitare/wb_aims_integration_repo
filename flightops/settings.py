@@ -80,7 +80,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost','wbhub@rwandair.com']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost','wbhub.rwandair.com']
 
 # Allowed Hosts
 # ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
@@ -263,8 +263,6 @@ STATICFILES_FINDERS = [
 # Directory where static files are stored for the project
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
