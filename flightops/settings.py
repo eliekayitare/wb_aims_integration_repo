@@ -101,7 +101,6 @@ INSTALLED_APPS = [
     'django_celery_beat',       # For periodic tasks
 ]
 
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
