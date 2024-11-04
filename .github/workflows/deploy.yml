@@ -68,7 +68,7 @@ jobs:
 
             # Write the .env file to the server with the necessary environment variables
             echo "Creating and updating .env file on server"
-            cat <<EOT > .env
+            cat > .env <<EOT
 SECRET_KEY=${SECRET_KEY}
 MSSQL_DB_USER=${MSSQL_DB_USER}
 MSSQL_DB_PASSWORD=${MSSQL_DB_PASSWORD}
