@@ -104,6 +104,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -212,36 +213,6 @@ EXCHANGE_EMAIL_SERVER = config('EXCHANGE_EMAIL_SERVER')
 from kombu import Queue, Exchange
 from celery.schedules import crontab
 from datetime import timedelta
-
-# CELERY_BROKER_URL = 'redis://redis:6379/0'
-# CELERY_ACCEPT_CONTENT = ['json']
-# CELERY_TASK_SERIALIZER = 'json'
-# CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
-
-
-
-
-# # Celery Beat Schedule for periodic tasks
-# CELERY_BEAT_SCHEDULE = {
-#     # Airport Data - Runs once at startup and then every 72 hours
-#     'fetch-airport-data-every-72-hours': {
-#         'task': 'aimsintegration.tasks.fetch_airport_data',
-#         'schedule':crontab(minute='*/7200'),
-#         # 'schedule': timedelta(hours=72),
-#     },
-#     # Flight Schedules - Runs every 10 minutes
-#     'fetch-flight-schedules-every-10-minutes': {
-#         'task': 'aimsintegration.tasks.fetch_flight_schedules',
-#         'schedule': crontab(minute='*/10'),  # Every 10 minutes
-#     },
-#     # ACARS Messages - Runs every 1 minute
-#     'fetch-acars-messages-every-1-minute': {
-#         'task': 'aimsintegration.tasks.fetch_acars_messages',
-#         'schedule': crontab(minute='*'),  # Every 1 minute
-#     },
-# }
-
-
 from celery.schedules import crontab
 from datetime import timedelta
 
@@ -289,6 +260,7 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
