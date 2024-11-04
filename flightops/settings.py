@@ -281,7 +281,7 @@ CELERY_BEAT_SCHEDULE = {
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 # Directory where static files are stored for the project
 MEDIA_URL = '/media/'
