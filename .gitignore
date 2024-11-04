@@ -1,10 +1,12 @@
 # Byte-compiled files
 __pycache__/
 *.py[cod]
+.log
 
 # Virtual environments
 venv/
 ENV/
+my_env/
 
 # Django environment and secret files
 .env
@@ -13,6 +15,7 @@ db.sqlite3
 # Static and media files
 static/
 media/
+staticfiles/
 
 # Docker-related files
 docker-compose.override.yml
