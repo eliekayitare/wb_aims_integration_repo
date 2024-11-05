@@ -78,9 +78,9 @@ LOGGING = {
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['web', '10.0.0.120', 'localhost', '127.0.0.1','wbhub.rwandair.com']
+ALLOWED_HOSTS = ['10.0.0.120', 'localhost', '127.0.0.1']
 
 # Allowed Hosts
 # ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
@@ -159,13 +159,6 @@ DATABASES = {
         },
     },
 }
-
-# settings.py
-# CSRF cookie settings
-CSRF_COOKIE_SECURE = False  # Ensure CSRF cookie is not restricted to HTTPS
-CSRF_COOKIE_SAMESITE = 'None'  # Allow cookies to be sent across different sites (Nginx reverse proxy)
-CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie
-
 
 
 
