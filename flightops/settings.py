@@ -78,7 +78,7 @@ LOGGING = {
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['web', '10.0.0.120', 'localhost', '127.0.0.1','wbhub.rwandair.com']
 
@@ -160,7 +160,13 @@ DATABASES = {
     },
 }
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://wbhub.rwandair.com',  # Add your production domain here
+    'http://localhost:8000',   # If testing locally
+]
 
+
+CSRF_COOKIE_SECURE = True  # Set this to True in production over HTTPS
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
