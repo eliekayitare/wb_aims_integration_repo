@@ -160,13 +160,10 @@ DATABASES = {
     },
 }
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://wbhub.rwandair.com',  # Add your production domain here
-    'http://localhost:8000',   # If testing locally
-]
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True  # Make sure you are using HTTPS in production
+CSRF_COOKIE_HTTPONLY = True
 
-
-CSRF_COOKIE_SECURE = True  # Set this to True in production over HTTPS
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
