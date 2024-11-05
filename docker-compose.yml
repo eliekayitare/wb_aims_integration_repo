@@ -86,11 +86,11 @@
 version: "3.8"
 
 services:
-  # Redis service for Celery broker
+  # Redis service for Celery broker (optional)
   redis:
     image: redis:alpine
     ports:
-      - "6380:6379" # Expose Redis on port 6380 for external use
+      - "6380:6379"
     networks:
       - backend
 
@@ -106,25 +106,25 @@ services:
     networks:
       - backend
 
-  # Django application service
+  # Django application service (frontend + backend)
   web:
-    build: . # Builds the Dockerfile in the current directory
+    build: .
     command: bash -c "sleep 5 && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
-      - .:/app # Mounts the current directory as /app in the container
-      - static_volume:/app/staticfiles # Persistent volume for static files
-      - media_volume:/app/media # Persistent volume for media files
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
     ports:
-      - "8000:8000" # Exposes the Django app on port 8000
+      - "8000:8000" # Expose port 8000 for the Django app
     env_file:
-      - .env # Environment variables (database creds, etc.)
+      - .env
     depends_on:
       - db
-      - redis # This makes sure the Redis and DB services are up before starting the web service
+      - redis
     networks:
       - backend
 
-  # Celery worker service for background tasks
+  # Celery worker service for background tasks (optional)
   celery_worker:
     build: .
     command: celery -A flightops worker --loglevel=info
@@ -140,7 +140,7 @@ services:
     networks:
       - backend
 
-  # Celery beat service for periodic tasks
+  # Celery beat service for periodic tasks (optional)
   celery_beat:
     build: .
     command: celery -A flightops beat --loglevel=info
@@ -156,20 +156,20 @@ services:
     networks:
       - backend
 
-  # Nginx service (reverse proxy for Django app)
+  # Nginx reverse proxy service
   nginx:
-    image: nginx:latest # Use the official Nginx image
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Mount your Nginx config
-      - ./server.crt:/etc/nginx/ssl/server.crt:ro # Mount your SSL certificate
-      - ./server.key:/etc/nginx/ssl/server.key:ro # Mount your SSL key
-      - ./static_volume:/var/www/staticfiles # Mount static files
-      - ./media_volume:/var/www/media # Mount media files
+    image: nginx:latest
+    container_name: flightops_nginx
     ports:
-      - "80:80" # Expose HTTP port
-      - "443:443" # Expose HTTPS port
+      - "80:80" # HTTP port
+      - "443:443" # HTTPS port
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf # Nginx config file
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - ./ssl:/etc/ssl/private # SSL certificates (server.crt and server.key)
     depends_on:
-      - web # Ensure the Django app is up before starting Nginx
+      - web
     networks:
       - backend
 
