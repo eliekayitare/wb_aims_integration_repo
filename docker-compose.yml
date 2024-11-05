@@ -114,6 +114,9 @@ services:
       - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+
+    ports:
+      - "8007:8000"
     env_file:
       - .env
     depends_on:
@@ -126,13 +129,11 @@ services:
   nginx:
     image: nginx:latest
     ports:
-      - "80:80" # HTTP
-      - "443:443" # HTTPS
+      - "8088:8080"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf # Mount custom Nginx config
-      - static_volume:/app/staticfiles # Serve static files from this volume
-      - media_volume:/app/media # Serve media files from this volume
-      - .:/app
+      - ./config/nginx:/etc/nginx/conf.d
+      - static_volume:/nginx_wbhub_static
+      - media_volume:/nginx_wbhub_media
     depends_on:
       - web
     networks:

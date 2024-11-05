@@ -1,0 +1,5 @@
+FROM nginx:1.19.0-alpine
+
+COPY ./server.crt /etc/ssl/certs/server.crt
+COPY ./server.key /etc/ssl/private/server.key
+COPY ./config/nginx/default.conf /etc/nginx/conf.d/default.conf
