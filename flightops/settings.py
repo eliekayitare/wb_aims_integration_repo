@@ -160,9 +160,15 @@ DATABASES = {
     },
 }
 
+# Disable secure cookies since you're using HTTP (not HTTPS)
+CSRF_COOKIE_SECURE = False
+
+# Allow cross-site cookies (needed for reverse proxy with Nginx)
 CSRF_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SECURE = True  # Make sure you are using HTTPS in production
-CSRF_COOKIE_HTTPONLY = True
+
+# Optional but recommended: Ensure CSRF protection is enabled
+CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie
+
 
 
 # Password validation
