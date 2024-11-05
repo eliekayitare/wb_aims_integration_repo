@@ -90,7 +90,7 @@ services:
   redis:
     image: redis:alpine
     ports:
-      - "6380:6379" # Redis exposed on port 6380 for external use
+      - "6380:6379" # Expose Redis on port 6380 for external use
     networks:
       - backend
 
@@ -106,21 +106,21 @@ services:
     networks:
       - backend
 
-  # Django application service (No need to expose port 8000 externally)
+  # Django application service
   web:
-    build: .
+    build: . # Builds the Dockerfile in the current directory
     command: bash -c "sleep 5 && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
-      - .:/app
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      - .:/app # Mounts the current directory as /app in the container
+      - static_volume:/app/staticfiles # Persistent volume for static files
+      - media_volume:/app/media # Persistent volume for media files
     ports:
-      - "8000" # Only exposed inside the Docker network (no external mapping)
+      - "8000:8000" # Exposes the Django app on port 8000
     env_file:
-      - .env
+      - .env # Environment variables (database creds, etc.)
     depends_on:
       - db
-      - redis
+      - redis # This makes sure the Redis and DB services are up before starting the web service
     networks:
       - backend
 
@@ -153,6 +153,23 @@ services:
       - .env
     environment:
       - DJANGO_SETTINGS_MODULE=flightops.settings
+    networks:
+      - backend
+
+  # Nginx service (reverse proxy for Django app)
+  nginx:
+    image: nginx:latest # Use the official Nginx image
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Mount your Nginx config
+      - ./server.crt:/etc/nginx/ssl/server.crt:ro # Mount your SSL certificate
+      - ./server.key:/etc/nginx/ssl/server.key:ro # Mount your SSL key
+      - ./static_volume:/var/www/staticfiles # Mount static files
+      - ./media_volume:/var/www/media # Mount media files
+    ports:
+      - "80:80" # Expose HTTP port
+      - "443:443" # Expose HTTPS port
+    depends_on:
+      - web # Ensure the Django app is up before starting Nginx
     networks:
       - backend
 
