@@ -160,14 +160,12 @@ DATABASES = {
     },
 }
 
-# Disable secure cookies since you're using HTTP (not HTTPS)
-CSRF_COOKIE_SECURE = False
-
-# Allow cross-site cookies (needed for reverse proxy with Nginx)
-CSRF_COOKIE_SAMESITE = 'None'
-
-# Optional but recommended: Ensure CSRF protection is enabled
+# settings.py
+# CSRF cookie settings
+CSRF_COOKIE_SECURE = False  # Ensure CSRF cookie is not restricted to HTTPS
+CSRF_COOKIE_SAMESITE = 'None'  # Allow cookies to be sent across different sites (Nginx reverse proxy)
 CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie
+
 
 
 
