@@ -70,13 +70,13 @@
         <tbody id="flight-data">
           {% for flight in schedules %}
           <tr>
-            <td>{{ flight.sd_date_utc }}</td>
+            <td>{{ flight.sd_date_utc|date:"Y-m-d" }}</td>
             <td>{{ flight.flight_no }}</td>
             <td>{{ flight.dep_code_iata }}</td>
             <td>{{ flight.dep_code_icao }}</td>
             <td>{{ flight.arr_code_iata }}</td>
             <td>{{ flight.arr_code_icao }}</td>
-            <td>{{ flight.std_utc }}</td>
+            <td>{{ flight.std_utc | date:"H:i" }}</td>
             <td>{{ flight.atd_utc|default:'' }}</td>
             <td>{{ flight.takeoff_utc|default:'' }}</td>
             <td>{{ flight.touchdown_utc|default:'' }}</td>
