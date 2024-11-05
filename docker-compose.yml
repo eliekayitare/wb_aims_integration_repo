@@ -86,11 +86,11 @@
 version: "3.8"
 
 services:
-  # Redis service for Celery broker (optional)
+  # Redis service for Celery broker
   redis:
     image: redis:alpine
     ports:
-      - "6380:6379"
+      - "6380:6379" # Corrected port mapping
     networks:
       - backend
 
@@ -106,7 +106,7 @@ services:
     networks:
       - backend
 
-  # Django application service (frontend + backend)
+  # Django application service
   web:
     build: .
     command: bash -c "sleep 5 && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
@@ -114,8 +114,8 @@ services:
       - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-    ports:
-      - "8000:8000" # Expose port 8000 for the Django app
+    expose:
+      - "8000" # Expose only for internal use with nginx
     env_file:
       - .env
     depends_on:
@@ -124,7 +124,7 @@ services:
     networks:
       - backend
 
-  # Celery worker service for background tasks (optional)
+  # Celery worker service for background tasks
   celery_worker:
     build: .
     command: celery -A flightops worker --loglevel=info
@@ -135,12 +135,10 @@ services:
       - redis
     env_file:
       - .env
-    environment:
-      - DJANGO_SETTINGS_MODULE=flightops.settings
     networks:
       - backend
 
-  # Celery beat service for periodic tasks (optional)
+  # Celery beat service for periodic tasks
   celery_beat:
     build: .
     command: celery -A flightops beat --loglevel=info
@@ -151,23 +149,18 @@ services:
       - redis
     env_file:
       - .env
-    environment:
-      - DJANGO_SETTINGS_MODULE=flightops.settings
     networks:
       - backend
 
-  # Nginx reverse proxy service
+  # Nginx service to handle SSL termination
   nginx:
-    image: nginx:latest
-    container_name: flightops_nginx
-    ports:
-      - "80:80" # HTTP port
-      - "443:443" # HTTPS port
+    image: nginx:alpine
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf # Nginx config file
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
-      - ./ssl:/etc/ssl/private # SSL certificates (server.crt and server.key)
+      - ./nginx.conf:/etc/nginx/nginx.conf # Custom Nginx config file
+      - ./server.crt:/etc/ssl/certs/server.crt
+      - ./server.key:/etc/ssl/private/server.key
+    ports:
+      - "443:443"
     depends_on:
       - web
     networks:
