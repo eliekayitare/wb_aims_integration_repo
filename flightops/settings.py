@@ -161,7 +161,7 @@ DATABASES = {
 }
 
 CSRF_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SECURE = False  # Make sure you are using HTTPS in production
+CSRF_COOKIE_SECURE = True  # Make sure you are using HTTPS in production
 CSRF_COOKIE_HTTPONLY = True
 
 
