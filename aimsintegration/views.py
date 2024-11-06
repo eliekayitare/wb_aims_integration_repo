@@ -45,7 +45,6 @@
 #     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
 
 
-
 from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FlightData
@@ -55,15 +54,13 @@ def dashboard_view(request):
     query = request.GET.get('query', '')
     selected_date = request.GET.get('date', '')
 
-    # Use today's date if no specific date is provided
+    # Set filter date based on selected date or default to today
     filter_date = date.today() if not selected_date else datetime.strptime(selected_date, "%Y-%m-%d").date()
 
-    # Check if the request is an AJAX request
+    # Check if it's an AJAX request
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # Filter flights based on the search query and selected date
-        schedules = FlightData.objects.filter(
-            sd_date_utc=filter_date
-        ).filter(
+        # Filter based on query and selected date
+        schedules = FlightData.objects.filter(sd_date_utc=filter_date).filter(
             flight_no__icontains=query
         ) | FlightData.objects.filter(
             sd_date_utc=filter_date
@@ -83,7 +80,7 @@ def dashboard_view(request):
             arr_code_icao__icontains=query
         )
 
-        # Serialize the flight data for AJAX response
+        # Serialize data for JSON response
         data = list(schedules.values('sd_date_utc', 'flight_no', 'dep_code_iata', 'dep_code_icao',
                                       'arr_code_iata', 'arr_code_icao', 'std_utc', 'atd_utc',
                                       'takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc'))
@@ -92,12 +89,3 @@ def dashboard_view(request):
     # Non-AJAX request loads all today's flights
     schedules = FlightData.objects.filter(sd_date_utc=filter_date)
     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
-
-
-
-
-
-
-
-
-
