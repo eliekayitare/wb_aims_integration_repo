@@ -38,7 +38,8 @@
   <!-- Main Content -->
   <div class="main-content">
     <div class="search-filter-container">
-      <input type="text" placeholder="Search" class="search-input" />
+      {% comment %} <input type="text" placeholder="Search" class="search-input" /> {% endcomment %}
+      <input type="text" placeholder="Search by Flight" class="search-input" id="search-input" />
       <button class="search-btn"><i class="fas fa-search"></i></button>
       <select class="filter-select">
         <option>Filter by</option>
@@ -85,21 +86,7 @@
             <td>{{ flight.touchdown_utc|date:"H:i"|default:'' }}</td>
             <td>{{ flight.ata_utc|date:"H:i"|default:'' }}</td>
             <td>{{ flight.sta_utc|date:"H:i"|default:'' }}</td>
-            {% comment %}
-            <td>{{ flight.sd_date_utc }}</td>
-            <td>{{ flight.flight_no }}</td>
-            <td>{{ flight.dep_code_iata }}</td>
-            <td>{{ flight.dep_code_icao }}</td>
-            <td>{{ flight.arr_code_iata }}</td>
-            <td>{{ flight.arr_code_icao }}</td>
-            <td>{{ flight.std_utc }}</td>
-            <td>{{ flight.atd_utc|default:'' }}</td>
-            <td>{{ flight.takeoff_utc|default:'' }}</td>
-            <td>{{ flight.touchdown_utc|default:'' }}</td>
-            <td>{{ flight.ata_utc|default:'' }}</td>
-            <td>{{ flight.sta_utc|default:'' }}</td>
-            {% endcomment %}
-
+          
             <td><button class="btn-action">View</button></td>
           </tr>
           {% endfor %}
@@ -142,6 +129,7 @@
       tableBody.appendChild(row);
     });
   }
+  
 
   // Handle incoming WebSocket messages
   socket.onmessage = function(event) {
@@ -182,6 +170,29 @@
     {% endif %}
   {% endfor %}
   {% endif %}
+
+   // Real-time search functionality
+   document.getElementById("search-input").addEventListener("input", function() {
+    const searchQuery = document.getElementById("search-input").value.trim();
+    const filterValue = document.getElementById("filter-select").value;
+
+    // Fetch filtered flight data from the server via AJAX
+    if (searchQuery.length >= 3) {  // Start searching after 3 characters
+      fetch(`/search_flights/?query=${searchQuery}`)
+        .then(response => response.json())
+        .then(data => {
+          // Handle the updated flight data
+          if (data.flights) {
+            updateFlightTable(data.flights);
+          } else {
+            showToast("No flights found matching the search criteria", "error");
+          }
+        })
+        .catch(error => {
+          showToast("Error fetching flight data", "error");
+        });
+    }
+  });
 </script>
 
 {% endblock %}
