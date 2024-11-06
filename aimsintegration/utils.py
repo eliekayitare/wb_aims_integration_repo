@@ -122,7 +122,7 @@ def process_flight_schedule_file(attachment):
                     atd_utc__isnull=True,  # Ensure no ACARS data
                     takeoff_utc__isnull=True,
                     touchdown_utc__isnull=True,
-                    ata_utc__isnull=True
+                    ata_utc__isnull=True,
                     sa_date_utc=sa_date_utc
                 ).first()
 
