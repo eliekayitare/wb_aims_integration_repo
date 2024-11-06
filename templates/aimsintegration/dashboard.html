@@ -70,6 +70,22 @@
         <tbody id="flight-data">
           {% for flight in schedules %}
           <tr>
+            <td>{{ flight.sd_date_utc|date:"Y-m-d" }}</td>
+            <!-- Displays date in Y-m-d format -->
+            <td>{{ flight.flight_no }}</td>
+            <td>{{ flight.dep_code_iata }}</td>
+            <td>{{ flight.dep_code_icao }}</td>
+            <td>{{ flight.arr_code_iata }}</td>
+            <td>{{ flight.arr_code_icao }}</td>
+            <td>{{ flight.std_utc|date:"H:i" }}</td>
+            <!-- Formats as 24-hour time -->
+            <td>{{ flight.atd_utc|date:"H:i"|default:'' }}</td>
+            <!-- Formats as 24-hour time with default empty string -->
+            <td>{{ flight.takeoff_utc|date:"H:i"|default:'' }}</td>
+            <td>{{ flight.touchdown_utc|date:"H:i"|default:'' }}</td>
+            <td>{{ flight.ata_utc|date:"H:i"|default:'' }}</td>
+            <td>{{ flight.sta_utc|date:"H:i"|default:'' }}</td>
+            {% comment %}
             <td>{{ flight.sd_date_utc }}</td>
             <td>{{ flight.flight_no }}</td>
             <td>{{ flight.dep_code_iata }}</td>
@@ -82,6 +98,7 @@
             <td>{{ flight.touchdown_utc|default:'' }}</td>
             <td>{{ flight.ata_utc|default:'' }}</td>
             <td>{{ flight.sta_utc|default:'' }}</td>
+            {% endcomment %}
 
             <td><button class="btn-action">View</button></td>
           </tr>
