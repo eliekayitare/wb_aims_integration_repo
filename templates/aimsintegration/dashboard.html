@@ -41,11 +41,12 @@
       {% comment %} <input type="text" placeholder="Search" class="search-input" /> {% endcomment %}
       <input type="text" placeholder="Search by Flight" class="search-input" id="search-input" />
       <button class="search-btn"><i class="fas fa-search"></i></button>
-      <select class="filter-select">
-        <option>Filter by</option>
-        <option value="date">Date</option>
+      <select class="filter-select" id="filter-select">
+        <option value="flight_no">Flight No.</option>
         <option value="iata">IATA</option>
+        <option value="icao">ICAO</option>
       </select>
+      
     </div>
 
     <!-- Flight Data Table -->
