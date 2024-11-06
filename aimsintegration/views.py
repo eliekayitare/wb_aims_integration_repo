@@ -1,48 +1,37 @@
 
-
-# from django.shortcuts import render
-# from .models import FlightData
-# from datetime import date
-# from datetime import timedelta
-# from django.http import JsonResponse
-
-# def dashboard_view(request):
-#     # Fetch only today's flight data from the database
-#     today = date.today()  # Get today's date
-#     #display only today's flights
-#     schedules = FlightData.objects.filter(sd_date_utc=today)
-#     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
-
 from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FlightData
-from datetime import date
+from datetime import date, datetime
 
 def dashboard_view(request):
-    today = date.today()
     query = request.GET.get('query', '')
+    selected_date = request.GET.get('date', '')
+
+    # Use today's date if no specific date is provided
+    filter_date = date.today() if not selected_date else datetime.strptime(selected_date, "%Y-%m-%d").date()
 
     # Check if the request is an AJAX request
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # Filter today's flights based on multiple fields
+        # Filter flights based on the search query and selected date
         schedules = FlightData.objects.filter(
-            sd_date_utc=today
+            sd_date_utc=filter_date
         ).filter(
             flight_no__icontains=query
         ) | FlightData.objects.filter(
-            sd_date_utc=today
+            sd_date_utc=filter_date
         ).filter(
             dep_code_iata__icontains=query
         ) | FlightData.objects.filter(
-            sd_date_utc=today
+            sd_date_utc=filter_date
         ).filter(
             arr_code_iata__icontains=query
         ) | FlightData.objects.filter(
-            sd_date_utc=today
+            sd_date_utc=filter_date
         ).filter(
             dep_code_icao__icontains=query
         ) | FlightData.objects.filter(
-            sd_date_utc=today
+            sd_date_utc=filter_date
         ).filter(
             arr_code_icao__icontains=query
         )
@@ -54,5 +43,18 @@ def dashboard_view(request):
         return JsonResponse(data, safe=False)
     
     # Non-AJAX request loads all today's flights
-    schedules = FlightData.objects.filter(sd_date_utc=today)
+    schedules = FlightData.objects.filter(sd_date_utc=filter_date)
     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
+
+
+
+
+
+
+
+
+
+
+
+
+
