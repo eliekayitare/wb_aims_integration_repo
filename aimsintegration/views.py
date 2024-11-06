@@ -24,8 +24,29 @@ def dashboard_view(request):
 
     # Check if the request is an AJAX request
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # Filter based on search query for today's flights
-        schedules = FlightData.objects.filter(sd_date_utc=today, flight_no__icontains=query)
+        # Filter today's flights based on multiple fields
+        schedules = FlightData.objects.filter(
+            sd_date_utc=today
+        ).filter(
+            flight_no__icontains=query
+        ) | FlightData.objects.filter(
+            sd_date_utc=today
+        ).filter(
+            dep_code_iata__icontains=query
+        ) | FlightData.objects.filter(
+            sd_date_utc=today
+        ).filter(
+            arr_code_iata__icontains=query
+        ) | FlightData.objects.filter(
+            sd_date_utc=today
+        ).filter(
+            dep_code_icao__icontains=query
+        ) | FlightData.objects.filter(
+            sd_date_utc=today
+        ).filter(
+            arr_code_icao__icontains=query
+        )
+
         # Serialize the flight data for AJAX response
         data = list(schedules.values('sd_date_utc', 'flight_no', 'dep_code_iata', 'dep_code_icao',
                                       'arr_code_iata', 'arr_code_icao', 'std_utc', 'atd_utc',
