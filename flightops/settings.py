@@ -138,7 +138,7 @@ WSGI_APPLICATION = 'flightops.wsgi.application'
 
 CSRF_TRUSTED_ORIGINS = [
     'https://wbhub.rwandair.com',
-    'https':'10.0.0.120'
+    'https://10.0.0.120'
 ]
 
 
