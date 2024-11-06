@@ -13,7 +13,6 @@
 #     schedules = FlightData.objects.filter(sd_date_utc=today)
 #     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
 
-
 from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FlightData
@@ -21,8 +20,10 @@ from datetime import date
 
 def dashboard_view(request):
     today = date.today()
-    if request.is_ajax():
-        query = request.GET.get('query', '')
+    query = request.GET.get('query', '')
+
+    # Check if the request is an AJAX request
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         # Filter based on search query for today's flights
         schedules = FlightData.objects.filter(sd_date_utc=today, flight_no__icontains=query)
         # Serialize the flight data for AJAX response
