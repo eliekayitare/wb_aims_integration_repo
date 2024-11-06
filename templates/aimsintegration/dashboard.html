@@ -45,10 +45,14 @@
         id="search-input"
       />
       <button class="search-btn"><i class="fas fa-search"></i></button>
-      <select class="filter-select">
-        <option>Filter by</option>
+
+      <select class="filter-select" id="filter-select">
+        <option value="none">Filter by</option>
         <option value="date">Date</option>
       </select>
+
+      <!-- Date picker input (initially hidden, shown when "Date" is selected) -->
+      <input type="date" id="date-picker" style="display: none" />
     </div>
 
     <!-- Flight Data Table -->
@@ -129,20 +133,35 @@
     });
   }
 
-  // Handle real-time search
-  document.getElementById('search-input').addEventListener('input', function() {
-    const query = this.value;
+  // Show or hide the date picker based on filter selection
+  document.getElementById('filter-select').addEventListener('change', function() {
+    const datePicker = document.getElementById('date-picker');
+    if (this.value === 'date') {
+      datePicker.style.display = 'inline-block';
+    } else {
+      datePicker.style.display = 'none';
+      datePicker.value = ''; // Clear date picker value when not used
+    }
+  });
 
-    fetch(/aims/dashboard/?query=${query}, {
+  // Handle real-time search with query and date filter
+  document.getElementById('search-input').addEventListener('input', searchFlights);
+  document.getElementById('date-picker').addEventListener('change', searchFlights);
+
+  function searchFlights() {
+    const query = document.getElementById('search-input').value;
+    const selectedDate = document.getElementById('date-picker').value;
+
+    fetch(`/aims/dashboard/?query=${query}&date=${selectedDate}`, {
       headers: {
         'X-Requested-With': 'XMLHttpRequest'
       }
     })
     .then(response => response.json())
     .then(data => {
-      updateFlightTable(data); // Update the flight data table with the search results
+      updateFlightTable(data); // Update the flight data table with the filtered results
     });
-  });
+  }
 
   // Handle incoming WebSocket messages
   socket.onmessage = function(event) {
@@ -185,4 +204,4 @@
   {% endif %}
 </script>
 
-{% endblock %}
+{% endblock %}
