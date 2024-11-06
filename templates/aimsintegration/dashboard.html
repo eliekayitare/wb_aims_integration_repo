@@ -39,14 +39,13 @@
   <div class="main-content">
     <div class="search-filter-container">
       {% comment %} <input type="text" placeholder="Search" class="search-input" /> {% endcomment %}
-      <input type="text" placeholder="Search by Flight" class="search-input" id="search-input" />
+      <input type="text" placeholder="Search" class="search-input" id="search-input" />
       <button class="search-btn"><i class="fas fa-search"></i></button>
-      <select class="filter-select" id="filter-select">
-        <option value="flight_no">Flight No.</option>
+      <select class="filter-select">
+        <option>Filter by</option>
+        <option value="date">Date</option>
         <option value="iata">IATA</option>
-        <option value="icao">ICAO</option>
       </select>
-      
     </div>
 
     <!-- Flight Data Table -->
@@ -171,30 +170,6 @@
     {% endif %}
   {% endfor %}
   {% endif %}
-
-   // Real-time search functionality
-   document.getElementById("search-input").addEventListener("input", function() {
-    const searchQuery = document.getElementById("search-input").value.trim();
-    const filterValue = document.getElementById("filter-select").value;
-  
-    // Fetch filtered flight data from the server via AJAX
-    if (searchQuery.length >= 3) {  // Start searching after 3 characters
-      fetch(`/aims/search-flights/?query=${searchQuery}&filter=${filterValue}`)
-        .then(response => response.json())
-        .then(data => {
-          // Handle the updated flight data
-          if (data.flights) {
-            updateFlightTable(data.flights);
-          } else {
-            showToast("No flights found matching the search criteria", "error");
-          }
-        })
-        .catch(error => {
-          showToast("Error fetching flight data", "error");
-        });
-    }
-  });
-  
 </script>
 
 {% endblock %}
