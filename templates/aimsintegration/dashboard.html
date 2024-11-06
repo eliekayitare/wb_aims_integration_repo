@@ -176,10 +176,10 @@
    document.getElementById("search-input").addEventListener("input", function() {
     const searchQuery = document.getElementById("search-input").value.trim();
     const filterValue = document.getElementById("filter-select").value;
-
+  
     // Fetch filtered flight data from the server via AJAX
     if (searchQuery.length >= 3) {  // Start searching after 3 characters
-      fetch(`/search_flights/?query=${searchQuery}`)
+      fetch(`/aims/search-flights/?query=${searchQuery}&filter=${filterValue}`)
         .then(response => response.json())
         .then(data => {
           // Handle the updated flight data
@@ -194,6 +194,7 @@
         });
     }
   });
+  
 </script>
 
 {% endblock %}
