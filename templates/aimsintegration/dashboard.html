@@ -38,8 +38,12 @@
   <!-- Main Content -->
   <div class="main-content">
     <div class="search-filter-container">
-      {% comment %} <input type="text" placeholder="Search" class="search-input" /> {% endcomment %}
-      <input type="text" placeholder="Search" class="search-input" id="search-input" />
+      <input
+        type="text"
+        placeholder="Search"
+        class="search-input"
+        id="search-input"
+      />
       <button class="search-btn"><i class="fas fa-search"></i></button>
       <select class="filter-select">
         <option>Filter by</option>
@@ -72,21 +76,17 @@
           {% for flight in schedules %}
           <tr>
             <td>{{ flight.sd_date_utc|date:"Y-m-d" }}</td>
-            <!-- Displays date in Y-m-d format -->
             <td>{{ flight.flight_no }}</td>
             <td>{{ flight.dep_code_iata }}</td>
             <td>{{ flight.dep_code_icao }}</td>
             <td>{{ flight.arr_code_iata }}</td>
             <td>{{ flight.arr_code_icao }}</td>
             <td>{{ flight.std_utc|date:"H:i" }}</td>
-            <!-- Formats as 24-hour time -->
             <td>{{ flight.atd_utc|date:"H:i"|default:'' }}</td>
-            <!-- Formats as 24-hour time with default empty string -->
             <td>{{ flight.takeoff_utc|date:"H:i"|default:'' }}</td>
             <td>{{ flight.touchdown_utc|date:"H:i"|default:'' }}</td>
             <td>{{ flight.ata_utc|date:"H:i"|default:'' }}</td>
             <td>{{ flight.sta_utc|date:"H:i"|default:'' }}</td>
-          
             <td><button class="btn-action">View</button></td>
           </tr>
           {% endfor %}
@@ -99,7 +99,7 @@
 <!-- Toast Container for displaying messages -->
 <div id="toast-container" class="toast-container"></div>
 
-<!-- WebSocket and Toast Script -->
+<!-- WebSocket, Toast, and Search Script -->
 <script>
   // Establish WebSocket connection
   const socket = new WebSocket('ws://' + window.location.host + '/ws/flight-data/');
@@ -119,17 +119,31 @@
         <td>${flight.arr_code_iata}</td>
         <td>${flight.arr_code_icao}</td>
         <td>${flight.std_utc}</td>
-        <td>{{ flight.atd_utc|default:'' }}</td>
-        <td>{{ flight.takeoff_utc|default:'' }}</td>
-        <td>{{ flight.touchdown_utc|default:'' }}</td>
-        <td>{{ flight.ata_utc|default:'' }}</td>
-        <td>{{ flight.sta_utc|default:'' }}</td>
+        <td>${flight.atd_utc || ''}</td>
+        <td>${flight.takeoff_utc || ''}</td>
+        <td>${flight.touchdown_utc || ''}</td>
+        <td>${flight.ata_utc || ''}</td>
+        <td>${flight.sta_utc || ''}</td>
         <td><button class="btn-action">View</button></td>
       `;
       tableBody.appendChild(row);
     });
   }
-  
+
+  // Handle real-time search
+  document.getElementById('search-input').addEventListener('input', function() {
+    const query = this.value;
+
+    fetch(`/aims/dashboard/?query=${query}`, {
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      updateFlightTable(data); // Update the flight data table with the search results
+    });
+  });
 
   // Handle incoming WebSocket messages
   socket.onmessage = function(event) {
