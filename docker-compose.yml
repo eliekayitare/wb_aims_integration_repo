@@ -134,6 +134,7 @@ services:
       - ./server.key:/etc/ssl/private/server.key
     depends_on:
       - web
+    restart: always
     networks:
       - backend
 
