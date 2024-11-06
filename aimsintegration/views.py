@@ -1,17 +1,21 @@
 
 
+from datetime import datetime
+from django.utils.timezone import utc
 from django.shortcuts import render
 from .models import FlightData
-from datetime import date
-from datetime import timedelta
-
-
 
 def dashboard_view(request):
-    # Fetch only today's flight data from the database
-    today = date.today()  # Get today's date
-
-    #display only today's flights
+    # Fetch only today's flight data in UTC
+    today = datetime.utcnow().date()  # Get today's date in UTC
+    print("====================")
+    print(f"Today's date: {today}")
+    print("====================")
+    # Display only today's flights
     schedules = FlightData.objects.filter(sd_date_utc=today).order_by('-sd_date_utc')
+    print("====================")
+    print(f"sd_date_utc: {schedules.sd_date_utc}")
+    print("====================")
     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
+
     
