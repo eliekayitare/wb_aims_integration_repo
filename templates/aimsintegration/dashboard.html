@@ -119,11 +119,11 @@
         <td>${flight.arr_code_iata}</td>
         <td>${flight.arr_code_icao}</td>
         <td>${flight.std_utc}</td>
-        <td>${flight.atd_utc || ''}</td>
-        <td>${flight.takeoff_utc || ''}</td>
-        <td>${flight.touchdown_utc || ''}</td>
-        <td>${flight.ata_utc || ''}</td>
-        <td>${flight.sta_utc || ''}</td>
+        <td>${flight.atd_utc || '--'}</td>
+        <td>${flight.takeoff_utc || '--'}</td>
+        <td>${flight.touchdown_utc || '--'}</td>
+        <td>${flight.ata_utc || '--'}</td>
+        <td>${flight.sta_utc}</td>
         <td><button class="btn-action">View</button></td>
       `;
       tableBody.appendChild(row);
