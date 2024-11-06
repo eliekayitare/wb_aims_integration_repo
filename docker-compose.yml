@@ -1,88 +1,3 @@
-# version: "3.8"
-
-# services:
-#   # Redis service for Celery broker
-#   redis:
-#     image: redis:alpine
-#     ports:
-#       - "6380:6379" # Corrected port mapping
-#     networks:
-#       - backend
-
-#   # PostgreSQL database service
-#   db:
-#     image: postgres:13
-#     environment:
-#       - POSTGRES_DB=${DB_NAME}
-#       - POSTGRES_USER=${DB_USER}
-#       - POSTGRES_PASSWORD=${DB_PASSWORD}
-#     volumes:
-#       - postgres_data:/var/lib/postgresql/data
-#     networks:
-#       - backend
-
-#   # Django application service
-#   web:
-#     build: .
-#     command: bash -c "sleep 5 && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
-#     volumes:
-#       - .:/app
-#       - static_volume:/app/staticfiles
-#       - media_volume:/app/media
-#     ports:
-#       - "8000:8000"
-#     env_file:
-#       - .env
-#     depends_on:
-#       - db
-#       - redis
-#     networks:
-#       - backend
-
-#   # Celery worker service for background tasks
-#   celery_worker:
-#     build: .
-#     command: celery -A flightops worker --loglevel=info
-#     volumes:
-#       - .:/app
-#     depends_on:
-#       - db
-#       - redis
-#     env_file:
-#       - .env
-
-#     environment:
-#       - DJANGO_SETTINGS_MODULE=flightops.settings
-
-#     networks:
-#       - backend
-
-#   # Celery beat service for periodic tasks
-#   celery_beat:
-#     build: .
-#     command: celery -A flightops beat --loglevel=info
-#     volumes:
-#       - .:/app
-#     depends_on:
-#       - db
-#       - redis
-#     env_file:
-#       - .env
-
-#     environment:
-#       - DJANGO_SETTINGS_MODULE=flightops.settings
-#     networks:
-#       - backend
-
-# volumes:
-#   postgres_data:
-#   static_volume:
-#   media_volume:
-
-# networks:
-#   backend:
-#     driver: bridge
-
 version: "3.8"
 
 services:
@@ -90,7 +5,7 @@ services:
   redis:
     image: redis:alpine
     ports:
-      - "6380:6379"
+      - "6380:6379" # Corrected port mapping
     networks:
       - backend
 
@@ -114,27 +29,13 @@ services:
       - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     depends_on:
       - db
       - redis
-    networks:
-      - backend
-
-  # Nginx reverse proxy service
-  nginx:
-    image: nginx:latest
-    ports:
-      - "443:443" # Exposing HTTPS port
-      - "80:80" # Optional: Redirect HTTP to HTTPS
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf # Custom Nginx config
-      - ./server.crt:/etc/ssl/certs/server.crt
-      - ./server.key:/etc/ssl/private/server.key
-    depends_on:
-      - web
-    restart: always
     networks:
       - backend
 
@@ -149,8 +50,10 @@ services:
       - redis
     env_file:
       - .env
+
     environment:
       - DJANGO_SETTINGS_MODULE=flightops.settings
+
     networks:
       - backend
 
@@ -165,6 +68,7 @@ services:
       - redis
     env_file:
       - .env
+
     environment:
       - DJANGO_SETTINGS_MODULE=flightops.settings
     networks:
@@ -178,3 +82,98 @@ volumes:
 networks:
   backend:
     driver: bridge
+# version: "3.8"
+
+# services:
+#   # Redis service for Celery broker
+#   redis:
+#     image: redis:alpine
+#     ports:
+#       - "6380:6379"
+#     networks:
+#       - backend
+
+#   # PostgreSQL database service
+#   db:
+#     image: postgres:13
+#     environment:
+#       - POSTGRES_DB=${DB_NAME}
+#       - POSTGRES_USER=${DB_USER}
+#       - POSTGRES_PASSWORD=${DB_PASSWORD}
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     networks:
+#       - backend
+
+#   # Django application service
+#   web:
+#     build: .
+#     command: bash -c "sleep 5 && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+#     volumes:
+#       - .:/app
+#       - static_volume:/app/staticfiles
+#       - media_volume:/app/media
+#     env_file:
+#       - .env
+#     depends_on:
+#       - db
+#       - redis
+#     networks:
+#       - backend
+
+#   # Nginx reverse proxy service
+#   nginx:
+#     image: nginx:latest
+#     ports:
+#       - "443:443" # Exposing HTTPS port
+#       - "80:80" # Optional: Redirect HTTP to HTTPS
+#     volumes:
+#       - ./nginx.conf:/etc/nginx/nginx.conf # Custom Nginx config
+#       - ./server.crt:/etc/ssl/certs/server.crt
+#       - ./server.key:/etc/ssl/private/server.key
+#     depends_on:
+#       - web
+#     restart: always
+#     networks:
+#       - backend
+
+#   # Celery worker service for background tasks
+#   celery_worker:
+#     build: .
+#     command: celery -A flightops worker --loglevel=info
+#     volumes:
+#       - .:/app
+#     depends_on:
+#       - db
+#       - redis
+#     env_file:
+#       - .env
+#     environment:
+#       - DJANGO_SETTINGS_MODULE=flightops.settings
+#     networks:
+#       - backend
+
+#   # Celery beat service for periodic tasks
+#   celery_beat:
+#     build: .
+#     command: celery -A flightops beat --loglevel=info
+#     volumes:
+#       - .:/app
+#     depends_on:
+#       - db
+#       - redis
+#     env_file:
+#       - .env
+#     environment:
+#       - DJANGO_SETTINGS_MODULE=flightops.settings
+#     networks:
+#       - backend
+
+# volumes:
+#   postgres_data:
+#   static_volume:
+#   media_volume:
+
+# networks:
+#   backend:
+#     driver: bridge

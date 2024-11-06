@@ -78,7 +78,7 @@ LOGGING = {
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['10.0.0.120', 'localhost', '127.0.0.1','wbhub.rwandair.com']
 
@@ -136,10 +136,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'flightops.wsgi.application'
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://wbhub.rwandair.com',
-    'https://10.0.0.120'
-]
+# CSRF_TRUSTED_ORIGINS = [
+#     'https://wbhub.rwandair.com',
+#     'https://10.0.0.120'
+# ]
 
 
 
