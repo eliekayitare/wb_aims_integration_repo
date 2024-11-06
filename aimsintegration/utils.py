@@ -88,10 +88,11 @@ def process_flight_schedule_file(attachment):
 
                 # Parse dates
                 sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-                try:
-                    sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
-                except ValueError:
-                    sa_date_utc = sd_date_utc
+                sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
+                # try:
+                #     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
+                # except ValueError:
+                #     sa_date_utc = sd_date_utc
 
                 # Parse times
                 try:
@@ -100,7 +101,7 @@ def process_flight_schedule_file(attachment):
                 except ValueError:
                     logger.error(f"Skipping line {line_num} due to time format error in STD or STA: {std}, {sta}")
                     continue
-
+                
                 # Fetch airport data
                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
@@ -122,6 +123,7 @@ def process_flight_schedule_file(attachment):
                     takeoff_utc__isnull=True,
                     touchdown_utc__isnull=True,
                     ata_utc__isnull=True
+                    sa_date_utc=sa_date_utc
                 ).first()
 
                 # Update if a matching record exists without ACARS data
