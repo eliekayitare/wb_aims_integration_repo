@@ -524,7 +524,7 @@ import paramiko
 
 def upload_to_aims_server(local_file_path):
     # Server credentials
-    aims_host = settings.AIMS_SERVER_HOST
+    aims_host = settings.AIMS_SERVER_ADDRESS 
     aims_port = settings.AIMS_PORT
     aims_username = settings.AIMS_SERVER_USER
     aims_password = settings.AIMS_SERVER_PASSWORD
