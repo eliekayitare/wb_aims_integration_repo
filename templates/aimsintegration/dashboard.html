@@ -85,11 +85,11 @@
             <td>{{ flight.arr_code_iata }}</td>
             <td>{{ flight.arr_code_icao }}</td>
             <td>{{ flight.std_utc|date:"H:i" }}</td>
-            <td>{{ flight.atd_utc|date:"H:i"|default:'' }}</td>
-            <td>{{ flight.takeoff_utc|date:"H:i"|default:'' }}</td>
-            <td>{{ flight.touchdown_utc|date:"H:i"|default:'' }}</td>
-            <td>{{ flight.ata_utc|date:"H:i"|default:'' }}</td>
-            <td>{{ flight.sta_utc|date:"H:i"|default:'' }}</td>
+            <td>{{ flight.atd_utc|date:"H:i"|default:'--' }}</td>
+            <td>{{ flight.takeoff_utc|date:"H:i"|default:'--' }}</td>
+            <td>{{ flight.touchdown_utc|date:"H:i"|default:'--' }}</td>
+            <td>{{ flight.ata_utc|date:"H:i"|default:'--' }}</td>
+            <td>{{ flight.sta_utc|date:"H:i"}}</td>
             <td><button class="btn-action">View</button></td>
           </tr>
           {% endfor %}

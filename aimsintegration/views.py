@@ -78,7 +78,7 @@ def dashboard_view(request):
             sd_date_utc=filter_date
         ).filter(
             arr_code_icao__icontains=query
-        )
+        ).order_by('std_utc')
 
         # Serialize data for JSON response
         data = list(schedules.values('sd_date_utc', 'flight_no', 'dep_code_iata', 'dep_code_icao',
