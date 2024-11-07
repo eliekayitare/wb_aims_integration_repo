@@ -143,15 +143,6 @@
       });
   }
 
-  function formatTime(dateString) {
-    if (!dateString) return "--";  // Return "--" if no date is provided
-    const date = new Date(dateString);
-    const hours = date.getUTCHours().toString().padStart(2, '0');  // Get hours and pad with leading zero if necessary
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');  // Get minutes and pad with leading zero if necessary
-    return `${hours}:${minutes}`;  // Return in HH:MM format
-}
-
-
   // Function to dynamically update flight table
   function updateFlightTable(flightData) {
     const tableBody = document.getElementById("flight-data");
@@ -160,22 +151,21 @@
     flightData.forEach((flight) => {
       const row = document.createElement("tr");
       row.innerHTML = `
-          <td>${flight.sd_date_utc}</td>
-          <td>${flight.flight_no}</td>
-          <td>${flight.tail_no}</td>
-          <td>${flight.dep_code_iata}</td>
-          <td>${flight.dep_code_icao}</td>
-          <td>${flight.arr_code_iata}</td>
-          <td>${flight.arr_code_icao}</td>
-          <td>${formatTime(flight.std_utc)}</td>
-          <td>${formatTime(flight.atd_utc) || "--"}</td>
-          <td>${formatTime(flight.takeoff_utc) || "--"}</td>
-          <td>${formatTime(flight.touchdown_utc) || "--"}</td>
-          <td>${formatTime(flight.ata_utc) || "--"}</td>
-          <td>${formatTime(flight.sta_utc)}</td>
-          <td><button class="btn-action">View</button></td>
+        <td>${flight.sd_date_utc}</td>
+        <td>${flight.flight_no}</td>
+        <td>${flight.tail_no}</td>
+        <td>${flight.dep_code_iata}</td>
+        <td>${flight.dep_code_icao}</td>
+        <td>${flight.arr_code_iata}</td>
+        <td>${flight.arr_code_icao}</td>
+        <td>${flight.std_utc}</td>
+        <td>${flight.atd_utc || "--"}</td>
+        <td>${flight.takeoff_utc || "--"}</td>
+        <td>${flight.touchdown_utc || "--"}</td>
+        <td>${flight.ata_utc || "--"}</td>
+        <td>${flight.sta_utc}</td>
+        <td><button class="btn-action">View</button></td>
       `;
-
       tableBody.appendChild(row);
     });
   }

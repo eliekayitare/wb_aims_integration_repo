@@ -1,8 +1,62 @@
 
+# from django.shortcuts import render
+# from django.http import JsonResponse
+# from .models import FlightData
+# from datetime import date, datetime
+
+# def dashboard_view(request):
+#     query = request.GET.get('query', '')
+#     selected_date = request.GET.get('date', '')
+
+#     # Set filter date based on selected date or default to today
+#     filter_date = date.today() if not selected_date else datetime.strptime(selected_date, "%Y-%m-%d").date()
+
+#     # Check if it's an AJAX request
+#     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#         # Filter based on query and selected date, then order by std_utc
+#         schedules = (
+#             FlightData.objects.filter(sd_date_utc=filter_date).filter(
+#                 flight_no__icontains=query
+#             ) | FlightData.objects.filter(
+#                 sd_date_utc=filter_date
+#             ).filter(
+#                 dep_code_iata__icontains=query
+#             ) | FlightData.objects.filter(
+#                 sd_date_utc=filter_date
+#             ).filter(
+#                 arr_code_iata__icontains=query
+#             ) | FlightData.objects.filter(
+#                 sd_date_utc=filter_date
+#             ).filter(
+#                 dep_code_icao__icontains=query
+#             ) | FlightData.objects.filter(
+#                 sd_date_utc=filter_date
+#             ).filter(
+#                 arr_code_icao__icontains=query
+#             ) | FlightData.objects.filter(
+#                 sd_date_utc=filter_date
+#             ).filter(
+#                 tail_no__icontains=query)
+
+#         ).order_by('std_utc')
+
+#         # Serialize data for JSON response
+#         data = list(schedules.values('sd_date_utc', 'flight_no', 'tail_no','dep_code_iata', 'dep_code_icao',
+#                                       'arr_code_iata', 'arr_code_icao', 'std_utc', 'atd_utc',
+#                                       'takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc'))
+#         return JsonResponse(data, safe=False)
+    
+#     # Non-AJAX request loads all today's flights, ordered by std_utc
+#     schedules = FlightData.objects.filter(sd_date_utc=filter_date).order_by('std_utc')
+#     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
+
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FlightData
 from datetime import date, datetime
+from django.utils.dateformat import DateFormat
+from django.utils.timezone import localtime
 
 def dashboard_view(request):
     query = request.GET.get('query', '')
@@ -37,13 +91,27 @@ def dashboard_view(request):
                 sd_date_utc=filter_date
             ).filter(
                 tail_no__icontains=query)
-
         ).order_by('std_utc')
 
-        # Serialize data for JSON response
-        data = list(schedules.values('sd_date_utc', 'flight_no', 'tail_no','dep_code_iata', 'dep_code_icao',
-                                      'arr_code_iata', 'arr_code_icao', 'std_utc', 'atd_utc',
-                                      'takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc'))
+        # Serialize data with formatted dates for JSON response
+        data = []
+        for schedule in schedules:
+            data.append({
+                'sd_date_utc': schedule.sd_date_utc,
+                'flight_no': schedule.flight_no,
+                'tail_no': schedule.tail_no,
+                'dep_code_iata': schedule.dep_code_iata,
+                'dep_code_icao': schedule.dep_code_icao,
+                'arr_code_iata': schedule.arr_code_iata,
+                'arr_code_icao': schedule.arr_code_icao,
+                'std_utc': DateFormat(localtime(schedule.std_utc)).format('H:i') if schedule.std_utc else '--',
+                'atd_utc': DateFormat(localtime(schedule.atd_utc)).format('H:i') if schedule.atd_utc else '--',
+                'takeoff_utc': DateFormat(localtime(schedule.takeoff_utc)).format('H:i') if schedule.takeoff_utc else '--',
+                'touchdown_utc': DateFormat(localtime(schedule.touchdown_utc)).format('H:i') if schedule.touchdown_utc else '--',
+                'ata_utc': DateFormat(localtime(schedule.ata_utc)).format('H:i') if schedule.ata_utc else '--',
+                'sta_utc': DateFormat(localtime(schedule.sta_utc)).format('H:i') if schedule.sta_utc else '--',
+            })
+
         return JsonResponse(data, safe=False)
     
     # Non-AJAX request loads all today's flights, ordered by std_utc
