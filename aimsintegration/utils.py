@@ -222,13 +222,15 @@ def process_flight_schedule_file(attachment):
                     'dep_code_icao': dep_code_icao,
                     'arr_code_icao': arr_code_icao,
                     'sa_date_utc': sa_date_utc,
+                    'std_utc': std_utc,
+                    'sta_utc': sta_utc,
                 }
 
                 # Check if any record exists with the same unique criteria
                 existing_record = FlightData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
-                    logger.info(f"Record for flight {flight_no} on {sd_date_utc} with ACARS data exists. Skipping insertion.")
+                    logger.info(f"Record for flight {flight_no} on {sd_date_utc} Exists,no update needed")
                     continue  # Skip insertion if a record exists, regardless of ACARS data
 
                 # Create a new record if no matching record exists
