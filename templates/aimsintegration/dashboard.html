@@ -62,6 +62,7 @@
           <tr>
             <th>Date</th>
             <th>Flt No.</th>
+            <th>Tail No.</th>
             <th>Dep IATA</th>
             <th>Dep ICAO</th>
             <th>Arr IATA</th>
@@ -80,6 +81,7 @@
           <tr>
             <td>{{ flight.sd_date_utc|date:"Y-m-d" }}</td>
             <td>{{ flight.flight_no }}</td>
+            <td>{{ flight.tail_no }}</td>
             <td>{{ flight.dep_code_iata }}</td>
             <td>{{ flight.dep_code_icao }}</td>
             <td>{{ flight.arr_code_iata }}</td>
@@ -151,16 +153,17 @@
       row.innerHTML = `
         <td>${flight.sd_date_utc}</td>
         <td>${flight.flight_no}</td>
+        <td>${flight.tail_no}</td>
         <td>${flight.dep_code_iata}</td>
         <td>${flight.dep_code_icao}</td>
         <td>${flight.arr_code_iata}</td>
         <td>${flight.arr_code_icao}</td>
-        <td>${flight.std_utc}</td>
-        <td>${flight.atd_utc || "--"}</td>
-        <td>${flight.takeoff_utc || "--"}</td>
-        <td>${flight.touchdown_utc || "--"}</td>
-        <td>${flight.ata_utc || "--"}</td>
-        <td>${flight.sta_utc}</td>
+        <td>${flight.std_utc|date:"H:i"}</td>
+        <td>${flight.atd_utc|date:"H:i" ||"--"}</td>
+        <td>${flight.takeoff_utc|date:"H:i" ||"--"}</td>
+        <td>${flight.touchdown_utc|date:"H:i" ||"--"}</td>
+        <td>${flight.ata_utc|date:"H:i" || "--"}</td>
+        <td>${flight.sta_utc|date:"H:i"}</td>
         <td><button class="btn-action">View</button></td>
       `;
       tableBody.appendChild(row);

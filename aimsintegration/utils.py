@@ -513,12 +513,42 @@ def process_acars_message(item):
         # Write updated data to the job file
         file_path = os.path.join(settings.MEDIA_ROOT, 'JOB1.txt')
         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
+        # upload_to_aims_server(file_path)
 
     except Exception as e:
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
 
 
 
+import paramiko
+
+def upload_to_aims_server(local_file_path):
+    # Server credentials
+    aims_host = settings.AIMS_SERVER_HOST
+    aims_port = settings.AIMS_PORT
+    aims_username = settings.AIMS_SERVER_USER
+    aims_password = settings.AIMS_SERVER_PASSWORD
+    remote_path = settings.AIMS_SERVER_PATH
+
+
+    try:
+        # Connect to the server
+        transport = paramiko.Transport((aims_host, aims_port))
+        transport.connect(username=aims_username, password=aims_password)
+        
+        # Start an SFTP session
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        
+        # Upload the file
+        sftp.put(local_file_path, remote_path)
+        logger.info(f"File successfully uploaded to {remote_path} on aims server.")
+        
+        # Close the SFTP session and transport
+        sftp.close()
+        transport.close()
+
+    except Exception as e:
+        logger.error(f"Failed to upload file to aims server: {e}", exc_info=True)
 
 
 
