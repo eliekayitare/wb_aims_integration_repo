@@ -189,6 +189,26 @@
     }, 5000); // Remove the toast after 5 seconds
   }
 
+  const socket = new WebSocket('ws://' + window.location.host + '/ws/flight-updates/');
+
+socket.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    if (data.message === 'Flight data updated') {
+        // Trigger a function to refresh the dashboard data
+        updateDashboard();
+    }
+};
+
+function updateDashboard() {
+    // Make an AJAX call to fetch updated data
+    fetch('/aims/dashboard/')
+        .then(response => response.json())
+        .then(data => {
+            // Update the dashboard with the new data
+            console.log("Dashboard updated", data);
+        });
+}
+
   // Handle displaying toast messages based on Django's messages framework
   {% if messages %}
   {% for message in messages %}

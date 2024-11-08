@@ -1,6 +1,6 @@
-from django.urls import path
-from aimsintegration.consumers import FlightDataConsumer
+from django.urls import re_path
+from . import consumers
 
 websocket_urlpatterns = [
-    path('ws/flight-data/', FlightDataConsumer.as_asgi()),
+    re_path(r'ws/flight-updates/$', consumers.FlightUpdatesConsumer.as_asgi()),
 ]

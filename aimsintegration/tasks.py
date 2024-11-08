@@ -6,6 +6,10 @@ import logging
 from django.conf import settings
 from datetime import datetime
 
+from aimsintegration.models import FlightData
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 logger = logging.getLogger(__name__)
 
 def get_exchange_account():
@@ -95,3 +99,28 @@ def fetch_acars_messages():
     logger.info("Batch processing of ACARS emails completed.")
 
 
+
+
+
+
+@shared_task
+def check_database_for_changes():
+    """
+    This task checks for changes in the FlightData table and sends updates via WebSocket if changes are detected.
+    """
+    # Check for updated or new flight data
+    updated_flights = FlightData.objects.filter(is_updated=True)
+
+    if updated_flights.exists():
+        # Send the update to WebSocket channel
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "flight_updates",  # Channel group name
+            {
+                "type": "send_update",
+                "message": "Flight data updated",
+            }
+        )
+
+        # Reset the 'is_updated' flag after notifying clients
+        updated_flights.update(is_updated=False)
