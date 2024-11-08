@@ -169,6 +169,37 @@
       tableBody.appendChild(row);
     });
   }
+
+  // Function to show toast messages
+  function showToast(message, type = "info") {
+    const toastContainer = document.getElementById("toast-container");
+    if (!toastContainer) return; // Exit if no container is found
+
+    // Create the toast element
+    const toast = document.createElement("div");
+    toast.classList.add("toast", type); // Add 'success', 'error', etc. based on the type
+    toast.innerText = message;
+
+    // Append the toast to the container
+    toastContainer.appendChild(toast);
+
+    // Automatically remove the toast after 5 seconds
+    setTimeout(() => {
+      toast.remove();
+    }, 5000); // Remove the toast after 5 seconds
+  }
+
+  // Handle displaying toast messages based on Django's messages framework
+  {% if messages %}
+  {% for message in messages %}
+    {% if message.tags == 'success' %}
+      showToast("{{ message }}", "success");
+    {% elif message.tags == 'error' %}
+      showToast("{{ message }}", "error");
+    {% endif %}
+  {% endfor %}
+  {% endif %}
+
 </script>
 
 {% endblock %}
