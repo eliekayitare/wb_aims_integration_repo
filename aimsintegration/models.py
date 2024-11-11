@@ -31,7 +31,7 @@ class FlightData(models.Model):
     sta_utc = models.TimeField(null=True, blank=True)  # Scheduled Time of Arrival
     source_type = models.CharField(max_length=20)
     raw_content = models.TextField()
-    # last_modified = models.DateTimeField(default=now, auto_now=True)  # Automatically updates on save
+    last_modified = models.DateTimeField(default=now, auto_now=True)  # Automatically updates on save
 
     class Meta:
         db_table = 'flight_data'
