@@ -101,26 +101,23 @@ def fetch_acars_messages():
 
 
 
-
+from datetime import timedelta
 
 @shared_task
 def check_database_for_changes():
-    """
-    This task checks for changes in the FlightData table and sends updates via WebSocket if changes are detected.
-    """
-    # Check for updated or new flight data
-    updated_flights = FlightData.objects.filter(is_updated=True)
+    # Get the time 1 minute ago
+    one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
+    
+    # Check if any records were modified in the last minute
+    recently_modified = FlightData.objects.filter(last_modified__gte=one_minute_ago)
 
-    if updated_flights.exists():
+    if recently_modified.exists():
         # Send the update to WebSocket channel
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            "flight_updates",  # Channel group name
+            "flight_updates",
             {
                 "type": "send_update",
                 "message": "Flight data updated",
             }
         )
-
-        # Reset the 'is_updated' flag after notifying clients
-        updated_flights.update(is_updated=False)

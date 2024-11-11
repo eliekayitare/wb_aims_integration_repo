@@ -458,6 +458,7 @@ def process_acars_message(item):
         flight_no = extract_flight_number(message_body)
         acars_event, event_time_str = extract_acars_event(message_body)
         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
+        tail_number = extract_tail_number(message_body)
 
         # Validate extracted time format
         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
@@ -466,6 +467,7 @@ def process_acars_message(item):
 
         # Log extracted fields
         logger.info(f"Extracted Flight Number: {flight_no}")
+        logger.info(f"Extracted Tail Number: {tail_number}")
         logger.info(f"Extracted ACARS Event: {acars_event}")
         logger.info(f"Extracted Event Time: {event_time_str}")
         logger.info(f"Extracted Departure Code (IATA): {dep_code}")
@@ -482,6 +484,7 @@ def process_acars_message(item):
         # Fetch all flights with the specified flight number, origin, and destination
         flights = FlightData.objects.filter(
             flight_no=flight_no,
+            tail_no=tail_number,
             dep_code_iata=dep_code,
             arr_code_iata=arr_code
         )
@@ -560,6 +563,17 @@ def extract_flight_number(message_body):
     """
     match = re.search(r'FI\sWB(\d+)', message_body)
     return match.group(1) if match else None
+
+
+import re
+
+def extract_tail_number(message_body):
+    """
+    Extracts the tail number (e.g., 9XR-XX) from the message body.
+    Assumes the tail number is always in the format '9XR-XX' where X is any alphanumeric character.
+    """
+    match = re.search(r'\b9XR-\w{2}\b', message_body)  # Match '9XR-' followed by exactly two alphanumeric characters
+    return match.group(0) if match else None
 
 
 
