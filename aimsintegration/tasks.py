@@ -6,10 +6,6 @@ import logging
 from django.conf import settings
 from datetime import datetime
 
-from aimsintegration.models import FlightData
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-
 logger = logging.getLogger(__name__)
 
 def get_exchange_account():
@@ -99,25 +95,3 @@ def fetch_acars_messages():
     logger.info("Batch processing of ACARS emails completed.")
 
 
-
-
-from datetime import timedelta
-
-@shared_task
-def check_database_for_changes():
-    # Get the time 1 minute ago
-    one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
-    
-    # Check if any records were modified in the last minute
-    recently_modified = FlightData.objects.filter(last_modified__gte=one_minute_ago)
-
-    if recently_modified.exists():
-        # Send the update to WebSocket channel
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            "flight_updates",
-            {
-                "type": "send_update",
-                "message": "Flight data updated",
-            }
-        )

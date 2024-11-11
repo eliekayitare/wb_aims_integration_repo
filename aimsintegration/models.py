@@ -13,7 +13,7 @@ class AirportData(models.Model):
     def __str__(self):
         return f"{self.iata_code} - {self.icao_code}"
 
-from django.utils.timezone import now
+
 class FlightData(models.Model):
     flight_no = models.CharField(max_length=6, null=False, blank=False)
     tail_no = models.CharField(max_length=10, null=True, blank=True)
@@ -31,7 +31,6 @@ class FlightData(models.Model):
     sta_utc = models.TimeField(null=True, blank=True)  # Scheduled Time of Arrival
     source_type = models.CharField(max_length=20)
     raw_content = models.TextField()
-    last_modified = models.DateTimeField(default=now, auto_now=True)  # Automatically updates on save
 
     class Meta:
         db_table = 'flight_data'

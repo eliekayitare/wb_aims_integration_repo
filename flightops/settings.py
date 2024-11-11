@@ -250,10 +250,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'aimsintegration.tasks.fetch_acars_messages',
         'schedule': crontab(minute='*'),  # Every 1 minute
     },
-    #  'check-database-every-minute': {
-    #     'task': 'aimsintegration.tasks.check_database_for_changes',
-    #     'schedule': crontab(minute='*/4'),
-    # },
+    
 }
 
 
