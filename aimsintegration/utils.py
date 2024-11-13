@@ -3,7 +3,7 @@ from exchangelib import FileAttachment
 from aimsintegration.models import AirportData, FlightData, AcarsMessage
 from datetime import datetime
 import re
-
+from django.core.mail import send_mail
 logger = logging.getLogger(__name__)
 
 def process_airport_file(attachment):
@@ -492,6 +492,15 @@ def process_acars_message(item):
 
         if not flights.exists():
             logger.info(f"No matching flights found in database for flight number: {flight_no}")
+            # Send an email notification to the email receiver if no matching flights are found
+            send_mail(
+                subject=f"No matching flights found in the database for flight number: {flight_no}",
+                message=f"Dear All,\n\n",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=settings.EMAIL_RECEIVER,
+                fail_silently=False,
+            )
+            
             return
 
         # Find the closest `sd_date_utc` to `email_received_date`
@@ -517,7 +526,7 @@ def process_acars_message(item):
         # Write updated data to the job file
         file_path = os.path.join(settings.MEDIA_ROOT, 'JOB1.txt')
         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
-        # upload_to_aims_server(file_path)
+        upload_to_aims_server(file_path)
 
     except Exception as e:
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
