@@ -541,7 +541,7 @@ def upload_to_aims_server(local_file_path):
     aims_port = settings.AIMS_PORT
     aims_username = settings.AIMS_SERVER_USER
     aims_password = settings.AIMS_SERVER_PASSWORD
-    remote_path = settings.AIMS_SERVER_PATH
+    remote_path = settings.AIMS_SERVER_DESTINATION_PATH
 
 
     try:
