@@ -218,6 +218,7 @@ def process_flight_schedule_file(attachment):
                 # Define unique criteria
                 unique_criteria = {
                     'flight_no': flight_no,
+                    'tail_no': tail_no,
                     'sd_date_utc': sd_date_utc,
                     'dep_code_icao': dep_code_icao,
                     'arr_code_icao': arr_code_icao,
@@ -484,7 +485,7 @@ def process_acars_message(item):
         # Fetch all flights with the specified flight number, origin, and destination
         flights = FlightData.objects.filter(
             flight_no=flight_no,
-            # tail_no=tail_number,
+            tail_no=tail_number,
             dep_code_iata=dep_code,
             arr_code_iata=arr_code
         )
