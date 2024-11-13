@@ -484,7 +484,7 @@ def process_acars_message(item):
         # Fetch all flights with the specified flight number, origin, and destination
         flights = FlightData.objects.filter(
             flight_no=flight_no,
-            tail_no=tail_number,
+            # tail_no=tail_number,
             dep_code_iata=dep_code,
             arr_code_iata=arr_code
         )
