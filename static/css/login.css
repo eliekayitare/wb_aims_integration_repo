@@ -7,7 +7,7 @@
 
 /* Left section with airplane background */
 .page-wrapper .left-section {
-  width: 60%;
+  width: 80%;
   background-color: #003366; /* You can keep this as a fallback color */
   opacity: 1; /* Adjust the opacity */
 }
