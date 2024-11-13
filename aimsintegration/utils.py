@@ -538,11 +538,10 @@ import paramiko
 def upload_to_aims_server(local_file_path):
     # Server credentials
     aims_host = settings.AIMS_SERVER_ADDRESS 
-    aims_port = settings.AIMS_PORT
+    aims_port = int(settings.AIMS_PORT)  # Ensure the port is an integer
     aims_username = settings.AIMS_SERVER_USER
     aims_password = settings.AIMS_SERVER_PASSWORD
     remote_path = settings.AIMS_SERVER_DESTINATION_PATH
-
 
     try:
         # Connect to the server
