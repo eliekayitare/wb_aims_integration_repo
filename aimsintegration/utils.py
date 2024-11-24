@@ -536,35 +536,6 @@ def process_acars_message(item):
 
 
 
-# import paramiko
-
-# def upload_to_aims_server(local_file_path):
-#     # Server credentials
-#     aims_host = settings.AIMS_SERVER_ADDRESS 
-#     aims_port = int(settings.AIMS_PORT)  # Ensure the port is an integer
-#     aims_username = settings.AIMS_SERVER_USER
-#     aims_password = settings.AIMS_SERVER_PASSWORD
-#     remote_path = settings.AIMS_SERVER_DESTINATION_PATH
-
-#     try:
-#         # Connect to the server
-#         transport = paramiko.Transport((aims_host, aims_port))
-#         transport.connect(username=aims_username, password=aims_password)
-        
-#         # Start an SFTP session
-#         sftp = paramiko.SFTPClient.from_transport(transport)
-        
-#         # Upload the file
-#         sftp.put(local_file_path, remote_path)
-#         logger.info(f"File successfully uploaded to {remote_path} on aims server.")
-        
-#         # Close the SFTP session and transport
-#         sftp.close()
-#         transport.close()
-
-#     except Exception as e:
-#         logger.error(f"Failed to upload file to aims server: {e}", exc_info=True)
-
 
 import os
 import paramiko
