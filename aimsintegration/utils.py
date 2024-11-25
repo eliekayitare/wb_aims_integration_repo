@@ -497,12 +497,13 @@ def process_acars_message(item):
             logger.info(f"No matching flights found in database for flight number: {flight_no}")
             # Send an email notification to the email receiver if no matching flights are found
             send_mail(
-                subject=f"No matching flights found in the database for flight number: {flight_no}",
-                message=f"Dear All,\n\n No matching flights found in the database for flight number: {flight_no}.\n\n The ACARS message received is as follows:\n\n{message_body} \n\n Regards,\n FlightOps Team",
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=settings.EMAIL_RECEIVER,
-                fail_silently=False,
+            subject=f"No matching flights found in the database for flight number: {flight_no}",
+            message=f"Dear All,\n\n No matching flights found in the database for flight number: {flight_no}.\n\n The ACARS message received is as follows:\n\n{message_body} \n\n Regards,\n FlightOps Team",
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[settings.EMAIL_RECEIVER] if isinstance(settings.EMAIL_RECEIVER, str) else settings.EMAIL_RECEIVER,
+            fail_silently=False,
             )
+
             
             return
 
