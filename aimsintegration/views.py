@@ -85,6 +85,6 @@ class FlightDataListView(APIView):
             sd_date_utc__gte=scheduled_departure_date
         )
 
-        # Serialize the data
+        # Serialize the data using the updated serializer
         serializer = FlightDataSerializer(flight_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
