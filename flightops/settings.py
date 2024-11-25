@@ -250,10 +250,10 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/10'),  # Every 10 minutes
         'options': {'run_immediately': False}
     },
-    # ACARS Messages - Runs every 1 minute
-    'fetch-acars-messages-every-1-minute': {
+    # ACARS Messages - Runs every 2 minutes
+    'fetch-acars-messages-every-2-minutes': {
         'task': 'aimsintegration.tasks.fetch_acars_messages',
-        'schedule': crontab(minute='*'),  # Every 1 minute
+        'schedule': crontab(minute='*/2'),  # Every 2 minutes
     },
     
 }
