@@ -49,3 +49,42 @@ def dashboard_view(request):
     # Non-AJAX request loads all today's flights, ordered by std_utc
     schedules = FlightData.objects.filter(sd_date_utc=filter_date).order_by('std_utc')
     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
+
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils.dateparse import parse_date
+from .models import FlightData
+from .serializers import FlightDataSerializer
+from datetime import datetime
+
+class FlightDataListView(APIView):
+    def get(self, request, *args, **kwargs):
+        # Extract query parameters
+        origin_icao = request.query_params.get('origin_icao')
+        destination_icao = request.query_params.get('destination_icao')
+        scheduled_departure_date = request.query_params.get('scheduled_departure_date', None)
+
+        # If no scheduled_departure_date is provided, use today's date
+        if scheduled_departure_date:
+            try:
+                scheduled_departure_date = parse_date(scheduled_departure_date)
+                if not scheduled_departure_date:
+                    raise ValueError("Invalid date format")
+            except ValueError:
+                return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            scheduled_departure_date = datetime.today().date()
+
+        # Query the database based on provided filters
+        flight_data = FlightData.objects.filter(
+            dep_code_icao=origin_icao,
+            arr_code_icao=destination_icao,
+            sd_date_utc__gte=scheduled_departure_date
+        )
+
+        # Serialize the data
+        serializer = FlightDataSerializer(flight_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
