@@ -393,7 +393,7 @@ def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arr
         row = format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time)
         
         # Append the row to the file
-        with open(file_path, 'a') as file:
+        with open(file_path, 'w') as file:
             file.write(row + '\n')
         logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to job file.")
     
