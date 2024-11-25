@@ -177,7 +177,7 @@ def process_flight_schedule_file(attachment):
             fields = line.split()
             
             # Skip line if insufficient fields
-            if len(fields) < 9:
+            if len(fields) < 8:
                 logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
                 print("----------------------------------------------")
                 print(len(fields))
