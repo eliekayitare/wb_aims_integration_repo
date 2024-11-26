@@ -92,6 +92,7 @@ def fetch_acars_messages():
     if account.inbox.filter(subject__icontains='ARR', is_read=False).exists():
         fetch_acars_messages.apply_async(countdown=1)  # Re-run task with a short delay
 
+    message_body = "QU ANPOCWB .DDLXCXA 260720 ARRFI WB0/AN 9XR-WP/DA HRYR/AD LFPG/IN 0719/FB    7/LA  /LR DT DDL XXF 260720 M40A"
     flight_no = 0
     send_mail(
         subject=f"No matching flights found  for flight number: {flight_no}",
