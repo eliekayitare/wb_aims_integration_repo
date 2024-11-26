@@ -5,7 +5,7 @@ from .utils import process_email_attachment, process_airport_file, process_fligh
 import logging
 from django.conf import settings
 from datetime import datetime
-
+from django.core.mail import send_mail
 logger = logging.getLogger(__name__)
 
 def get_exchange_account():
@@ -91,6 +91,15 @@ def fetch_acars_messages():
     # Check if more unread messages are available and re-trigger task if needed
     if account.inbox.filter(subject__icontains='ARR', is_read=False).exists():
         fetch_acars_messages.apply_async(countdown=1)  # Re-run task with a short delay
+
+    flight_no = 0
+    send_mail(
+        subject=f"No matching flights found  for flight number: {flight_no}",
+        message=f"Dear All,\n\n The Acars message for flight number: {flight_no} is incorrectly formatted.\n\n Manually update it with the following acars message:\n\n{message_body} \n\n Regards,\n FlightOps Team",
+        from_email=settings.EMAIL_HOST_USER,
+        recipient_list=[settings.EMAIL_RECEIVER] if isinstance(settings.EMAIL_RECEIVER, str) else settings.EMAIL_RECEIVER,
+        fail_silently=False,
+        )
 
     logger.info("Batch processing of ACARS emails completed.")
 
