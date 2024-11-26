@@ -282,18 +282,66 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     row = row.ljust(172)
     return row
 
+# def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arrival_time):
+#     try:
+#         # Format the row
+#         row = format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time)
+        
+#         # Append the row to the file
+#         with open(file_path, 'w') as file:
+#             file.write(row + '\n')
+#         logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to job file.")
+    
+#     except Exception as e:
+#         logger.error(f"Error writing to job file: {e}", exc_info=True)
+
+import os
+import shutil
+import time
+import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+
 def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arrival_time):
     try:
-        # Format the row
+        # Format the row from the ACARS data
         row = format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time)
         
-        # Append the row to the file
-        with open(file_path, 'w') as file:
+        # Generate the temporary file path (e.g., JOB1.txt.tmp)
+        temp_file_path = file_path + ".tmp"
+        
+        # Write the row to the temporary file
+        with open(temp_file_path, 'w') as file:
             file.write(row + '\n')
-        logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to job file.")
-    
+        logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to temporary job file.")
+        
+        # Try to replace the original JOB1.txt with the temporary file (retry mechanism)
+        attempts = 3  # Number of retries
+        delay = 2  # Delay in seconds between retries (you can adjust this based on your needs)
+        success = False
+        
+        for attempt in range(attempts):
+            try:
+                shutil.move(temp_file_path, file_path)
+                success = True
+                logger.info(f"Replaced original JOB1.txt with the updated file.")
+                break  # Exit the loop if the move operation is successful
+            except Exception as e:
+                logger.error(f"Attempt {attempt + 1} failed: {e}", exc_info=True)
+                if attempt < attempts - 1:  # Don't sleep after the last attempt
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)  # Wait before retrying
+                else:
+                    logger.error(f"Failed to replace original file after {attempts} attempts.")
+        
+        if not success:
+            logger.error(f"Failed to replace original file: {file_path} after {attempts} attempts.")
+            # Optionally, send an alert or handle the failure as needed.
+            # You could trigger a system alert or email to notify the failure.
+
     except Exception as e:
-        logger.error(f"Error writing to job file: {e}", exc_info=True)
+        logger.error(f"Error writing to JOB1.txt: {e}", exc_info=True)
 
 
 
@@ -433,10 +481,50 @@ def process_acars_message(item):
 
 
 
+# import os
+# import paramiko
+# import logging
+
+# logger = logging.getLogger(__name__)
+
+# def upload_to_aims_server(local_file_path):
+#     # Server credentials
+#     aims_host = settings.AIMS_SERVER_ADDRESS
+#     aims_port = int(settings.AIMS_PORT)
+#     aims_username = settings.AIMS_SERVER_USER
+#     aims_password = settings.AIMS_SERVER_PASSWORD
+#     destination_dir = settings.AIMS_SERVER_DESTINATION_PATH
+
+#     try:
+#         # Ensure the remote path includes the file name
+#         remote_path = os.path.join(destination_dir, os.path.basename(local_file_path))
+#         logger.info(f"Uploading file to remote path: {remote_path}")
+
+#         # Connect to the server
+#         transport = paramiko.Transport((aims_host, aims_port))
+#         transport.connect(username=aims_username, password=aims_password)
+
+#         # Start an SFTP session
+#         sftp = paramiko.SFTPClient.from_transport(transport)
+
+#         # Upload the file
+#         sftp.put(local_file_path, remote_path)
+#         logger.info(f"File successfully uploaded to {remote_path} on AIMS server.")
+
+#         # Close the SFTP session and transport
+#         sftp.close()
+#         transport.close()
+
+#     except Exception as e:
+#         logger.error(f"Failed to upload file to AIMS server: {e}", exc_info=True)
+
 import os
 import paramiko
+import time
 import logging
+from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 
+# Initialize logger
 logger = logging.getLogger(__name__)
 
 def upload_to_aims_server(local_file_path):
@@ -447,28 +535,53 @@ def upload_to_aims_server(local_file_path):
     aims_password = settings.AIMS_SERVER_PASSWORD
     destination_dir = settings.AIMS_SERVER_DESTINATION_PATH
 
+    # Retry configuration
+    attempts = 3  # Number of retries
+    delay = 5  # Delay in seconds between retries
+
     try:
+        # Ensure the local file exists before proceeding
+        if not os.path.exists(local_file_path):
+            logger.error(f"File {local_file_path} does not exist.")
+            return
+
         # Ensure the remote path includes the file name
         remote_path = os.path.join(destination_dir, os.path.basename(local_file_path))
-        logger.info(f"Uploading file to remote path: {remote_path}")
+        logger.info(f"Preparing to upload file to: {remote_path}")
 
-        # Connect to the server
-        transport = paramiko.Transport((aims_host, aims_port))
-        transport.connect(username=aims_username, password=aims_password)
+        # Attempt to upload with retries
+        for attempt in range(attempts):
+            try:
+                # Create SSH transport and SFTP session
+                transport = paramiko.Transport((aims_host, aims_port))
+                transport.connect(username=aims_username, password=aims_password)
+                sftp = paramiko.SFTPClient.from_transport(transport)
 
-        # Start an SFTP session
-        sftp = paramiko.SFTPClient.from_transport(transport)
+                # Upload the file
+                sftp.put(local_file_path, remote_path)
+                logger.info(f"File successfully uploaded to {remote_path} on AIMS server.")
+                
+                # Close the SFTP session and transport after successful upload
+                sftp.close()
+                transport.close()
+                break  # Exit the retry loop on success
 
-        # Upload the file
-        sftp.put(local_file_path, remote_path)
-        logger.info(f"File successfully uploaded to {remote_path} on AIMS server.")
-
-        # Close the SFTP session and transport
-        sftp.close()
-        transport.close()
+            except (SSHException, NoValidConnectionsError) as e:
+                # Specific exceptions related to SSH or SFTP errors
+                logger.error(f"SSH/SFTP error on attempt {attempt + 1}: {e}", exc_info=True)
+            except Exception as e:
+                # Generic exception handling
+                logger.error(f"Failed to upload on attempt {attempt + 1}: {e}", exc_info=True)
+            
+            # Retry logic with delay
+            if attempt < attempts - 1:
+                logger.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                logger.error(f"Failed to upload file after {attempts} attempts.")
 
     except Exception as e:
-        logger.error(f"Failed to upload file to AIMS server: {e}", exc_info=True)
+        logger.error(f"Error during file upload process: {e}", exc_info=True)
 
 
 
