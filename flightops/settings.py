@@ -259,7 +259,9 @@ CELERY_BEAT_SCHEDULE = {
     
 }
 
-
+CORS_ALLOWED_ORIGINS = [
+"http://localhost:3000",
+]
 
 
 
