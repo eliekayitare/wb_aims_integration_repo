@@ -387,6 +387,14 @@ def process_acars_message(item):
             dep_code_iata=dep_code,
             arr_code_iata=arr_code
         )
+        flight_no = 0
+        send_mail(
+            subject=f"No matching flights found  for flight number: {flight_no}",
+            message=f"Dear All,\n\n The Acars message for flight number: {flight_no} is incorrectly formatted.\n\n Manually update it with the following acars message:\n\n{message_body} \n\n Regards,\n FlightOps Team",
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[settings.EMAIL_RECEIVER] if isinstance(settings.EMAIL_RECEIVER, str) else settings.EMAIL_RECEIVER,
+            fail_silently=False,
+            )
 
         if not flights.exists():
             logger.info(f"No matching flights found in database for flight number: {flight_no}")
