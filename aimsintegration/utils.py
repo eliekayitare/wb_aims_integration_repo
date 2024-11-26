@@ -58,111 +58,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# def process_flight_schedule_file(attachment):
-#     """
-#     Process the entire flight schedule file and update the FlightData table.
-#     Avoid updating records with ACARS data in `atd_utc`, `takeoff_utc`, `touchdown_utc`, or `ata_utc`.
-#     """
-#     try:
-#         content = attachment.content.decode('utf-8').splitlines()
-#         logger.info("Starting to process the flight schedule file...")
-
-#         for line_num, line in enumerate(content, start=1):
-#             fields = line.split()
-            
-#             # Skip line if insufficient fields
-#             if len(fields) < 9:
-#                 logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
-#                 continue
-
-#             try:
-#                 # Extract fields
-#                 flight_date = fields[0]
-#                 tail_no = fields[1]
-#                 flight_no = fields[2]
-#                 dep_code_icao = fields[3]
-#                 arr_code_icao = fields[4]
-#                 std = fields[5]
-#                 sta = fields[6]
-#                 arrival_date = fields[-1]
-
-#                 # Parse dates
-#                 sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-#                 sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
-#                 # try:
-#                 #     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
-#                 # except ValueError:
-#                 #     sa_date_utc = sd_date_utc
-
-#                 # Parse times
-#                 try:
-#                     std_utc = datetime.strptime(std, "%H:%M").time()
-#                     sta_utc = datetime.strptime(sta, "%H:%M").time()
-#                 except ValueError:
-#                     logger.error(f"Skipping line {line_num} due to time format error in STD or STA: {std}, {sta}")
-#                     continue
-                
-#                 # Fetch airport data
-#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
-#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
-
-#                 if not dep_airport or not arr_airport:
-#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
-#                     continue
-
-#                 dep_code_iata = dep_airport.iata_code
-#                 arr_code_iata = arr_airport.iata_code
-
-#                 # Define matching criteria and check if a record exists
-#                 flight_data = FlightData.objects.filter(
-#                     flight_no=flight_no,
-#                     sd_date_utc=sd_date_utc,
-#                     dep_code_icao=dep_code_icao,
-#                     arr_code_icao=arr_code_icao,
-#                     atd_utc__isnull=True,  # Ensure no ACARS data
-#                     takeoff_utc__isnull=True,
-#                     touchdown_utc__isnull=True,
-#                     ata_utc__isnull=True,
-#                     sa_date_utc=sa_date_utc
-#                 ).first()
-
-#                 # Update if a matching record exists without ACARS data
-#                 if flight_data:
-#                     flight_data.tail_no = tail_no
-#                     flight_data.dep_code_iata = dep_code_iata
-#                     flight_data.arr_code_iata = arr_code_iata
-#                     flight_data.std_utc = std_utc
-#                     flight_data.sta_utc = sta_utc
-#                     flight_data.sa_date_utc = sa_date_utc
-#                     flight_data.raw_content = line
-#                     flight_data.save()
-#                     logger.info(f"Updated flight {flight_no} on {sd_date_utc}")
-#                 else:
-#                     # Create a new record if no matching record exists
-#                     FlightData.objects.create(
-#                         flight_no=flight_no,
-#                         tail_no=tail_no,
-#                         dep_code_iata=dep_code_iata,
-#                         dep_code_icao=dep_code_icao,
-#                         arr_code_iata=arr_code_iata,
-#                         arr_code_icao=arr_code_icao,
-#                         sd_date_utc=sd_date_utc,
-#                         std_utc=std_utc,
-#                         sta_utc=sta_utc,
-#                         sa_date_utc=sa_date_utc,
-#                         raw_content=line
-#                     )
-#                     logger.info(f"Created new flight record: {flight_no} on {sd_date_utc}")
-
-#             except ValueError as ve:
-#                 logger.error(f"Error processing flight record on line {line_num}: {ve} - {line}")
-#                 continue
-
-#         logger.info("Flight schedule file processed successfully.")
-
-#     except Exception as e:
-#         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
-
 
 def process_flight_schedule_file(attachment):
     """
@@ -497,8 +392,8 @@ def process_acars_message(item):
             logger.info(f"No matching flights found in database for flight number: {flight_no}")
             # Send an email notification to the email receiver if no matching flights are found
             send_mail(
-            subject=f"No matching flights found in the database for flight number: {flight_no}",
-            message=f"Dear All,\n\n No matching flights found in the database for flight number: {flight_no}.\n\n The ACARS message received is as follows:\n\n{message_body} \n\n Regards,\n FlightOps Team",
+            subject=f"No matching flights found  for flight number: {flight_no}",
+            message=f"Dear All,\n\n The Acars message for flight number: {flight_no} is incorrectly formatted.\n\n Manually update it with the following acars message:\n\n{message_body} \n\n Regards,\n FlightOps Team",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[settings.EMAIL_RECEIVER] if isinstance(settings.EMAIL_RECEIVER, str) else settings.EMAIL_RECEIVER,
             fail_silently=False,
