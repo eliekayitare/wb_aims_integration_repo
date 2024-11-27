@@ -101,8 +101,9 @@ def fetch_acars_messages():
     account = get_exchange_account()
     logger.info("Fetching and processing ACARS messages...")
 
-    # Fetch the oldest unread email
-    email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
+    # Fetch the oldest unread email (using slicing and indexing)
+    emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:1]
+    email = emails[0] if emails else None  # Extract the first email if it exists
 
     while email:
         # Check if the email contains "M16" in the body
@@ -124,7 +125,8 @@ def fetch_acars_messages():
             break  # Exit after processing one non-"M16" message
 
         # Fetch the next oldest unread email
-        email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
+        emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:1]
+        email = emails[0] if emails else None  # Extract the next email if it exists
 
     if not email:
         logger.info("No more unread ACARS messages or only 'M16' messages left. Task will run again at the next schedule.")
