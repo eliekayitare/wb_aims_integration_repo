@@ -70,11 +70,11 @@ def fetch_acars_messages():
     logger.info("Fetching and processing ACARS messages...")
 
     # Fetch a batch of the oldest unread messages
-    # emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:5]
-    email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
+    emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:5]
+    # email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
 
     # Process each email in the batch
-    for item in email:
+    for item in emails:
         if "M16" in item.body:
             logger.info(f"Skipping 'M16' ACARS message: {item.subject}")
             item.is_read = True
