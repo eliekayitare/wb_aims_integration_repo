@@ -64,35 +64,67 @@ def fetch_flight_schedules():
         logger.info("No new flight schedule email found.")
 
 
+# @shared_task
+# def fetch_acars_messages():
+#     account = get_exchange_account()
+#     logger.info("Fetching and processing ACARS messages...")
+
+#     # Fetch a batch of the oldest unread messages
+#     emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:5]
+#     # email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
+
+#     # Process each email in the batch
+#     for item in emails:
+#         if "M16" in item.body:
+#             logger.info(f"Skipping 'M16' ACARS message: {item.subject}")
+#             item.is_read = True
+#             item.save(update_fields=['is_read'])
+#             continue
+
+#         # Log and process the ACARS message
+#         logger.info(f"Processing ACARS email with subject: {item.subject}")
+#         process_acars_message(item)
+
+#         # Mark as read to avoid reprocessing
+#         item.is_read = True
+#         item.save(update_fields=['is_read'])
+
+#     # Check if more unread messages are available and re-trigger task if needed
+#     if account.inbox.filter(subject__icontains='ARR', is_read=False).exists():
+#         fetch_acars_messages.apply_async(countdown=1)  # Re-run task with a short delay
+
+#     logger.info("Batch processing of ACARS emails completed.")
+
+
 @shared_task
 def fetch_acars_messages():
     account = get_exchange_account()
     logger.info("Fetching and processing ACARS messages...")
 
-    # Fetch a batch of the oldest unread messages
-    emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:5]
-    # email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
+    # Fetch the oldest unread email
+    email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
 
-    # Process each email in the batch
-    for item in emails:
-        if "M16" in item.body:
-            logger.info(f"Skipping 'M16' ACARS message: {item.subject}")
-            item.is_read = True
-            item.save(update_fields=['is_read'])
-            continue
+    while email:
+        # Check if the email contains "M16" in the body
+        if "M16" in email.body:
+            logger.info(f"Skipping 'M16' ACARS message: {email.subject}")
+            email.is_read = True
+            email.save(update_fields=['is_read'])
+            logger.info("Marked 'M16' message as read. Proceeding to the next message.")
+        else:
+            # Log and process the ACARS message
+            logger.info(f"Processing ACARS email with subject: {email.subject}")
+            process_acars_message(email)
 
-        # Log and process the ACARS message
-        logger.info(f"Processing ACARS email with subject: {item.subject}")
-        process_acars_message(item)
+            # Mark as read to avoid reprocessing
+            email.is_read = True
+            email.save(update_fields=['is_read'])
 
-        # Mark as read to avoid reprocessing
-        item.is_read = True
-        item.save(update_fields=['is_read'])
+            logger.info("Processed an ACARS message. Exiting after handling one message.")
+            break  # Exit after processing one non-"M16" message
 
-    # Check if more unread messages are available and re-trigger task if needed
-    if account.inbox.filter(subject__icontains='ARR', is_read=False).exists():
-        fetch_acars_messages.apply_async(countdown=1)  # Re-run task with a short delay
+        # Fetch the next oldest unread email
+        email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
 
-    logger.info("Batch processing of ACARS emails completed.")
-
-
+    if not email:
+        logger.info("No more unread ACARS messages or only 'M16' messages left. Task will run again at the next schedule.")
