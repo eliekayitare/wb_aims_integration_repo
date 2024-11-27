@@ -95,15 +95,14 @@ def fetch_flight_schedules():
 
 #     logger.info("Batch processing of ACARS emails completed.")
 
-
 @shared_task
 def fetch_acars_messages():
     account = get_exchange_account()
     logger.info("Fetching and processing ACARS messages...")
 
-    # Fetch the oldest unread email (using slicing and indexing)
-    emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:1]
-    email = emails[0] if emails else None  # Extract the first email if it exists
+    # Fetch the oldest unread email safely
+    emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
+    email = next(iter(emails), None)  # Use `next` to get the first email or `None` if empty
 
     while email:
         # Check if the email contains "M16" in the body
@@ -125,8 +124,8 @@ def fetch_acars_messages():
             break  # Exit after processing one non-"M16" message
 
         # Fetch the next oldest unread email
-        emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:1]
-        email = emails[0] if emails else None  # Extract the next email if it exists
+        emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
+        email = next(iter(emails), None)  # Get the next email or `None` if no more emails
 
     if not email:
         logger.info("No more unread ACARS messages or only 'M16' messages left. Task will run again at the next schedule.")
