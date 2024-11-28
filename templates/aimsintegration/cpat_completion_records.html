@@ -1,6 +1,6 @@
 {% extends 'base.html' %} {% load static %}
 
-<!-- Page-specific CSS for CPAT Completion Records -->
+<!-- Page-specific CSS for CPAT -->
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
@@ -31,10 +31,8 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <ul>
-      <li>
-        <li><a href="{% url 'dashboard' %}">ACARS</a></li>
-        <a href="{% url 'cpat_completion_records' %}">CPAT</a>
-      </li>
+      <li><a href="{% url 'dashboard' %}">ACARS</a></li>
+      <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
     </ul>
   </aside>
 
@@ -79,10 +77,10 @@
             <td>{{ record.employee_id }}</td>
             <td>{{ record.employee_email }}</td>
             <td>{{ record.course_code }}</td>
-            <td>{{ record.score|default:'--' }}</td>
-            <td>{{ record.time_in_seconds|default:'--' }}</td>
-            <td>{{ record.start_date|date:"Y-m-d H:i"|default:'--' }}</td>
-            <td>{{ record.end_date|date:"Y-m-d H:i"|default:'--' }}</td>
+            <td>{{ record.score|default:"--" }}</td>
+            <td>{{ record.time_in_seconds|default:"--" }}</td>
+            <td>{{ record.start_date|date:"Y-m-d H:i"|default:"--" }}</td>
+            <td>{{ record.end_date|date:"Y-m-d H:i"|default:"--" }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -129,11 +127,11 @@
     })
       .then((response) => response.json())
       .then((data) => {
-        updateCompletionTable(data); // Update the completion data table with the filtered results
+        updateCompletionTable(data); // Update the completion records table with the filtered results
       });
   }
 
-  // Function to dynamically update completion records table
+  // Function to dynamically update the completion records table
   function updateCompletionTable(completionData) {
     const tableBody = document.getElementById("completion-data");
     tableBody.innerHTML = ""; // Clear the current table content
@@ -170,7 +168,7 @@
     }, 5000);
   }
 
-  // Handle Django messages framework for displaying toasts
+  // Handle displaying toast messages based on Django's messages framework
   {% if messages %}
   {% for message in messages %}
     {% if message.tags == 'success' %}
