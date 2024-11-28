@@ -260,10 +260,10 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/2'),  # Every 2 minutes
     },
 
-    # CARGO Project - Runs every 2 hours
-    'fetch-cargo-data-every-2-hours': {
+    # CARGO Project - Runs every 1 hour 20 minutes
+    'fetch-cargo-data-every-1-hour': {
         'task': 'aimsintegration.tasks.cargo_fetch_flight_schedules',
-        'schedule': crontab(minute=0, hour='*/2'),  # Every 2 hours
+        'schedule': crontab(minute='*/85'),  # Every 1 hour 20 minutes
     },
 
     # CPAT Project -Runs every 1 hour
