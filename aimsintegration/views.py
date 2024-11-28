@@ -122,7 +122,7 @@ def todays_completion_records_view(request):
     records = records_query.order_by('completion_date')
 
     # Render the template with the filtered records
-    return render(request, 'completion_records.html', {
+    return render(request, 'aimsintegration/completion_records.html', {
         'records': records,
         'today': today,
         'query': query,
