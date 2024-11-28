@@ -51,12 +51,13 @@ def dashboard_view(request):
     return render(request, 'aimsintegration/dashboard.html', {'schedules': schedules})
 
 
+#Cargo Project API
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.dateparse import parse_date
-from .models import FlightData
+from .models import FlightData, CargoFlightData
 from .serializers import FlightDataSerializer
 from datetime import datetime
 
@@ -79,7 +80,7 @@ class FlightDataListView(APIView):
             scheduled_departure_date = datetime.today().date()
 
         # Query the database based on provided filters
-        flight_data = FlightData.objects.filter(
+        flight_data = CargoFlightData.objects.filter(
             dep_code_icao=origin_icao,
             arr_code_icao=destination_icao,
             sd_date_utc__gte=scheduled_departure_date
@@ -88,3 +89,41 @@ class FlightDataListView(APIView):
         # Serialize the data using the updated serializer
         serializer = FlightDataSerializer(flight_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+#CPAT Project API
+
+from django.shortcuts import render
+from django.utils.timezone import now
+from .models import CompletionRecord
+
+def todays_completion_records_view(request):
+    # Get today's date in the server's timezone
+    today = now().date()
+
+    # Fetch the search query from the request, if provided
+    query = request.GET.get('query', '').strip()
+
+    # Base query to filter records for today
+    records_query = CompletionRecord.objects.filter(completion_date__date=today)
+
+    # Apply search filter if a query is provided
+    if query:
+        records_query = records_query.filter(
+            employee_id__icontains=query
+        ) | CompletionRecord.objects.filter(
+            employee_email__icontains=query
+        ) | CompletionRecord.objects.filter(
+            course_code__icontains=query
+        )
+
+    # Order the records by completion_date
+    records = records_query.order_by('completion_date')
+
+    # Render the template with the filtered records
+    return render(request, 'completion_records.html', {
+        'records': records,
+        'today': today,
+        'query': query,
+    })

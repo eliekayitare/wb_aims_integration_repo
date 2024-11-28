@@ -1,9 +1,9 @@
 from rest_framework import serializers
-from .models import FlightData
+from .models import FlightData, CargoFlightData
 
 class FlightDataSerializer(serializers.ModelSerializer):
     class Meta:
-        model = FlightData
+        model = CargoFlightData
         fields = [
             'flight_no', 
             'tail_no', 

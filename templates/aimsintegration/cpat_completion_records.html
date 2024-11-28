@@ -1,0 +1,184 @@
+{% extends 'base.html' %} {% load static %}
+
+<!-- Page-specific CSS for CPAT Completion Records -->
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/cpat_completion_records.css' %}" />
+<style>
+  /* Toast styling */
+  .toast {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    color: white;
+    width: 250px;
+    opacity: 0.9;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+  }
+
+  .toast.success {
+    background-color: green;
+  }
+
+  .toast.error {
+    background-color: red;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <ul>
+      <li>
+        <a href="{% url 'cpat_completion_records' %}">Completion Records</a>
+      </li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="search-filter-container">
+      <input
+        type="text"
+        placeholder="Search by Employee, Email, or Course Code"
+        class="search-input"
+        id="search-input"
+      />
+
+      <select class="filter-select" id="filter-select">
+        <option value="none">Filter by</option>
+        <option value="date">Date</option>
+      </select>
+
+      <!-- Date picker input (initially hidden, shown when "Date" is selected) -->
+      <input type="date" id="date-picker" style="display: none" />
+    </div>
+
+    <!-- Completion Records Table -->
+    <div class="table-container">
+      <table id="completion-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Employee ID</th>
+            <th>Email</th>
+            <th>Course Code</th>
+            <th>Score</th>
+            <th>Time (Seconds)</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+          </tr>
+        </thead>
+        <tbody id="completion-data">
+          {% for record in records %}
+          <tr>
+            <td>{{ record.completion_date|date:"Y-m-d" }}</td>
+            <td>{{ record.employee_id }}</td>
+            <td>{{ record.employee_email }}</td>
+            <td>{{ record.course_code }}</td>
+            <td>{{ record.score|default:'--' }}</td>
+            <td>{{ record.time_in_seconds|default:'--' }}</td>
+            <td>{{ record.start_date|date:"Y-m-d H:i"|default:'--' }}</td>
+            <td>{{ record.end_date|date:"Y-m-d H:i"|default:'--' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container for displaying messages -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- WebSocket, Toast, and Search Script -->
+<script>
+  // Show or hide the date picker based on filter selection
+  document
+    .getElementById("filter-select")
+    .addEventListener("change", function () {
+      const datePicker = document.getElementById("date-picker");
+      if (this.value === "date") {
+        datePicker.style.display = "inline-block";
+      } else {
+        datePicker.style.display = "none";
+        datePicker.value = ""; // Clear date picker value when not used
+        searchRecords(); // Re-run the search if filter is cleared
+      }
+    });
+
+  // Listen for input events on the search bar and date picker
+  document
+    .getElementById("search-input")
+    .addEventListener("input", searchRecords);
+  document
+    .getElementById("date-picker")
+    .addEventListener("change", searchRecords);
+
+  function searchRecords() {
+    const query = document.getElementById("search-input").value;
+    const selectedDate = document.getElementById("date-picker").value;
+
+    fetch(`/cpat/completion-records/?query=${query}&date=${selectedDate}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        updateCompletionTable(data); // Update the completion data table with the filtered results
+      });
+  }
+
+  // Function to dynamically update completion records table
+  function updateCompletionTable(completionData) {
+    const tableBody = document.getElementById("completion-data");
+    tableBody.innerHTML = ""; // Clear the current table content
+
+    completionData.forEach((record) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${record.completion_date}</td>
+        <td>${record.employee_id}</td>
+        <td>${record.employee_email}</td>
+        <td>${record.course_code}</td>
+        <td>${record.score || "--"}</td>
+        <td>${record.time_in_seconds || "--"}</td>
+        <td>${record.start_date || "--"}</td>
+        <td>${record.end_date || "--"}</td>
+      `;
+      tableBody.appendChild(row);
+    });
+  }
+
+  // Function to show toast messages
+  function showToast(message, type = "info") {
+    const toastContainer = document.getElementById("toast-container");
+    if (!toastContainer) return;
+
+    const toast = document.createElement("div");
+    toast.classList.add("toast", type);
+    toast.innerText = message;
+
+    toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+      toast.remove();
+    }, 5000);
+  }
+
+  // Handle Django messages framework for displaying toasts
+  {% if messages %}
+  {% for message in messages %}
+    {% if message.tags == 'success' %}
+      showToast("{{ message }}", "success");
+    {% elif message.tags == 'error' %}
+      showToast("{{ message }}", "error");
+    {% endif %}
+  {% endfor %}
+  {% endif %}
+</script>
+
+{% endblock %}

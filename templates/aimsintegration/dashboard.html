@@ -31,7 +31,8 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <ul>
-      <li><a href="{% url 'dashboard' %}">AIMS Data</a></li>
+      <li><a href="{% url 'dashboard' %}">ACARS</a></li>
+      <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
     </ul>
   </aside>
 
@@ -44,7 +45,9 @@
         class="search-input"
         id="search-input"
       />
-      {% comment %} <button class="search-btn"><i class="fas fa-search"></i></button> {% endcomment %}
+      {% comment %}
+      <button class="search-btn"><i class="fas fa-search"></i></button> {%
+      endcomment %}
 
       <select class="filter-select" id="filter-select">
         <option value="none">Filter by</option>
@@ -106,120 +109,119 @@
 
 <!-- WebSocket, Toast, and Search Script -->
 <script>
-  // Show or hide the date picker based on filter selection
-  document
-    .getElementById("filter-select")
-    .addEventListener("change", function () {
-      const datePicker = document.getElementById("date-picker");
-      if (this.value === "date") {
-        datePicker.style.display = "inline-block";
-      } else {
-        datePicker.style.display = "none";
-        datePicker.value = ""; // Clear date picker value when not used
-        searchFlights(); // Re-run the search if filter is cleared
-      }
-    });
-
-  // Listen for input events on the search bar and date picker
-  document
-    .getElementById("search-input")
-    .addEventListener("input", searchFlights);
-  document
-    .getElementById("date-picker")
-    .addEventListener("change", searchFlights);
-
-  function searchFlights() {
-    const query = document.getElementById("search-input").value;
-    const selectedDate = document.getElementById("date-picker").value;
-
-    fetch(`/aims/dashboard/?query=${query}&date=${selectedDate}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        updateFlightTable(data); // Update the flight data table with the filtered results
+    // Show or hide the date picker based on filter selection
+    document
+      .getElementById("filter-select")
+      .addEventListener("change", function () {
+        const datePicker = document.getElementById("date-picker");
+        if (this.value === "date") {
+          datePicker.style.display = "inline-block";
+        } else {
+          datePicker.style.display = "none";
+          datePicker.value = ""; // Clear date picker value when not used
+          searchFlights(); // Re-run the search if filter is cleared
+        }
       });
-  }
 
-  // Function to dynamically update flight table
-  function updateFlightTable(flightData) {
-    const tableBody = document.getElementById("flight-data");
-    tableBody.innerHTML = ""; // Clear the current table content
+    // Listen for input events on the search bar and date picker
+    document
+      .getElementById("search-input")
+      .addEventListener("input", searchFlights);
+    document
+      .getElementById("date-picker")
+      .addEventListener("change", searchFlights);
 
-    flightData.forEach((flight) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${flight.sd_date_utc}</td>
-        <td>${flight.flight_no}</td>
-        <td>${flight.tail_no}</td>
-        <td>${flight.dep_code_iata}</td>
-        <td>${flight.dep_code_icao}</td>
-        <td>${flight.arr_code_iata}</td>
-        <td>${flight.arr_code_icao}</td>
-        <td>${flight.std_utc}</td>
-        <td>${flight.atd_utc || "--"}</td>
-        <td>${flight.takeoff_utc || "--"}</td>
-        <td>${flight.touchdown_utc || "--"}</td>
-        <td>${flight.ata_utc || "--"}</td>
-        <td>${flight.sta_utc}</td>
-        <td><button class="btn-action">View</button></td>
-      `;
-      tableBody.appendChild(row);
-    });
-  }
+    function searchFlights() {
+      const query = document.getElementById("search-input").value;
+      const selectedDate = document.getElementById("date-picker").value;
 
-  // Function to show toast messages
-  function showToast(message, type = "info") {
-    const toastContainer = document.getElementById("toast-container");
-    if (!toastContainer) return; // Exit if no container is found
-
-    // Create the toast element
-    const toast = document.createElement("div");
-    toast.classList.add("toast", type); // Add 'success', 'error', etc. based on the type
-    toast.innerText = message;
-
-    // Append the toast to the container
-    toastContainer.appendChild(toast);
-
-    // Automatically remove the toast after 5 seconds
-    setTimeout(() => {
-      toast.remove();
-    }, 5000); // Remove the toast after 5 seconds
-  }
-
-  const socket = new WebSocket('ws://' + window.location.host + '/ws/flight-updates/');
-
-socket.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    if (data.message === 'Flight data updated') {
-        // Trigger a function to refresh the dashboard data
-        updateDashboard();
-    }
-};
-
-function updateDashboard() {
-    // Make an AJAX call to fetch updated data
-    fetch('/aims/dashboard/')
-        .then(response => response.json())
-        .then(data => {
-            // Update the dashboard with the new data
-            console.log("Dashboard updated", data);
+      fetch(`/aims/dashboard/?query=${query}&date=${selectedDate}`, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          updateFlightTable(data); // Update the flight data table with the filtered results
         });
-}
+    }
 
-  // Handle displaying toast messages based on Django's messages framework
-  {% if messages %}
-  {% for message in messages %}
-    {% if message.tags == 'success' %}
-      showToast("{{ message }}", "success");
-    {% elif message.tags == 'error' %}
-      showToast("{{ message }}", "error");
+    // Function to dynamically update flight table
+    function updateFlightTable(flightData) {
+      const tableBody = document.getElementById("flight-data");
+      tableBody.innerHTML = ""; // Clear the current table content
+
+      flightData.forEach((flight) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${flight.sd_date_utc}</td>
+          <td>${flight.flight_no}</td>
+          <td>${flight.tail_no}</td>
+          <td>${flight.dep_code_iata}</td>
+          <td>${flight.dep_code_icao}</td>
+          <td>${flight.arr_code_iata}</td>
+          <td>${flight.arr_code_icao}</td>
+          <td>${flight.std_utc}</td>
+          <td>${flight.atd_utc || "--"}</td>
+          <td>${flight.takeoff_utc || "--"}</td>
+          <td>${flight.touchdown_utc || "--"}</td>
+          <td>${flight.ata_utc || "--"}</td>
+          <td>${flight.sta_utc}</td>
+          <td><button class="btn-action">View</button></td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    // Function to show toast messages
+    function showToast(message, type = "info") {
+      const toastContainer = document.getElementById("toast-container");
+      if (!toastContainer) return; // Exit if no container is found
+
+      // Create the toast element
+      const toast = document.createElement("div");
+      toast.classList.add("toast", type); // Add 'success', 'error', etc. based on the type
+      toast.innerText = message;
+
+      // Append the toast to the container
+      toastContainer.appendChild(toast);
+
+      // Automatically remove the toast after 5 seconds
+      setTimeout(() => {
+        toast.remove();
+      }, 5000); // Remove the toast after 5 seconds
+    }
+
+    const socket = new WebSocket('ws://' + window.location.host + '/ws/flight-updates/');
+
+  socket.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      if (data.message === 'Flight data updated') {
+          // Trigger a function to refresh the dashboard data
+          updateDashboard();
+      }
+  };
+
+  function updateDashboard() {
+      // Make an AJAX call to fetch updated data
+      fetch('/aims/dashboard/')
+          .then(response => response.json())
+          .then(data => {
+              // Update the dashboard with the new data
+              console.log("Dashboard updated", data);
+          });
+  }
+
+    // Handle displaying toast messages based on Django's messages framework
+    {% if messages %}
+    {% for message in messages %}
+      {% if message.tags == 'success' %}
+        showToast("{{ message }}", "success");
+      {% elif message.tags == 'error' %}
+        showToast("{{ message }}", "error");
+      {% endif %}
+    {% endfor %}
     {% endif %}
-  {% endfor %}
-  {% endif %}
-
 </script>
 
 {% endblock %}

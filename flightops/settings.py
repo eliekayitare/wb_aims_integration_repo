@@ -259,6 +259,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'aimsintegration.tasks.fetch_acars_messages',
         'schedule': crontab(minute='*/2'),  # Every 2 minutes
     },
+
+    # CPAT Project -Runs every 1 hour
+    'fetch-cpat-data-every-hour': {
+        'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
+        'schedule': crontab(minute=0, hour='*/1'),  # Every hour
+    },
     
 }
 
@@ -306,7 +312,10 @@ CHANNEL_LAYERS = {
     },
 }
 
-
+LMS_BASE_URL = config('LMS_BASE_URL')
+LMS_KEY = config('LMS_KEY')
+API_TOKEN = config('API_TOKEN')
+DAYS = config('DAYS', cast=int, default=1)  # Optional: Define default and typecast
 
 
 # daphne -p 8000 flightops.asgi:application

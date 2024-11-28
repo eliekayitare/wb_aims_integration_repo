@@ -1,0 +1,130 @@
+/* General Styling */
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 12%;
+  background-color: #006400; /* Updated color for sidebar to differentiate */
+  padding: 20px;
+  color: white;
+  height: 100%;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar ul li {
+  margin-bottom: 20px;
+}
+
+.sidebar ul li a {
+  color: white;
+  text-decoration: none;
+}
+
+.main-content {
+  width: 80%;
+  padding: 20px;
+  background-color: #f9f9f9; /* Slightly lighter background */
+}
+
+/* Search and Filter */
+.search-filter-container {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.search-input {
+  width: 60%;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #aaa; /* Updated border color */
+}
+
+.filter-select {
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #aaa; /* Updated border color */
+}
+
+/* Table Styling */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table th,
+table td {
+  text-align: left;
+  padding: 12px;
+}
+
+table th {
+  background-color: #006400; /* Updated header color */
+  color: white;
+}
+
+table td {
+  border-bottom: 1px solid #ccc;
+}
+
+.btn-action {
+  background-color: #006400; /* Updated button color */
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-action:hover {
+  background-color: #004d00; /* Darker hover color */
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dashboard-container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .main-content {
+    width: 100%;
+  }
+
+  .search-filter-container {
+    flex-direction: column;
+  }
+
+  .search-input,
+  .filter-select {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .table-container {
+    padding: 10px;
+  }
+
+  table th,
+  table td {
+    padding: 8px;
+  }
+}
