@@ -69,7 +69,7 @@ def fetch_flight_schedules():
 @shared_task
 def cargo_fetch_flight_schedules():
     account = get_exchange_account()
-    logger.info("Fetching the most recent flight schedule email for cargo website...")
+    logger.info("Fetching the most recent cargo flight schedule email for cargo website...")
 
     emails = account.inbox.filter(
         subject__contains='AIMS JOB : #1002 Flight schedule feed to WB server file attached'
@@ -78,10 +78,10 @@ def cargo_fetch_flight_schedules():
     email = emails[0] if emails else None
 
     if email:
-        logger.info(f"Processing the most recent flight schedule email with subject: {email.subject}")
+        logger.info(f"Processing the most recent cargo flight schedule email with subject: {email.subject}")
         process_cargo_email_attachment(email, process_cargo_flight_schedule_file)
     else:
-        logger.info("No new flight schedule email found.")
+        logger.info("No new cargo flight schedule email found.")
 
 
 # @shared_task
