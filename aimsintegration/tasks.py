@@ -116,12 +116,12 @@ def cargo_fetch_flight_schedules():
 
 #     logger.info("Batch processing of ACARS emails completed.")
 
-from .utils import upload_to_aims_server, write_job_one_row
+
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
 import os
-from .utils import upload_to_aims_server, process_acars_message
+from .utils import  process_acars_message
 
 logger = get_task_logger(__name__)
 
@@ -161,7 +161,7 @@ def fetch_acars_messages(self):
     # Upload the file to the AIMS server after processing the batch
     if os.path.getsize(file_path) > 0:  # Ensure the file is not empty
         logger.info(f"Uploading {file_path} to AIMS server...")
-        upload_to_aims_server(file_path)
+        upload_acars_to_aims_server(file_path)
     else:
         logger.info(f"{file_path} is empty. Skipping upload.")
 
@@ -296,7 +296,7 @@ def fetch_and_store_completion_records():
             return
 
         file_path = generate_job8_file(records_for_file)
-        upload_to_aims_server(file_path)
+        upload_cpat_to_aims_server(file_path)
         email_job8_file(file_path, data)
 
         logger.info("CPAT completion records processed successfully.")
@@ -355,8 +355,75 @@ def generate_job8_file(records):
     return file_path
 
 
+import os
+import paramiko
+import time
+import logging
+from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 
-def upload_to_aims_server(local_file_path):
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+def upload_acars_to_aims_server(local_file_path):
+    # Server credentials
+    aims_host = settings.AIMS_SERVER_ADDRESS
+    aims_port = int(settings.AIMS_PORT)
+    aims_username = settings.AIMS_SERVER_USER
+    aims_password = settings.AIMS_SERVER_PASSWORD
+    destination_dir = settings.AIMS_SERVER_DESTINATION_PATH
+
+    # Retry configuration
+    attempts = 3  # Number of retries
+    delay = 5  # Delay in seconds between retries
+
+    try:
+        # Ensure the local file exists before proceeding
+        if not os.path.exists(local_file_path):
+            logger.error(f"File {local_file_path} does not exist.")
+            return
+
+        # Ensure the remote path includes the file name
+        remote_path = os.path.join(destination_dir, os.path.basename(local_file_path))
+        logger.info(f"Preparing to upload file to: {remote_path}")
+
+        # Attempt to upload with retries
+        for attempt in range(attempts):
+            try:
+                # Create SSH transport and SFTP session
+                transport = paramiko.Transport((aims_host, aims_port))
+                transport.connect(username=aims_username, password=aims_password)
+                sftp = paramiko.SFTPClient.from_transport(transport)
+
+                # Upload the file
+                sftp.put(local_file_path, remote_path)
+                logger.info(f"File successfully uploaded to {remote_path} on AIMS server.")
+                
+                # Close the SFTP session and transport after successful upload
+                sftp.close()
+                transport.close()
+                break  # Exit the retry loop on success
+
+            except (SSHException, NoValidConnectionsError) as e:
+                # Specific exceptions related to SSH or SFTP errors
+                logger.error(f"SSH/SFTP error on attempt {attempt + 1}: {e}", exc_info=True)
+            except Exception as e:
+                # Generic exception handling
+                logger.error(f"Failed to upload on attempt {attempt + 1}: {e}", exc_info=True)
+            
+            # Retry logic with delay
+            if attempt < attempts - 1:
+                logger.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                logger.error(f"Failed to upload file after {attempts} attempts.")
+
+    except Exception as e:
+        logger.error(f"Error during file upload process: {e}", exc_info=True)
+
+
+
+
+def upload_cpat_to_aims_server(local_file_path):
     """Upload JOB8.txt to the AIMS server."""
     attempts = 3
     delay = 5
@@ -366,8 +433,8 @@ def upload_to_aims_server(local_file_path):
             logger.error(f"File {local_file_path} does not exist.")
             return
 
-        remote_path = os.path.join(CPAT_AIMS_PATH, os.path.basename(local_file_path))
-        logger.info(f"Uploading JOB8.txt to: {remote_path}")
+        cpat_remote_path = os.path.join(CPAT_AIMS_PATH, os.path.basename(local_file_path))
+        logger.info(f"Uploading JOB8.txt to: {cpat_remote_path}")
 
         for attempt in range(attempts):
             try:
@@ -375,8 +442,8 @@ def upload_to_aims_server(local_file_path):
                 transport.connect(username=AIMS_USERNAME, password=AIMS_PASSWORD)
                 sftp = paramiko.SFTPClient.from_transport(transport)
 
-                sftp.put(local_file_path, remote_path)
-                logger.info(f"JOB8.txt uploaded successfully to {remote_path}.")
+                sftp.put(local_file_path, cpat_remote_path)
+                logger.info(f"JOB8.txt uploaded successfully to {cpat_remote_path}.")
                 
                 sftp.close()
                 transport.close()
