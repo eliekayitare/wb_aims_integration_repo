@@ -72,7 +72,7 @@ def cargo_fetch_flight_schedules():
     logger.info("Fetching the most recent cargo flight schedule email for cargo website...")
 
     emails = account.inbox.filter(
-        subject__contains='AIMS JOB : #1002 Flight schedule feed to WB server file attached'
+        subject__contains='AIMS JOB : #1002 Flight schedule feed to Cargo website file attached'
     ).order_by('-datetime_received')
     
     email = emails[0] if emails else None
@@ -154,19 +154,35 @@ def fetch_acars_messages():
 
 #Tasks for CPAT project
 
+import os
+import csv
 import requests
-from decouple import config
+from datetime import datetime
+from django.conf import settings
 from .models import CompletionRecord
+import paramiko
+import logging
+from celery import shared_task
+from django.core.mail import send_mail
+import time
+logger = logging.getLogger(__name__)
 
-# Fetch secrets from .env
-BASE_URL = config('LMS_BASE_URL')
-LMS_KEY = config('LMS_KEY')
-API_TOKEN = config('API_TOKEN')
-DAYS = config('DAYS', cast=int, default=1)
+# Settings
+LMS_BASE_URL = settings.LMS_BASE_URL
+LMS_KEY = settings.LMS_KEY
+API_TOKEN = settings.API_TOKEN
+DAYS = settings.DAYS
+AIMS_HOST = settings.AIMS_SERVER_ADDRESS
+AIMS_PORT = int(settings.AIMS_PORT)
+AIMS_USERNAME = settings.AIMS_SERVER_USER
+AIMS_PASSWORD = settings.AIMS_SERVER_PASSWORD
+CPAT_AIMS_PATH = settings.CPAT_AIMS_PATH
+
 
 @shared_task
 def fetch_and_store_completion_records():
-    url = f"{BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
+    """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
+    url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
     headers = {
         "apitoken": API_TOKEN,
         "Content-Type": "application/json",
@@ -176,7 +192,28 @@ def fetch_and_store_completion_records():
 
     if response.status_code == 200:
         data = response.json()
+        records_for_file = []
+
+        # Process each record
         for record in data:
+            existing_record = CompletionRecord.objects.filter(
+                employee_id=record.get("EmployeeID"),
+                course_code=record.get("CourseCode"),
+                completion_date=record.get("CompletionDate"),
+            ).first()
+
+            if existing_record:
+                is_identical = (
+                    existing_record.employee_email == record.get("EmployeeEmail") and
+                    existing_record.score == record.get("Score") and
+                    existing_record.time_in_seconds == record.get("TimeInSecond") and
+                    existing_record.start_date == record.get("StartDate") and
+                    existing_record.end_date == record.get("EndDate")
+                )
+                if is_identical:
+                    logger.info(f"Skipping identical record: {record.get('EmployeeID')} - {record.get('CourseCode')}")
+                    continue
+
             CompletionRecord.objects.update_or_create(
                 employee_id=record.get("EmployeeID"),
                 course_code=record.get("CourseCode"),
@@ -189,9 +226,144 @@ def fetch_and_store_completion_records():
                     "end_date": record.get("EndDate"),
                 },
             )
-        print("Completion records successfully updated.")
-        logger.info("Completion records successfully updated.")
+
+            # Prepare record for JOB8.txt
+            records_for_file.append({
+                "StaffNumber": record.get("EmployeeID"),
+                "ExpiryCode": record.get("CourseCode"),
+                "LastDoneDate": format_date(record.get("CompletionDate")),
+                "ExpiryDate": format_date(record.get("EndDate")),
+            })
+
+        if not records_for_file:
+            logger.info("No new data to process.")
+            return
+
+        file_path = generate_job8_file(records_for_file)
+        upload_to_aims_server(file_path)
+        email_job8_file(file_path, data)
+
+        logger.info("CPAT completion records processed successfully.")
     else:
-        print(f"Failed to fetch data: {response.status_code} - {response.text}")
         logger.error(f"Failed to fetch data: {response.status_code} - {response.text}")
 
+
+
+
+# def fixed_length(value, length):
+#     """Ensure the value is right-padded or truncated to the fixed length."""
+#     if value is None:
+#         value = ""
+#     value = str(value)
+#     return value[:length].ljust(length)
+
+
+def format_date(date_str):
+    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
+    if date_str:
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
+    return ""
+
+
+# def generate_job8_file(records):
+#     """Generate the JOB8.txt file in the specified format."""
+#     file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
+#     with open(file_path, "w", newline="") as file:
+#         for record in records:
+#             staff_number = fixed_length(record["StaffNumber"], 8)
+#             expiry_code = fixed_length(record["ExpiryCode"], 6)
+#             last_done_date = record["LastDoneDate"] or ""
+#             expiry_date = record["ExpiryDate"] or ""
+
+#             # Write formatted row to file
+#             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
+
+#     logger.info(f"JOB8.txt file created at: {file_path}")
+#     return file_path
+
+def generate_job8_file(records):
+    """Generate the JOB8.txt file without adding padding to fields."""
+    file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
+    with open(file_path, "w", newline="") as file:
+        for record in records:
+            # Extract fields without padding
+            staff_number = str(record["StaffNumber"])  # Write as-is
+            expiry_code = str(record["ExpiryCode"])  # Write as-is
+            last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
+            expiry_date = record["ExpiryDate"] or ""  # Leave blank if missing
+
+            # Write the row to the file
+            file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
+
+    logger.info(f"JOB8.txt file created at: {file_path}")
+    return file_path
+
+
+
+def upload_to_aims_server(local_file_path):
+    """Upload JOB8.txt to the AIMS server."""
+    attempts = 3
+    delay = 5
+
+    try:
+        if not os.path.exists(local_file_path):
+            logger.error(f"File {local_file_path} does not exist.")
+            return
+
+        remote_path = os.path.join(CPAT_AIMS_PATH, os.path.basename(local_file_path))
+        logger.info(f"Uploading JOB8.txt to: {remote_path}")
+
+        for attempt in range(attempts):
+            try:
+                transport = paramiko.Transport((AIMS_HOST, AIMS_PORT))
+                transport.connect(username=AIMS_USERNAME, password=AIMS_PASSWORD)
+                sftp = paramiko.SFTPClient.from_transport(transport)
+
+                sftp.put(local_file_path, remote_path)
+                logger.info(f"JOB8.txt uploaded successfully to {remote_path}.")
+                
+                sftp.close()
+                transport.close()
+                break
+            except Exception as e:
+                logger.error(f"Upload attempt {attempt + 1} failed: {e}", exc_info=True)
+                if attempt < attempts - 1:
+                    time.sleep(delay)
+    except Exception as e:
+        logger.error(f"Error during JOB8.txt upload: {e}", exc_info=True)
+
+
+
+def email_job8_file(file_path, data):
+    """Email the JOB8.txt file to flight dispatch."""
+    subject = "CPAT Completion Records (JOB8.txt)"
+    body = (
+        "Dear Team,\n\n"
+        "Attached is the JOB8.txt file containing CPAT completion records.\n\n"
+        "Best regards,\nFlightOps Team"
+    )
+    recipient_list = [
+        settings.FIRST_CPAT_EMAIL_RECEIVER,
+        settings.SECOND_CPAT_EMAIL_RECEIVER,
+    ]
+
+    summary_file_path = None
+    if data:
+        summary_file_path = os.path.join(settings.MEDIA_ROOT, "CPAT_Summary.csv")
+        with open(summary_file_path, "w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=data[0].keys())
+            writer.writeheader()
+            writer.writerows(data)
+
+    attachments = [file_path]
+    if summary_file_path:
+        attachments.append(summary_file_path)
+
+    send_mail(
+        subject=subject,
+        message=body,
+        from_email=settings.EMAIL_HOST_USER,
+        recipient_list=recipient_list,
+        fail_silently=False,
+    )
+    logger.info("JOB8.txt emailed to flight dispatch.")
