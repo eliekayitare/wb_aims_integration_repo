@@ -121,7 +121,7 @@ from .utils import upload_to_aims_server, write_job_one_row
 from celery import shared_task
 from celery.utils.log import get_task_logger
 import os
-from .utils import upload_to_aims_server, process_acars_message, get_exchange_account
+from .utils import upload_to_aims_server, process_acars_message
 
 logger = get_task_logger(__name__)
 
