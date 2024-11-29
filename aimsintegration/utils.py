@@ -396,53 +396,22 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
 #     except Exception as e:
 #         logger.error(f"Error writing to job file: {e}", exc_info=True)
 
-import os
-import shutil
-import time
-import logging
-
-# Initialize logger
-logger = logging.getLogger(__name__)
 
 def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arrival_time):
     try:
-        # Format the row from the ACARS data
+        # Format the row
         row = format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time)
         
-        # Generate the temporary file path (e.g., JOB1.txt.tmp)
-        temp_file_path = file_path + ".tmp"
-        
-        # Write the row to the temporary file
-        with open(temp_file_path, 'w') as file:
+        # Append the row to the file
+        with open(file_path, 'a') as file:  # Use 'a' to append
             file.write(row + '\n')
-        logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to temporary job file.")
-        
-        # Try to replace the original JOB1.txt with the temporary file (retry mechanism)
-        attempts = 3  # Number of retries
-        delay = 2  # Delay in seconds between retries (you can adjust this based on your needs)
-        success = False
-        
-        for attempt in range(attempts):
-            try:
-                shutil.move(temp_file_path, file_path)
-                success = True
-                logger.info(f"Replaced original JOB1.txt with the updated file.")
-                break  # Exit the loop if the move operation is successful
-            except Exception as e:
-                logger.error(f"Attempt {attempt + 1} failed: {e}", exc_info=True)
-                if attempt < attempts - 1:  # Don't sleep after the last attempt
-                    logger.info(f"Retrying in {delay} seconds...")
-                    time.sleep(delay)  # Wait before retrying
-                else:
-                    logger.error(f"Failed to replace original file after {attempts} attempts.")
-        
-        if not success:
-            logger.error(f"Failed to replace original file: {file_path} after {attempts} attempts.")
-            # Optionally, send an alert or handle the failure as needed.
-            # You could trigger a system alert or email to notify the failure.
 
+        logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to job file.")
+    
     except Exception as e:
-        logger.error(f"Error writing to JOB1.txt: {e}", exc_info=True)
+        logger.error(f"Error writing to job file: {e}", exc_info=True)
+
+
 
 
 
@@ -489,12 +458,107 @@ from aimsintegration.models import FlightData
 
 logger = logging.getLogger(__name__)
 
-def process_acars_message(item):
+# def process_acars_message(item):
+#     try:
+#         email_received_date = item.datetime_received.date()  # Get only the date part
+#         message_body = item.body
+
+#         # Skip processing if "M16" appears in the message
+#         if "M16" in message_body:
+#             logger.info("Skipping 'M16' ACARS message.")
+#             return
+
+#         logger.info(f"ACARS message received at: {email_received_date} UTC")
+#         logger.info(f"ACARS message body: {message_body}")
+
+#         # Extract fields from ACARS message
+#         flight_no = extract_flight_number(message_body)
+#         acars_event, event_time_str = extract_acars_event(message_body)
+#         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
+#         tail_number = extract_tail_number(message_body)
+
+#         # Validate extracted time format
+#         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
+#             logger.error("Invalid time format in ACARS message.")
+#             return
+
+#         # Log extracted fields
+#         logger.info(f"Extracted Flight Number: {flight_no}")
+#         logger.info(f"Extracted Tail Number: {tail_number}")
+#         logger.info(f"Extracted ACARS Event: {acars_event}")
+#         logger.info(f"Extracted Event Time: {event_time_str}")
+#         logger.info(f"Extracted Departure Code (IATA): {dep_code}")
+#         logger.info(f"Extracted Arrival Code (IATA): {arr_code}")
+
+#         # Ensure all required fields were extracted
+#         if not (flight_no and acars_event and event_time_str and dep_code and arr_code):
+#             logger.error("Unable to extract complete flight details from ACARS message.")
+#             return
+
+#         # Convert event time to a time object
+#         event_time = datetime.strptime(event_time_str, "%H:%M").time()
+
+#         # Fetch all flights with the specified flight number, origin, and destination
+#         flights = FlightData.objects.filter(
+#             flight_no=flight_no,
+#             tail_no=tail_number,
+#             dep_code_iata=dep_code,
+#             arr_code_iata=arr_code
+#         )
+
+#         if not flights.exists():
+#             logger.info(f"No matching flights found in database for flight number: {flight_no}")
+#             # Send an email notification to the email receiver if no matching flights are found
+#             send_mail(
+#             subject=f"No matching flights found for flight number: {flight_no}",
+#             message=f"Dear All,\n\n The Acars message for flight number: {flight_no} is incorrectly formatted.\n\n Manually update it with the following acars message:\n\n{message_body} \n\n Regards,\n FlightOps Team",
+#             from_email=settings.EMAIL_HOST_USER,
+#             recipient_list=[
+#                 settings.FIRST_EMAIL_RECEIVER
+#                 if isinstance(settings.FIRST_EMAIL_RECEIVER, str) else settings.FIRST_EMAIL_RECEIVER,
+#                 settings.SECOND_EMAIL_RECEIVER
+#                 if isinstance(settings.SECOND_EMAIL_RECEIVER, str) else settings.SECOND_EMAIL_RECEIVER
+#             ],
+#             fail_silently=False,
+#              )
+
+
+            
+#             return
+        
+#         # Find the closest `sd_date_utc` to `email_received_date`
+#         closest_flight = min(
+#             flights,
+#             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
+#         )
+
+#         # Update the closest flight based on the ACARS event type
+#         if acars_event == "OT":
+#             closest_flight.atd_utc = event_time
+#         elif acars_event == "OF":
+#             closest_flight.takeoff_utc = event_time
+#         elif acars_event == "ON":
+#             closest_flight.touchdown_utc = event_time
+#         elif acars_event == "IN":
+#             closest_flight.ata_utc = event_time
+
+#         # Save the updated flight record
+#         closest_flight.save()
+#         logger.info(f"Flight {flight_no} updated with event {acars_event} at {event_time}")
+
+#         # Write updated data to the job file
+#         file_path = os.path.join(settings.MEDIA_ROOT, 'JOB1.txt')
+#         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
+#         upload_to_aims_server(file_path)
+
+#     except Exception as e:
+#         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
+
+def process_acars_message(item, file_path):
     try:
         email_received_date = item.datetime_received.date()  # Get only the date part
         message_body = item.body
 
-        # Skip processing if "M16" appears in the message
         if "M16" in message_body:
             logger.info("Skipping 'M16' ACARS message.")
             return
@@ -502,34 +566,18 @@ def process_acars_message(item):
         logger.info(f"ACARS message received at: {email_received_date} UTC")
         logger.info(f"ACARS message body: {message_body}")
 
-        # Extract fields from ACARS message
+        # Extract fields from the message
         flight_no = extract_flight_number(message_body)
         acars_event, event_time_str = extract_acars_event(message_body)
         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
         tail_number = extract_tail_number(message_body)
 
-        # Validate extracted time format
         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
             logger.error("Invalid time format in ACARS message.")
             return
 
-        # Log extracted fields
-        logger.info(f"Extracted Flight Number: {flight_no}")
-        logger.info(f"Extracted Tail Number: {tail_number}")
-        logger.info(f"Extracted ACARS Event: {acars_event}")
-        logger.info(f"Extracted Event Time: {event_time_str}")
-        logger.info(f"Extracted Departure Code (IATA): {dep_code}")
-        logger.info(f"Extracted Arrival Code (IATA): {arr_code}")
-
-        # Ensure all required fields were extracted
-        if not (flight_no and acars_event and event_time_str and dep_code and arr_code):
-            logger.error("Unable to extract complete flight details from ACARS message.")
-            return
-
-        # Convert event time to a time object
         event_time = datetime.strptime(event_time_str, "%H:%M").time()
 
-        # Fetch all flights with the specified flight number, origin, and destination
         flights = FlightData.objects.filter(
             flight_no=flight_no,
             tail_no=tail_number,
@@ -538,32 +586,30 @@ def process_acars_message(item):
         )
 
         if not flights.exists():
-            logger.info(f"No matching flights found in database for flight number: {flight_no}")
-            # Send an email notification to the email receiver if no matching flights are found
+            logger.info(f"No matching flights found for flight number: {flight_no}")
             send_mail(
-            subject=f"No matching flights found for flight number: {flight_no}",
-            message=f"Dear All,\n\n The Acars message for flight number: {flight_no} is incorrectly formatted.\n\n Manually update it with the following acars message:\n\n{message_body} \n\n Regards,\n FlightOps Team",
-            from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[
-                settings.FIRST_EMAIL_RECEIVER
-                if isinstance(settings.FIRST_EMAIL_RECEIVER, str) else settings.FIRST_EMAIL_RECEIVER,
-                settings.SECOND_EMAIL_RECEIVER
-                if isinstance(settings.SECOND_EMAIL_RECEIVER, str) else settings.SECOND_EMAIL_RECEIVER
-            ],
-            fail_silently=False,
-             )
-
-
-            
+                subject=f"No matching flights found for flight number: {flight_no}",
+                message=(
+                    f"Dear Team,\n\n"
+                    f"The ACARS message for flight {flight_no} could not be matched.\n"
+                    f"Message details:\n\n{message_body}\n\n"
+                    f"Please review and update manually.\n\n"
+                    f"Regards,\nFlightOps Team"
+                ),
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[
+                    settings.FIRST_EMAIL_RECEIVER,
+                    settings.SECOND_EMAIL_RECEIVER,
+                ],
+                fail_silently=False,
+            )
             return
-        
-        # Find the closest `sd_date_utc` to `email_received_date`
+
         closest_flight = min(
             flights,
             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
         )
 
-        # Update the closest flight based on the ACARS event type
         if acars_event == "OT":
             closest_flight.atd_utc = event_time
         elif acars_event == "OF":
@@ -573,18 +619,13 @@ def process_acars_message(item):
         elif acars_event == "IN":
             closest_flight.ata_utc = event_time
 
-        # Save the updated flight record
         closest_flight.save()
-        logger.info(f"Flight {flight_no} updated with event {acars_event} at {event_time}")
 
-        # Write updated data to the job file
-        file_path = os.path.join(settings.MEDIA_ROOT, 'JOB1.txt')
+        # Append the updated flight details to the job file
         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
-        upload_to_aims_server(file_path)
 
     except Exception as e:
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
-
 
 
 
