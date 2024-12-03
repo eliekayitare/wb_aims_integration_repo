@@ -731,70 +731,46 @@ def process_cargo_email_attachment(item, process_function):
 
 #FMD Project
 
-def process_fdm_flight_schedule_file(attachment):
+from datetime import datetime
+from .models import FdmFlightData, AirportData
+
+def process_fdm_flight_schedule_file_fixed_columns(attachment):
     """
-    Process the entire fdm flight schedule file and update the FlightData table.
-    Avoid updating records with ACARS data in `atd_utc`, `takeoff_utc`, `touchdown_utc`, or `ata_utc`.
+    Process the FDM flight schedule file using fixed column positions, accounting for spaces.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
-        logger.info("Starting to process the fdm flight schedule file...")
+        logger.info("Starting to process the FDM flight schedule file...")
 
         for line_num, line in enumerate(content, start=1):
-            fields = line.split()
-            
-            # Skip line if insufficient fields
-            if len(fields) < 8:
-                logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
+            # Ensure the line has enough columns (length)
+            if len(line) < 84:
+                logger.error(f"Skipping line {line_num} due to insufficient length: {line}")
                 continue
 
             try:
-                # Extract fields
-                flight_date = fields[0]
-                tail_no = fields[1]
-                flight_no = fields[2]
-                dep_code_icao = fields[3]
-                arr_code_icao = fields[4]
-                std = fields[5]
-                sta = fields[6]
-                flight_type = fields[7] if len(fields) > 7 and fields[7] else " "
-                etd = fields[8] if len(fields) > 8 and fields[8] else " "
-                eta = fields[9] if len(fields) > 9 and fields[9] else " "
-                arrival_date = fields[-1]
+                # Extract fields based on fixed-width columns including spaces
+                flight_date = line[0:10].strip()      # Column 1-10
+                tail_no = line[10:27].strip()        # Column 11-26
+                flight_no = line[27:33].strip()      # Column 27-32
+                dep_code_icao = line[33:38].strip()  # Column 33-37
+                arr_code_icao = line[38:43].strip()  # Column 38-42
+                std_utc = line[43:50].strip()        # Column 43-49
+                sta_utc = line[50:57].strip()        # Column 50-56
+                flight_type = line[57:60].strip()    # Column 57-59
+                etd_utc = line[60:67].strip()        # Column 60-66
+                eta_utc = line[67:74].strip()        # Column 67-73
+                arrival_date = line[74:84].strip()   # Column 74-83
 
                 # Parse dates
-                try:
-                    sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-                    sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
-                except ValueError as ve:
-                    logger.error(f"Skipping line {line_num} due to date format error: {flight_date}, {arrival_date}")
-                    continue
+                sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
+                sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
 
-                # Parse times with individual error handling
-                std_utc = None
-                sta_utc = None
-                etd_utc = None
-                eta_utc = None
-
-                try:
-                    std_utc = datetime.strptime(std, "%H:%M").time()
-                except ValueError:
-                    logger.warning(f"STD time format error on line {line_num}: {std}")
-
-                try:
-                    sta_utc = datetime.strptime(sta, "%H:%M").time()
-                except ValueError:
-                    logger.warning(f"STA time format error on line {line_num}: {sta}")
-
-                try:
-                    etd_utc = datetime.strptime(etd, "%H:%M").time() if etd.strip() else None
-                except ValueError:
-                    logger.warning(f"ETD time format error on line {line_num}: {etd}")
-
-                try:
-                    eta_utc = datetime.strptime(eta, "%H:%M").time() if eta.strip() else None
-                except ValueError:
-                    logger.warning(f"ETA time format error on line {line_num}: {eta}")
+                # Parse times
+                std_utc_time = datetime.strptime(std_utc, "%H:%M").time() if std_utc else None
+                sta_utc_time = datetime.strptime(sta_utc, "%H:%M").time() if sta_utc else None
+                etd_utc_time = datetime.strptime(etd_utc, "%H:%M").time() if etd_utc else None
+                eta_utc_time = datetime.strptime(eta_utc, "%H:%M").time() if eta_utc else None
 
                 # Fetch airport data
                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
@@ -815,18 +791,18 @@ def process_fdm_flight_schedule_file(attachment):
                     'dep_code_icao': dep_code_icao,
                     'arr_code_icao': arr_code_icao,
                     'sa_date_utc': sa_date_utc,
-                    'std_utc': std_utc,
-                    'sta_utc': sta_utc,
+                    'std_utc': std_utc_time,
+                    'sta_utc': sta_utc_time,
                 }
 
-                # Check if any record exists with the same unique criteria
+                # Check if record exists
                 existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
                     logger.info(f"Record for flight {flight_no} on {sd_date_utc} exists; no update needed.")
-                    continue  # Skip insertion if a record exists
+                    continue
 
-                # Create a new record
+                # Insert new record
                 FdmFlightData.objects.create(
                     flight_no=flight_no,
                     tail_no=tail_no,
@@ -835,24 +811,25 @@ def process_fdm_flight_schedule_file(attachment):
                     arr_code_iata=arr_code_iata,
                     arr_code_icao=arr_code_icao,
                     sd_date_utc=sd_date_utc,
-                    std_utc=std_utc,
-                    sta_utc=sta_utc,
+                    std_utc=std_utc_time,
+                    sta_utc=sta_utc_time,
                     sa_date_utc=sa_date_utc,
                     flight_type=flight_type,
-                    etd_utc=etd_utc,
-                    eta_utc=eta_utc,
+                    etd_utc=etd_utc_time,
+                    eta_utc=eta_utc_time,
                     raw_content=line
                 )
                 logger.info(f"Created new FDM flight record: {flight_no} on {sd_date_utc}")
 
-            except Exception as ve:
-                logger.error(f"Error processing FDM flight record on line {line_num}: {ve} - {line}")
+            except Exception as e:
+                logger.error(f"Error processing line {line_num}: {e} - {line}")
                 continue
 
-        logger.info("FDM Flight schedule file processed successfully.")
+        logger.info("FDM flight schedule file processed successfully.")
 
     except Exception as e:
         logger.error(f"Error processing FDM flight schedule file: {e}", exc_info=True)
+
 
 
 
