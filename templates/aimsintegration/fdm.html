@@ -166,6 +166,9 @@
         <td>${flight.touchdown_utc || "--"}</td>
         <td>${flight.ata_utc || "--"}</td>
         <td>${flight.sta_utc}</td>
+        <td>${flight.flight_type}</td>
+        <td>${flight.etd_utc || "--"}</td>
+        <td>${flight.eta_utc || "--"}</td>
         <td><button class="btn-action">View</button></td>
       `;
       tableBody.appendChild(row);
