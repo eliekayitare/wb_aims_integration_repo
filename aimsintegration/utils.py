@@ -897,24 +897,69 @@ from datetime import datetime
 from .models import CrewMember  # Replace `your_app` with your actual app name
 from django.db import transaction
 
+import re
+import pandas as pd
+from datetime import datetime
+from django.db import transaction
+from your_app.models import CrewMember  # Replace with your actual app name
+
+def group_flight_rows(attachment):
+    """
+    Group raw data into rows based on flight numbers (maximum 5 characters including spaces).
+    """
+    try:
+        # Decode email attachment content
+        raw_content = attachment.content.decode('utf-8').splitlines()
+        rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
+
+        flight_rows = []
+        current_row = ""
+
+        # Flight number regex (maximum 5 characters including spaces)
+        flight_number_pattern = re.compile(r"^\d{1,5}\s")
+
+        for line in rows:
+            if flight_number_pattern.match(line):
+                # Start a new row when a flight number is encountered
+                if current_row:
+                    flight_rows.append(current_row.strip())
+                current_row = line
+            else:
+                # Append to the current row
+                current_row += f" {line}"
+
+        # Add the last row
+        if current_row:
+            flight_rows.append(current_row.strip())
+
+        print(f"Grouped {len(flight_rows)} rows based on flight numbers.")
+        return flight_rows
+
+    except Exception as e:
+        print(f"Error grouping flight rows: {e}")
+        return []
+
 def process_crew_details_file(attachment):
     """
     Process the crew details file received as an email attachment and save to the database.
     """
     try:
-        # Decode the email attachment content
-        raw_content = attachment.content.decode('utf-8').splitlines()
-        rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
+        # Group flight rows
+        grouped_rows = group_flight_rows(attachment)
+        if not grouped_rows:
+            print("No rows to process.")
+            return None
 
         parsed_data = []
+        role_pattern = re.compile(r"(?P<role>[A-Z]{2})\s+(?P<crew_id>\d{8})\s+(?P<name>.+?)\s+(?=[A-Z]{2}\s+\d{8}|$)")
 
-        for line_num, line in enumerate(rows, start=1):
+        for row in grouped_rows:
             try:
                 # Extract general flight details
-                flight_no = line[:4].strip()
-                flight_date = line[4:12].strip()
-                origin = line[12:15].strip()
-                destination = line[15:18].strip()
+                flight_no = row[:5].strip()  # Adjusted for maximum 5-character flight number
+                flight_date = row[5:13].strip()
+                origin = row[13:16].strip()
+                destination = row[16:19].strip()
 
                 # Convert flight_date
                 try:
@@ -922,27 +967,14 @@ def process_crew_details_file(attachment):
                 except ValueError:
                     raise ValueError(f"Invalid date format: {flight_date}")
 
-                # Parse crew data
-                crew_data = line[18:].strip()
-                i = 0
-                while i < len(crew_data):
-                    # Extract role
-                    role = crew_data[i:i + 2].strip()
-                    if not role.isalpha() or len(role) != 2:
-                        raise ValueError(f"Invalid role at index {i}: {role}")
-                    i += 2
+                # Parse crew data using regex
+                crew_data = row[19:].strip()
+                matches = role_pattern.finditer(crew_data)
 
-                    # Extract crew_id
-                    crew_id = crew_data[i:i + 8].strip()
-                    if not (crew_id.isdigit() and len(crew_id) == 8):
-                        raise ValueError(f"Invalid crew ID at index {i}: {crew_id}")
-                    i += 8
-
-                    # Extract name until the next role or end of string
-                    name_start = i
-                    while i < len(crew_data) and not crew_data[i:i + 2].strip().isalpha():
-                        i += 1
-                    name = crew_data[name_start:i].strip()
+                for match in matches:
+                    role = match.group("role")
+                    crew_id = match.group("crew_id")
+                    name = match.group("name").strip()
 
                     if len(name) > 100:
                         print(f"Warning: Name too long for crew ID {crew_id}, trimming to 100 characters.")
@@ -960,7 +992,7 @@ def process_crew_details_file(attachment):
                     })
 
             except Exception as e:
-                print(f"Error parsing line {line_num}: {line} - {e}")
+                print(f"Error parsing row: {row} - {e}")
                 continue
 
         # Save parsed data to the database
@@ -989,7 +1021,6 @@ def process_crew_details_file(attachment):
     except Exception as e:
         print(f"Error processing the email attachment: {e}")
         return None
-
 
 
 
