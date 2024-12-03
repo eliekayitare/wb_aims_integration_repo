@@ -901,7 +901,7 @@ import re
 import pandas as pd
 from datetime import datetime
 from django.db import transaction
-from your_app.models import CrewMember  # Replace with your actual app name
+from .models import CrewMember  # Replace with your actual app name
 
 def group_flight_rows(attachment):
     """
