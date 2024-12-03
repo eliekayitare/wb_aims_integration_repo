@@ -887,110 +887,74 @@ from datetime import datetime
 from .models import CrewMember
 import pandas as pd
 
-from datetime import datetime
+import re
 import pandas as pd
-from .models import CrewMember
-
-
 from datetime import datetime
-import pandas as pd
 from .models import CrewMember
-
 
 def process_crew_details_file(attachment):
     """
-    Process the crew details file using pandas for unstructured data.
+    Process the crew details file using regex and pandas for flexible parsing.
     """
     try:
-        # Load raw data from the file
         raw_content = attachment.content.decode('utf-8').splitlines()
+        rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
-        # Preprocess raw content into a structured format
-        rows = [line.strip() for line in raw_content if line.strip()]  # Ignore empty lines
+        parsed_data = []
 
-        # Convert to a dataframe
-        df = pd.DataFrame(rows, columns=["raw_line"])
-
-        # DEBUG: Print the raw DataFrame for review
-        print("====================================")
-        print("Raw DataFrame:\n", df.head())
-        print("====================================")
-
-        # Define a function to parse a single line
-        def parse_line(line):
-            """
-            Parse a single line of unstructured crew data into structured components.
-            """
+        for line_num, line in enumerate(rows, start=1):
             try:
-                # Extract flight details
+                # Extract general details (first fixed-width fields)
                 flight_no = line[:4].strip()
                 flight_date = line[4:12].strip()
                 origin = line[12:15].strip()
                 destination = line[15:18].strip()
+                
+                # Validate and convert flight_date
+                try:
+                    sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
+                except ValueError:
+                    raise ValueError(f"Invalid date format: {flight_date}")
+
+                # Extract crew details using regex
                 crew_data = line[18:].strip()
+                crew_matches = re.findall(r'(\w{2})\s+(\d{8})([A-Za-z\s]+)', crew_data)
 
-                # DEBUG: Print crew_data for review
-                print(f"Processing crew data: {crew_data}")
+                if not crew_matches:
+                    raise ValueError("No valid crew data found")
 
-                # Convert flight date
-                sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
-
-                # Process crew data
-                crew_list = []
-                i = 0
-                while i < len(crew_data):
-                    # Extract role (assume 2 characters)
-                    role = crew_data[i:i + 2].strip()
-
+                for role, crew_id, name in crew_matches:
                     # Validate role
-                    if role in dict(CrewMember.ROLE_CHOICES):
-                        # Extract crew ID (8 characters) and name
-                        raw_data = crew_data[i + 2:i + 20].strip()  # Adjust the width as needed
-                        crew_id = raw_data[:8].strip()
-                        name = raw_data[8:].strip()
+                    if role not in dict(CrewMember.ROLE_CHOICES):
+                        raise ValueError(f"Invalid role: {role}")
 
-                        # DEBUG: Print extracted details for review
-                        print(f"Extracted role: {role}, crew_id: {crew_id}, name: {name}")
+                    # Validate crew_id
+                    if not (crew_id.isdigit() and len(crew_id) == 8):
+                        raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                        # Validate crew ID
-                        if len(crew_id) == 8 and crew_id.isdigit():
-                            crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
-                            i += 20  # Move to the next record
-                        else:
-                            logger.warning(f"Invalid crew ID or name format: {raw_data} on line: {line}")
-                            i += 2  # Skip invalid data
-                    else:
-                        logger.warning(f"Skipping invalid role: {role} on line: {line}")
-                        i += 2  # Skip invalid role
+                    parsed_data.append({
+                        "flight_no": flight_no,
+                        "sd_date_utc": sd_date_utc,
+                        "origin": origin,
+                        "destination": destination,
+                        "role": role,
+                        "crew_id": crew_id,
+                        "name": name.strip(),
+                    })
 
-                return crew_list
             except Exception as e:
-                logger.error(f"Error parsing line: {line} - {e}")
-                return []
+                logger.warning(f"Skipping line {line_num}: {line} - Error: {e}")
+                continue
 
-        # Parse all lines into structured rows
-        all_crew_data = []
-        for _, row in df.iterrows():
-            parsed_data = parse_line(row["raw_line"])
-            all_crew_data.extend(parsed_data)
+        # Convert to DataFrame
+        crew_df = pd.DataFrame(parsed_data)
+        if crew_df.empty:
+            logger.error("No valid data extracted.")
+            return
 
-        # Create a dataframe for parsed crew details
-        crew_df = pd.DataFrame(all_crew_data, columns=["flight_no", "sd_date_utc", "origin", "destination", "role", "crew_id", "name"])
-
-        # DEBUG: Print the parsed DataFrame for review
-        print("+++++++++++++++++++++++++++++++++++++++++++")
-        print("Parsed DataFrame:\n", crew_df.head())
-        print("+++++++++++++++++++++++++++++++++++++++++++")
-
-        # Process and save data to the database
+        # Save to the database
         for _, crew_row in crew_df.iterrows():
             try:
-                # Validate role
-                if crew_row["role"] not in dict(CrewMember.ROLE_CHOICES):
-                    logger.warning(f"Skipping invalid role: {crew_row['role']}")
-                    continue
-
-                # Update or create CrewMember
                 CrewMember.objects.update_or_create(
                     crew_id=crew_row["crew_id"],
                     defaults={
@@ -1003,7 +967,6 @@ def process_crew_details_file(attachment):
                     }
                 )
                 logger.info(f"Processed crew member {crew_row['name']} ({crew_row['role']}) for flight {crew_row['flight_no']}.")
-
             except Exception as e:
                 logger.error(f"Error saving crew member: {crew_row} - {e}")
 
@@ -1011,7 +974,6 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
-
 
 
 
