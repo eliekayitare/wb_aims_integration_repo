@@ -894,7 +894,7 @@ from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
-    Process the crew details file with refined name extraction.
+    Process the crew details file with improved parsing for inconsistent data.
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -923,17 +923,19 @@ def process_crew_details_file(attachment):
                 i = 0
                 while i < len(crew_segments):
                     try:
-                        # Assume the role is 2 uppercase letters
+                        # Extract role (2 uppercase letters)
                         role = crew_segments[i].strip()
                         if role not in dict(CrewMember.ROLE_CHOICES):
                             raise ValueError(f"Invalid role: {role}")
 
-                        # Crew ID should be next (8 digits)
-                        crew_id = crew_segments[i + 1][:8].strip()
+                        # Crew ID should follow (8 characters)
+                        raw_data = crew_segments[i + 1] if i + 1 < len(crew_segments) else ""
+                        crew_id = raw_data[:8].strip()
+
                         if not (crew_id.isdigit() and len(crew_id) == 8):
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                        # The rest is the name, extract until the next role or invalid segment
+                        # Extract name until the next role or invalid data
                         name_parts = []
                         for j in range(i + 2, len(crew_segments)):
                             if crew_segments[j].strip() in dict(CrewMember.ROLE_CHOICES):
@@ -956,11 +958,11 @@ def process_crew_details_file(attachment):
                             "name": name,
                         })
 
-                        # Adjust index for the next segment
+                        # Adjust index to continue from the next crew member
                         i = j
                     except (IndexError, ValueError) as e:
                         logger.warning(f"Skipping invalid crew data segment: {crew_segments[i:]} on line {line_num} - Error: {e}")
-                        i += 1  # Move to the next segment
+                        i += 1  # Skip invalid data and move on
 
             except Exception as e:
                 logger.warning(f"Skipping line {line_num}: {line} - Error: {e}")
@@ -998,6 +1000,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
