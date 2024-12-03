@@ -887,7 +887,7 @@ from datetime import datetime
 from .models import CrewMember
 import pandas as pd
 
-def process_crew_details_view(attachment):
+def process_crew_details_file(attachment):
     """
     Process the crew details file using pandas for unstructured data.
     """
