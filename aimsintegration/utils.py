@@ -752,7 +752,8 @@ def process_fdm_flight_schedule_file(attachment):
                 # Extract fields based on fixed-width columns including spaces
                 flight_date = line[0:10].strip()      # Column 1-10
                 tail_no = line[10:27].strip()        # Column 11-26
-                flight_no = line[27:33].strip()      # Column 27-32
+                # Check if column 26 has a non-space character
+                flight_no = line[26:33].strip() if line[26] != " " else line[27:33].strip()
                 dep_code_icao = line[33:38].strip()  # Column 33-37
                 arr_code_icao = line[38:43].strip()  # Column 38-42
                 std_utc = line[43:50].strip()        # Column 43-49
