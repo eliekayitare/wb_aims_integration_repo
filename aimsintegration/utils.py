@@ -894,7 +894,7 @@ from .models import CrewMember
 
 import pandas as pd
 from datetime import datetime
-from your_app.models import CrewMember  # Replace `your_app` with your actual app name
+from .models import CrewMember  # Replace `your_app` with your actual app name
 from django.db import transaction
 
 def process_crew_details_file(attachment):
