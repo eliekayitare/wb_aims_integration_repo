@@ -80,7 +80,7 @@
           </tr>
         </thead>
         <tbody id="flight-data">
-          {% for flight in schedules %}
+          {% for flight in fdm_schedules %}
           <tr>
             <td>{{ flight.sd_date_utc|date:"Y-m-d" }}</td>
             <td>{{ flight.flight_no }}</td>
