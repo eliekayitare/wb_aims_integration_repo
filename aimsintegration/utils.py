@@ -894,7 +894,7 @@ from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
-    Process the crew details file using dynamic parsing for inconsistent formatting.
+    Process the crew details file with refined name extraction.
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -933,13 +933,17 @@ def process_crew_details_file(attachment):
                         if not (crew_id.isdigit() and len(crew_id) == 8):
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                        # The rest is the name, dynamically split if merged
-                        raw_name = crew_segments[i + 1][8:] + " " + " ".join(crew_segments[i + 2:]).strip()
-                        name_parts = raw_name.split()
-                        if not name_parts:
-                            raise ValueError("Invalid name format")
+                        # The rest is the name, extract until the next role or invalid segment
+                        name_parts = []
+                        for j in range(i + 2, len(crew_segments)):
+                            if crew_segments[j].strip() in dict(CrewMember.ROLE_CHOICES):
+                                break
+                            name_parts.append(crew_segments[j])
 
                         name = " ".join(name_parts).strip()
+                        if len(name) > 100:
+                            logger.warning(f"Trimming name for crew ID {crew_id}: {name}")
+                            name = name[:100]  # Trim to fit the database limit
 
                         # Add parsed data
                         parsed_data.append({
@@ -953,7 +957,7 @@ def process_crew_details_file(attachment):
                         })
 
                         # Adjust index for the next segment
-                        i += 2 + len(name_parts)
+                        i = j
                     except (IndexError, ValueError) as e:
                         logger.warning(f"Skipping invalid crew data segment: {crew_segments[i:]} on line {line_num} - Error: {e}")
                         i += 1  # Move to the next segment
@@ -994,6 +998,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
