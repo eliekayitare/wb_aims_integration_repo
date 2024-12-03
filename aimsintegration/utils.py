@@ -885,79 +885,94 @@ def preprocess_crew_file(content):
 
 from datetime import datetime
 from .models import CrewMember
+import pandas as pd
 
-
-def process_crew_details_file(attachment):
+def process_crew_details_view(attachment):
     """
-    Process the crew details file and update the CrewMember table.
+    Process the crew details file using pandas for unstructured data.
     """
     try:
-        # Read the raw content from the file
-        raw_content = attachment.content.decode('utf-8')
+        # Load raw data from the file
+        raw_content = attachment.content.decode('utf-8').splitlines()
 
-        # Preprocess the content to ensure one flight per row
-        formatted_content = preprocess_crew_file(raw_content)
+        # Preprocess raw content into a structured format
+        rows = []
+        for line in raw_content:
+            line = line.strip()
+            if len(line) > 0:  # Ignore empty lines
+                rows.append(line)
 
-        logger.info("Starting to process the crew details file...")
+        # Convert to a dataframe
+        df = pd.DataFrame(rows, columns=["raw_line"])
 
-        for line_num, line in enumerate(formatted_content, start=1):
+        # Extract fields from the unstructured text
+        def parse_line(line):
             try:
-                # Extract mandatory fields based on fixed-width columns
-                flight_no = line[0:4].strip()  # Columns 1-4
-                flight_date = line[4:12].strip()  # Columns 5-12 (DDMMYYYY)
-                origin = line[12:15].strip()  # Columns 13-15
-                destination = line[15:18].strip()  # Columns 16-18
+                # Extract main fields
+                flight_no = line[:4].strip()
+                flight_date = line[4:12].strip()
+                origin = line[12:15].strip()
+                destination = line[15:18].strip()
+                crew_data = line[18:].strip()
 
-                # Validate flight number
-                if not flight_no.isdigit():
-                    raise ValueError(f"Invalid flight number format: {flight_no}")
-
-                # Convert flight date
+                # Convert date
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
 
-                # Process crew details (roles, crew IDs, names)
-                crew_data = line[18:].strip()  # Start from column 19 onwards
-                crew_chunks = crew_data.split()
+                # Extract crew details
+                crew_list = []
+                chunks = crew_data.split()
+                for i in range(0, len(chunks), 2):
+                    role = chunks[i].strip()
+                    raw_data = chunks[i + 1].strip()
+                    crew_id = raw_data[:8].strip()
+                    name = raw_data[8:].strip()
 
-                # Each chunk is in the format: ROLE CREW_ID NAME
-                for i in range(0, len(crew_chunks), 2):
-                    role = crew_chunks[i].strip()
-                    rest = crew_chunks[i + 1].strip()
+                    # Append parsed crew details
+                    crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
+                return crew_list
+            except Exception as e:
+                logger.error(f"Error parsing line: {line} - {e}")
+                return []
 
-                    # Extract crew ID and name
-                    crew_id = rest[:8].strip()
-                    name = rest[8:].strip()
+        # Parse all lines into structured rows
+        all_crew_data = []
+        for _, row in df.iterrows():
+            parsed_data = parse_line(row["raw_line"])
+            all_crew_data.extend(parsed_data)
 
-                    # Validate crew ID
-                    if len(crew_id) != 8 or not crew_id.isdigit():
-                        raise ValueError(f"Invalid crew data format: {crew_id}")
+        # Create a dataframe for parsed crew details
+        crew_df = pd.DataFrame(all_crew_data, columns=["flight_no", "sd_date_utc", "origin", "destination", "role", "crew_id", "name"])
 
-                    # Validate role
-                    if role not in dict(CrewMember.ROLE_CHOICES):
-                        raise ValueError(f"Invalid role: {role}")
+        # Process and save data to the database
+        for _, crew_row in crew_df.iterrows():
+            try:
+                # Validate role
+                if crew_row["role"] not in dict(CrewMember.ROLE_CHOICES):
+                    logger.warning(f"Skipping invalid role: {crew_row['role']}")
+                    continue
 
-                    # Update or create CrewMember
-                    CrewMember.objects.update_or_create(
-                        crew_id=crew_id,
-                        defaults={
-                            'flight_no': flight_no,
-                            'sd_date_utc': sd_date_utc,
-                            'origin': origin,
-                            'destination': destination,
-                            'name': name,
-                            'role': role,
-                        }
-                    )
-                    logger.info(f"Processed crew member {name} ({role}) for flight {flight_no}.")
+                # Update or create CrewMember
+                CrewMember.objects.update_or_create(
+                    crew_id=crew_row["crew_id"],
+                    defaults={
+                        'flight_no': crew_row["flight_no"],
+                        'sd_date_utc': crew_row["sd_date_utc"],
+                        'origin': crew_row["origin"],
+                        'destination': crew_row["destination"],
+                        'name': crew_row["name"],
+                        'role': crew_row["role"],
+                    }
+                )
+                logger.info(f"Processed crew member {crew_row['name']} ({crew_row['role']}) for flight {crew_row['flight_no']}.")
 
-            except ValueError as e:
-                logger.error(f"Skipping line {line_num} due to error: {e} - Line: {line}")
-                continue
+            except Exception as e:
+                logger.error(f"Error saving crew member: {crew_row} - {e}")
 
         logger.info("Crew details file processed successfully.")
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
