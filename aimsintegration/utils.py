@@ -886,8 +886,6 @@ def preprocess_crew_file(content):
 from datetime import datetime
 from .models import CrewMember
 
-from datetime import datetime
-from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
@@ -919,21 +917,20 @@ def process_crew_details_file(attachment):
 
                 # Process crew details (roles, crew IDs, names)
                 crew_data = line[18:].strip()  # Start from column 19 onwards
-                chunks = crew_data.split()
+                crew_chunks = crew_data.split()
 
-                if len(chunks) % 2 != 0:
-                    raise ValueError(f"Incomplete crew data on line {line_num}")
+                # Each chunk is in the format: ROLE CREW_ID NAME
+                for i in range(0, len(crew_chunks), 2):
+                    role = crew_chunks[i].strip()
+                    rest = crew_chunks[i + 1].strip()
 
-                # Iterate through crew data
-                for i in range(0, len(chunks), 2):
-                    role = chunks[i].strip()  # Role (e.g., CP, FO, SA, etc.)
-                    crew_info = chunks[i + 1].strip()
+                    # Extract crew ID and name
+                    crew_id = rest[:8].strip()
+                    name = rest[8:].strip()
 
-                    if len(crew_info) < 8:
-                        raise ValueError(f"Invalid crew data format: {crew_info}")
-
-                    crew_id = crew_info[:8].strip()
-                    name = crew_info[8:].strip()
+                    # Validate crew ID
+                    if len(crew_id) != 8 or not crew_id.isdigit():
+                        raise ValueError(f"Invalid crew data format: {crew_id}")
 
                     # Validate role
                     if role not in dict(CrewMember.ROLE_CHOICES):
