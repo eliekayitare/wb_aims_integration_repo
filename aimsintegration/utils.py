@@ -801,7 +801,7 @@ def process_fdm_flight_schedule_file(attachment):
                 existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
-                    logger.info(f"Record for flight {flight_no} on {sd_date_utc} exists; no update needed.")
+                    logger.info(f"FDM Record for flight {flight_no} on {sd_date_utc} exists; no update needed.")
                     continue
 
                 # Insert new record
