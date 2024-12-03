@@ -746,9 +746,6 @@ def process_fdm_flight_schedule_file(attachment):
             # Skip line if insufficient fields
             if len(fields) < 8:
                 logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
-                print("----------------------------------------------")
-                print(len(fields))
-                print("----------------------------------------------")
                 continue
 
             try:
@@ -763,23 +760,42 @@ def process_fdm_flight_schedule_file(attachment):
                 flight_type = fields[7] if len(fields) > 7 and fields[7] else " "
                 etd = fields[8] if len(fields) > 8 and fields[8] else " "
                 eta = fields[9] if len(fields) > 9 and fields[9] else " "
-
                 arrival_date = fields[-1]
 
                 # Parse dates
-                sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-                sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
+                try:
+                    sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
+                    sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
+                except ValueError as ve:
+                    logger.error(f"Skipping line {line_num} due to date format error: {flight_date}, {arrival_date}")
+                    continue
 
-                # Parse times
+                # Parse times with individual error handling
+                std_utc = None
+                sta_utc = None
+                etd_utc = None
+                eta_utc = None
+
                 try:
                     std_utc = datetime.strptime(std, "%H:%M").time()
-                    sta_utc = datetime.strptime(sta, "%H:%M").time()
-                    etd_utc = datetime.strptime(etd, "%H:%M").time()
-                    eta_utc = datetime.strptime(eta, "%H:%M").time()
                 except ValueError:
-                    logger.error(f"Skipping line {line_num} due to time format error in STD or STA: {std}, {sta}, {etd}, {eta}")
-                    continue
-                
+                    logger.warning(f"STD time format error on line {line_num}: {std}")
+
+                try:
+                    sta_utc = datetime.strptime(sta, "%H:%M").time()
+                except ValueError:
+                    logger.warning(f"STA time format error on line {line_num}: {sta}")
+
+                try:
+                    etd_utc = datetime.strptime(etd, "%H:%M").time() if etd.strip() else None
+                except ValueError:
+                    logger.warning(f"ETD time format error on line {line_num}: {etd}")
+
+                try:
+                    eta_utc = datetime.strptime(eta, "%H:%M").time() if eta.strip() else None
+                except ValueError:
+                    logger.warning(f"ETA time format error on line {line_num}: {eta}")
+
                 # Fetch airport data
                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
@@ -802,16 +818,15 @@ def process_fdm_flight_schedule_file(attachment):
                     'std_utc': std_utc,
                     'sta_utc': sta_utc,
                 }
-               
 
                 # Check if any record exists with the same unique criteria
                 existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
-                    logger.info(f"Record for flight {flight_no} on {sd_date_utc} Exists,no update needed")
-                    continue  # Skip insertion if a record exists, regardless of ACARS data
+                    logger.info(f"Record for flight {flight_no} on {sd_date_utc} exists; no update needed.")
+                    continue  # Skip insertion if a record exists
 
-                # Create a new record if no matching record exists
+                # Create a new record
                 FdmFlightData.objects.create(
                     flight_no=flight_no,
                     tail_no=tail_no,
@@ -828,16 +843,17 @@ def process_fdm_flight_schedule_file(attachment):
                     eta_utc=eta_utc,
                     raw_content=line
                 )
-                logger.info(f"Created new fdm flight record: {flight_no} on {sd_date_utc}")
+                logger.info(f"Created new FDM flight record: {flight_no} on {sd_date_utc}")
 
-            except ValueError as ve:
-                logger.error(f"Error processing fdm flight record on line {line_num}: {ve} - {line}")
+            except Exception as ve:
+                logger.error(f"Error processing FDM flight record on line {line_num}: {ve} - {line}")
                 continue
 
         logger.info("FDM Flight schedule file processed successfully.")
 
     except Exception as e:
-        logger.error(f"Error processing fdm flight schedule file: {e}", exc_info=True)
+        logger.error(f"Error processing FDM flight schedule file: {e}", exc_info=True)
+
 
 
 
@@ -887,8 +903,10 @@ def preprocess_crew_file(content):
 
 
 
+
 from datetime import datetime
 from .models import CrewMember
+
 def process_crew_details_file(attachment):
     """
     Process the crew details file and update the CrewMember table.
@@ -905,19 +923,25 @@ def process_crew_details_file(attachment):
 
             # Extract mandatory flight and route details
             try:
-                flight_no = fields[0]
-                flight_date = fields[1]  # Format: DDMMYYYY
-                origin = fields[2]
-                destination = fields[3]
+                if len(fields) < 4:
+                    raise ValueError("Insufficient flight details")
+
+                flight_no = fields[0].strip()
+                flight_date = fields[1].strip()  # Format: DDMMYYYY
+                origin = fields[2].strip()
+                destination = fields[3].strip()
+
+                if not flight_no.isdigit():
+                    raise ValueError("Invalid flight number format")
 
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
-            except (IndexError, ValueError):
-                logger.error(f"Skipping line {line_num} due to missing or invalid flight details: {line}")
+            except ValueError as e:
+                logger.error(f"Skipping line {line_num} due to invalid flight details: {line} - {e}")
                 continue
 
             # Process the rest of the line for crew details
             crew_data = fields[4:]
-            if len(crew_data) % 2 != 0:  # Check for valid role-ID/name pairs
+            if len(crew_data) % 2 != 0:
                 logger.warning(f"Skipping line {line_num} due to incomplete crew data: {line}")
                 continue
 
@@ -925,13 +949,16 @@ def process_crew_details_file(attachment):
                 try:
                     role = crew_data[i].strip()
                     raw_data = crew_data[i + 1].strip()
+
+                    if len(raw_data) < 8:
+                        raise ValueError("Invalid crew ID or name format")
+
                     crew_id = raw_data[:8].strip()
                     name = raw_data[8:].strip()
 
                     # Validate role
                     if role not in dict(CrewMember.ROLE_CHOICES):
-                        logger.warning(f"Skipping invalid role {role} on line {line_num}: {line}")
-                        continue
+                        raise ValueError(f"Invalid role: {role}")
 
                     # Update or create CrewMember
                     CrewMember.objects.update_or_create(
@@ -947,8 +974,8 @@ def process_crew_details_file(attachment):
                     )
                     logger.info(f"Processed crew member {name} ({role}) for flight {flight_no}.")
 
-                except (IndexError, ValueError):
-                    logger.error(f"Error parsing crew data on line {line_num}: {line}")
+                except ValueError as e:
+                    logger.error(f"Error parsing crew data on line {line_num}: {line} - {e}")
                     continue
 
         logger.info("Crew details file processed successfully.")
@@ -960,10 +987,11 @@ def process_crew_details_file(attachment):
 
 
 
+
 def process_fdm_crew_email_attachment(item, process_function):
     """
     Generalized function to handle processing of email attachments.
-    `process_function` is the specific function that processes the attachment (e.g., process_airport_file).
+    `process_function` is the specific function that processes the attachment (e.g., process_crew_details_file).
     """
     try:
         if item.attachments:
