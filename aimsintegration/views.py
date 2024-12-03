@@ -169,8 +169,8 @@ def fdm_dashboard_view(request):
         ).order_by('std_utc')
 
         # Serialize data for JSON response
-        data = list(fdm_schedules.values('sd_date_utc', 'flight_no', 'tail_no','dep_code_iata', 'dep_code_icao',
-                                      'arr_code_iata', 'arr_code_icao', 'std_utc', 'atd_utc',
+        data = list(fdm_schedules.values('sd_date_utc', 'flight_no', 'tail_no', 'dep_code_icao',
+                                     'arr_code_icao', 'std_utc', 'atd_utc',
                                       'takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc','flight_type','etd_utc','eta_utc'))
         return JsonResponse(data, safe=False)
     
