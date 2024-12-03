@@ -887,6 +887,11 @@ from datetime import datetime
 from .models import CrewMember
 import pandas as pd
 
+from datetime import datetime
+import pandas as pd
+from .models import CrewMember
+
+
 def process_crew_details_file(attachment):
     """
     Process the crew details file using pandas for unstructured data.
@@ -911,34 +916,39 @@ def process_crew_details_file(attachment):
                 destination = line[15:18].strip()
                 crew_data = line[18:].strip()
 
-                # Convert date
+                # Convert flight date
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
 
-                # Process crew details
+                # Process crew data
                 crew_list = []
-                chunks = crew_data.split()
+                parts = crew_data.split()  # Split by whitespace
 
-                # Iterate through chunks dynamically
+                # Iterate through parts to identify roles, IDs, and names
                 i = 0
-                while i < len(chunks):
-                    role = chunks[i].strip()
-                    if role in dict(CrewMember.ROLE_CHOICES):  # Validate role
-                        if i + 1 < len(chunks):  # Ensure there's another chunk for ID + name
-                            raw_data = chunks[i + 1].strip()
+                while i < len(parts):
+                    role = parts[i].strip()
+
+                    # Validate role
+                    if role in dict(CrewMember.ROLE_CHOICES):
+                        if i + 1 < len(parts):  # Ensure there's another part for ID and name
+                            raw_data = parts[i + 1].strip()
                             crew_id = raw_data[:8].strip()
                             name = raw_data[8:].strip()
 
                             # Validate crew ID
                             if len(crew_id) == 8 and crew_id.isdigit():
                                 crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
+                                i += 2  # Move to the next role
                             else:
-                                logger.warning(f"Invalid crew ID or name: {raw_data} on line: {line}")
+                                logger.warning(f"Invalid crew ID or name format: {raw_data} on line: {line}")
+                                i += 1  # Skip this chunk and move on
                         else:
                             logger.warning(f"Incomplete data for role: {role} on line: {line}")
-                        i += 2  # Skip to the next role
+                            i += 1  # Skip this chunk and move on
                     else:
                         logger.warning(f"Skipping invalid role: {role} on line: {line}")
                         i += 1  # Skip invalid role
+
                 return crew_list
             except Exception as e:
                 logger.error(f"Error parsing line: {line} - {e}")
@@ -982,6 +992,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
