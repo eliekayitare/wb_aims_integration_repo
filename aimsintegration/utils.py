@@ -896,19 +896,15 @@ def process_crew_details_file(attachment):
         raw_content = attachment.content.decode('utf-8').splitlines()
 
         # Preprocess raw content into a structured format
-        rows = []
-        for line in raw_content:
-            line = line.strip()
-            if len(line) > 0:  # Ignore empty lines
-                rows.append(line)
+        rows = [line.strip() for line in raw_content if line.strip()]  # Ignore empty lines
 
         # Convert to a dataframe
         df = pd.DataFrame(rows, columns=["raw_line"])
 
-        # Extract fields from the unstructured text
+        # Define a function to parse a single line
         def parse_line(line):
             try:
-                # Extract main fields
+                # Extract flight details
                 flight_no = line[:4].strip()
                 flight_date = line[4:12].strip()
                 origin = line[12:15].strip()
@@ -918,17 +914,31 @@ def process_crew_details_file(attachment):
                 # Convert date
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
 
-                # Extract crew details
+                # Process crew details
                 crew_list = []
                 chunks = crew_data.split()
-                for i in range(0, len(chunks), 2):
-                    role = chunks[i].strip()
-                    raw_data = chunks[i + 1].strip()
-                    crew_id = raw_data[:8].strip()
-                    name = raw_data[8:].strip()
 
-                    # Append parsed crew details
-                    crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
+                # Iterate through chunks dynamically
+                i = 0
+                while i < len(chunks):
+                    role = chunks[i].strip()
+                    if role in dict(CrewMember.ROLE_CHOICES):  # Validate role
+                        if i + 1 < len(chunks):  # Ensure there's another chunk for ID + name
+                            raw_data = chunks[i + 1].strip()
+                            crew_id = raw_data[:8].strip()
+                            name = raw_data[8:].strip()
+
+                            # Validate crew ID
+                            if len(crew_id) == 8 and crew_id.isdigit():
+                                crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
+                            else:
+                                logger.warning(f"Invalid crew ID or name: {raw_data} on line: {line}")
+                        else:
+                            logger.warning(f"Incomplete data for role: {role} on line: {line}")
+                        i += 2  # Skip to the next role
+                    else:
+                        logger.warning(f"Skipping invalid role: {role} on line: {line}")
+                        i += 1  # Skip invalid role
                 return crew_list
             except Exception as e:
                 logger.error(f"Error parsing line: {line} - {e}")
