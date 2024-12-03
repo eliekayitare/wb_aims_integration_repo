@@ -744,7 +744,7 @@ def process_fdm_flight_schedule_file(attachment):
             fields = line.split()
             
             # Skip line if insufficient fields
-            if len(fields) < 10:
+            if len(fields) < 8:
                 logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
                 print("----------------------------------------------")
                 print(len(fields))
@@ -760,9 +760,10 @@ def process_fdm_flight_schedule_file(attachment):
                 arr_code_icao = fields[4]
                 std = fields[5]
                 sta = fields[6]
-                flight_type = fields[7]
-                etd = fields[8]
-                eta = fields[9]
+                flight_type = fields[7] if len(fields) > 7 and fields[7] else " "
+                etd = fields[8] if len(fields) > 8 and fields[8] else " "
+                eta = fields[9] if len(fields) > 9 and fields[9] else " "
+
                 arrival_date = fields[-1]
 
                 # Parse dates
@@ -858,24 +859,57 @@ def process_fdm_email_attachment(item, process_function):
 
 from datetime import datetime
 from .models import CrewMember
+def preprocess_crew_file(content):
+    """
+    Preprocess the crew file to ensure each flight's data is on a single row.
+    Rows should start with the flight number.
+    """
+    formatted_lines = []
+    current_line = ""
+
+    for line in content.splitlines():
+        stripped_line = line.strip()
+
+        # Check if the line starts with a flight number (numeric)
+        if stripped_line[:3].isdigit():  # Assuming flight numbers are at least 3 digits
+            if current_line:
+                formatted_lines.append(current_line.strip())  # Add the previous line
+            current_line = stripped_line  # Start a new record
+        else:
+            current_line += f" {stripped_line}"  # Append to the current line
+
+    if current_line:
+        formatted_lines.append(current_line.strip())  # Add the last record
+
+    return formatted_lines
+
+
+
+
+
+from datetime import datetime
+from .models import CrewMember
 def process_crew_details_file(attachment):
     """
     Process the crew details file and update the CrewMember table.
     """
     try:
-        content = attachment.content.decode('utf-8').splitlines()
+        # Preprocess the file content
+        raw_content = attachment.content.decode('utf-8')
+        formatted_content = preprocess_crew_file(raw_content)
+
         logger.info("Starting to process the crew details file...")
 
-        for line_num, line in enumerate(content, start=1):
+        for line_num, line in enumerate(formatted_content, start=1):
             fields = line.split()
-            
+
             # Extract mandatory flight and route details
             try:
                 flight_no = fields[0]
                 flight_date = fields[1]  # Format: DDMMYYYY
                 origin = fields[2]
                 destination = fields[3]
-                
+
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
             except (IndexError, ValueError):
                 logger.error(f"Skipping line {line_num} due to missing or invalid flight details: {line}")
@@ -883,13 +917,18 @@ def process_crew_details_file(attachment):
 
             # Process the rest of the line for crew details
             crew_data = fields[4:]
-            for i in range(0, len(crew_data), 2):  # Assuming alternating role and ID/name
-                try:
-                    role = crew_data[i]
-                    raw_data = crew_data[i + 1]
-                    crew_id, name = raw_data[:8], raw_data[8:].strip()
+            if len(crew_data) % 2 != 0:  # Check for valid role-ID/name pairs
+                logger.warning(f"Skipping line {line_num} due to incomplete crew data: {line}")
+                continue
 
-                    # Validate role and crew_id
+            for i in range(0, len(crew_data), 2):
+                try:
+                    role = crew_data[i].strip()
+                    raw_data = crew_data[i + 1].strip()
+                    crew_id = raw_data[:8].strip()
+                    name = raw_data[8:].strip()
+
+                    # Validate role
                     if role not in dict(CrewMember.ROLE_CHOICES):
                         logger.warning(f"Skipping invalid role {role} on line {line_num}: {line}")
                         continue
@@ -916,6 +955,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
