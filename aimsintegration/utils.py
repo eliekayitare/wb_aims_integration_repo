@@ -894,7 +894,7 @@ from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
-    Process the crew details file using dynamic splitting and validation.
+    Process the crew details file using dynamic parsing for inconsistent formatting.
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -919,26 +919,27 @@ def process_crew_details_file(attachment):
                 # Extract and dynamically parse crew data
                 crew_data = line[18:].strip()
                 crew_segments = crew_data.split()  # Split by spaces
-                
+
                 i = 0
                 while i < len(crew_segments):
                     try:
-                        # Assume the role is 2 characters
+                        # Assume the role is 2 uppercase letters
                         role = crew_segments[i].strip()
-
-                        # Validate role
                         if role not in dict(CrewMember.ROLE_CHOICES):
                             raise ValueError(f"Invalid role: {role}")
 
-                        # Next segment should be crew ID (8 digits)
-                        crew_id = crew_segments[i + 1].strip()
+                        # Crew ID should be next (8 digits)
+                        crew_id = crew_segments[i + 1][:8].strip()
                         if not (crew_id.isdigit() and len(crew_id) == 8):
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                        # The rest is the name
-                        name = " ".join(crew_segments[i + 2:]).strip()
-                        if not name:
-                            raise ValueError("Invalid name")
+                        # The rest is the name, dynamically split if merged
+                        raw_name = crew_segments[i + 1][8:] + " " + " ".join(crew_segments[i + 2:]).strip()
+                        name_parts = raw_name.split()
+                        if not name_parts:
+                            raise ValueError("Invalid name format")
+
+                        name = " ".join(name_parts).strip()
 
                         # Add parsed data
                         parsed_data.append({
@@ -951,10 +952,10 @@ def process_crew_details_file(attachment):
                             "name": name,
                         })
 
-                        # Move to the next crew record
-                        i += 3
+                        # Adjust index for the next segment
+                        i += 2 + len(name_parts)
                     except (IndexError, ValueError) as e:
-                        logger.warning(f"Skipping invalid crew data segment: {crew_segments[i:]} on line {line_num}")
+                        logger.warning(f"Skipping invalid crew data segment: {crew_segments[i:]} on line {line_num} - Error: {e}")
                         i += 1  # Move to the next segment
 
             except Exception as e:
