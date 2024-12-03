@@ -146,7 +146,7 @@ class FdmFlightData(models.Model):
     updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
 
     class Meta:
-        db_table = 'flight_data'
+        db_table = 'fdm_flight_data'
 
     def __str__(self):
         return f"Flight {self.flight_no} from {self.dep_code_iata} to {self.arr_code_iata}"
@@ -177,3 +177,10 @@ class CrewMember(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_role_display()}) on Flight {self.flight_no} ({self.origin} to {self.destination}) on {self.sd_date_utc}"
+
+    class Meta:
+        db_table = 'crew_member'
+        unique_together = ('flight_no', 'crew_id')
+        indexes = [
+            models.Index(fields=['flight_no', 'crew_id']),
+        ]
