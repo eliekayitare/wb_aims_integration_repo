@@ -118,3 +118,62 @@ class CompletionRecord(models.Model):
         indexes = [
             models.Index(fields=['employee_id', 'course_code', 'completion_date']),
         ]
+
+
+
+#FDM Project models
+class FdmFlightData(models.Model):
+    flight_no = models.CharField(max_length=6, null=False, blank=False)
+    tail_no = models.CharField(max_length=10, null=True, blank=True)
+    dep_code_iata = models.CharField(max_length=10, null=False, blank=False)  # IATA codes are 3 characters
+    dep_code_icao = models.CharField(max_length=10, null=True, blank=True)  # ICAO codes are 4 characters
+    arr_code_iata = models.CharField(max_length=10, null=False, blank=False)
+    arr_code_icao = models.CharField(max_length=10, null=True, blank=True)
+    sd_date_utc = models.DateField(null=False, blank=False)  # Scheduled departure date
+    sa_date_utc = models.DateField(null=True, blank=True)  # Scheduled arrival date
+    std_utc = models.TimeField(null=True, blank=True)  # Scheduled Time of Departure (HH:MM)
+    atd_utc = models.TimeField(null=True, blank=True)  # Actual Time of Departure
+    takeoff_utc = models.TimeField(null=True, blank=True)
+    touchdown_utc = models.TimeField(null=True, blank=True)
+    ata_utc = models.TimeField(null=True, blank=True)  # Actual Time of Arrival
+    sta_utc = models.TimeField(null=True, blank=True)  # Scheduled Time of Arrival
+    flight_type= models.CharField(max_length=20)
+    etd_utc = models.TimeField(null=True, blank=True)  # Estimated Time of Departure
+    eta_utc = models.TimeField(null=True, blank=True)  # Estimated Time of Arrival
+    source_type = models.CharField(max_length=20)
+    raw_content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
+    updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
+
+    class Meta:
+        db_table = 'flight_data'
+
+    def __str__(self):
+        return f"Flight {self.flight_no} from {self.dep_code_iata} to {self.arr_code_iata}"
+    
+
+
+
+class CrewMember(models.Model):
+    ROLE_CHOICES = [
+        ('CP', 'Captain'),
+        ('FO', 'First Officer'),
+        ('FP', 'Purser'),
+        ('SA', 'Senior Attendant'),
+        ('FA', 'Flight Attendant'),
+        ('FE', 'Flight Engineer'),
+        ('AC', 'Air Crew'),
+    ]
+
+    flight_no = models.CharField(max_length=6, null=False, blank=False)  # To associate with the flight indirectly
+    sd_date_utc = models.DateField(null=False, blank=False)  # Scheduled departure date
+    origin = models.CharField(max_length=10, null=False, blank=False)  # IATA or ICAO code for origin
+    destination = models.CharField(max_length=10, null=False, blank=False)  # IATA or ICAO code for destination
+    crew_id = models.CharField(max_length=10, unique=True, null=False, blank=False)
+    name = models.CharField(max_length=100, null=False, blank=False)
+    role = models.CharField(max_length=2, choices=ROLE_CHOICES, null=False, blank=False)
+    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
+    updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
+
+    def __str__(self):
+        return f"{self.name} ({self.get_role_display()}) on Flight {self.flight_no} ({self.origin} to {self.destination}) on {self.sd_date_utc}"

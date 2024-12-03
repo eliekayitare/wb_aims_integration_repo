@@ -3,7 +3,7 @@
 
 from celery import shared_task, chain
 from exchangelib import Credentials, Account, Configuration, EWSDateTime
-from .utils import process_email_attachment, process_airport_file, process_flight_schedule_file, process_acars_message, process_cargo_email_attachment, process_cargo_flight_schedule_file
+from .utils import process_email_attachment, process_airport_file, process_flight_schedule_file, process_acars_message, process_cargo_email_attachment, process_cargo_flight_schedule_file,process_fdm_email_attachment,process_fdm_flight_schedule_file,process_fdm_crew_email_attachment,process_crew_details_file
 import logging
 from django.conf import settings
 from datetime import datetime
@@ -490,3 +490,45 @@ def email_job8_file(file_path, data):
         fail_silently=False,
     )
     logger.info("JOB8.txt emailed to flight dispatch.")
+
+
+
+
+
+#TASK for FDM project
+
+@shared_task
+def fetch_fdm_flight_schedules():
+    account = get_exchange_account()
+    logger.info("Fetching the most recent fdm flight schedule email...")
+
+    emails = account.inbox.filter(
+        subject__contains='AIMS JOB : #1002 Flight schedule feed to FDM file attached'
+    ).order_by('-datetime_received')
+    
+    email = emails[0] if emails else None
+
+    if email:
+        logger.info(f"Processing the most recent fdm flight schedule email with subject: {email.subject}")
+        process_fdm_email_attachment(email, process_fdm_flight_schedule_file)
+    else:
+        logger.info("No new fdm flight schedule email found.")
+
+
+
+@shared_task
+def fetch_fdm_crew_data():
+    account = get_exchange_account()
+    logger.info("Fetching the most recent fdm crew data...")
+
+    emails = account.inbox.filter(
+        subject__contains="AIMS JOB : #16.A Download List of flight legs with crew names to FDM + ' file attached"
+    ).order_by('-datetime_received')
+    
+    email = emails[0] if emails else None
+
+    if email:
+        logger.info(f"Processing the most recent fdm crew data email with subject: {email.subject}")
+        process_fdm_crew_email_attachment(email, process_crew_details_file)
+    else:
+        logger.info("No new fdm flight schedule email found.")

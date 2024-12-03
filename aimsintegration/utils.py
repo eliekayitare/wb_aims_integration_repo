@@ -1,6 +1,6 @@
 import logging
 from exchangelib import FileAttachment
-from aimsintegration.models import AirportData, FlightData, AcarsMessage, CargoFlightData
+from aimsintegration.models import AirportData, FlightData, AcarsMessage, CargoFlightData,FdmFlightData
 from datetime import datetime
 import re
 from django.core.mail import send_mail
@@ -383,18 +383,6 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     row = row.ljust(172)
     return row
 
-# def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arrival_time):
-#     try:
-#         # Format the row
-#         row = format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time)
-        
-#         # Append the row to the file
-#         with open(file_path, 'w') as file:
-#             file.write(row + '\n')
-#         logger.info(f"Successfully wrote row for flight {flight_data.flight_no} to job file.")
-    
-#     except Exception as e:
-#         logger.error(f"Error writing to job file: {e}", exc_info=True)
 
 
 def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arrival_time):
@@ -585,8 +573,37 @@ def process_acars_message(item, file_path):
             arr_code_iata=arr_code
         )
 
+        #FDM Project
+        fdm_flights = FdmFlightData.objects.filter(
+            flight_no=flight_no,
+            tail_no=tail_number,
+            dep_code_iata=dep_code,
+            arr_code_iata=arr_code
+        )
+        
+
         if not flights.exists():
             logger.info(f"No matching flights found for flight number: {flight_no}")
+            send_mail(
+                subject=f"No matching flights found for flight number: {flight_no}",
+                message=(
+                    f"Dear Team,\n\n"
+                    f"The ACARS message for flight {flight_no} could not be matched.\n"
+                    f"Message details:\n\n{message_body}\n\n"
+                    f"Please review and update manually.\n\n"
+                    f"Regards,\nFlightOps Team"
+                ),
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[
+                    settings.FIRST_EMAIL_RECEIVER,
+                    settings.SECOND_EMAIL_RECEIVER,
+                ],
+                fail_silently=False,
+            )
+            return
+        
+        if not fdm_flights.exists():
+            logger.info(f"No matching FDM flights found for flight number: {flight_no}")
             send_mail(
                 subject=f"No matching flights found for flight number: {flight_no}",
                 message=(
@@ -610,26 +627,32 @@ def process_acars_message(item, file_path):
             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
         )
 
+        closest_fdm_flight = min(
+            fdm_flights,
+            key=lambda fl: abs((fl.sd_date_utc - email_received_date).days)
+        ) 
+
         if acars_event == "OT":
             closest_flight.atd_utc = event_time
+            closest_fdm_flight.atd_utc = event_time
         elif acars_event == "OF":
             closest_flight.takeoff_utc = event_time
+            closest_fdm_flight.takeoff_utc = event_time
         elif acars_event == "ON":
             closest_flight.touchdown_utc = event_time
+            closest_fdm_flight.touchdown_utc = event_time
         elif acars_event == "IN":
             closest_flight.ata_utc = event_time
+            closest_fdm_flight.ata_utc = event_time
 
         closest_flight.save()
+        closest_fdm_flight.save()
 
         # Append the updated flight details to the job file
         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
 
     except Exception as e:
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
-
-
-
-
 
 
 
@@ -700,3 +723,213 @@ def process_cargo_email_attachment(item, process_function):
                     process_function(attachment)  # Call the relevant function for each attachment
     except Exception as e:
         logger.error(f"Error processing cargo email attachment: {e}")
+
+
+
+
+
+
+#FMD Project
+
+def process_fdm_flight_schedule_file(attachment):
+    """
+    Process the entire fdm flight schedule file and update the FlightData table.
+    Avoid updating records with ACARS data in `atd_utc`, `takeoff_utc`, `touchdown_utc`, or `ata_utc`.
+    """
+    try:
+        content = attachment.content.decode('utf-8').splitlines()
+        logger.info("Starting to process the fdm flight schedule file...")
+
+        for line_num, line in enumerate(content, start=1):
+            fields = line.split()
+            
+            # Skip line if insufficient fields
+            if len(fields) < 11:
+                logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
+                print("----------------------------------------------")
+                print(len(fields))
+                print("----------------------------------------------")
+                continue
+
+            try:
+                # Extract fields
+                flight_date = fields[0]
+                tail_no = fields[1]
+                flight_no = fields[2]
+                dep_code_icao = fields[3]
+                arr_code_icao = fields[4]
+                std = fields[5]
+                sta = fields[6]
+                flight_type = fields[7]
+                etd = fields[8]
+                eta = fields[9]
+                arrival_date = fields[-1]
+
+                # Parse dates
+                sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
+                sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
+
+                # Parse times
+                try:
+                    std_utc = datetime.strptime(std, "%H:%M").time()
+                    sta_utc = datetime.strptime(sta, "%H:%M").time()
+                    etd_utc = datetime.strptime(etd, "%H:%M").time()
+                    eta_utc = datetime.strptime(eta, "%H:%M").time()
+                except ValueError:
+                    logger.error(f"Skipping line {line_num} due to time format error in STD or STA: {std}, {sta}, {etd}, {eta}")
+                    continue
+                
+                # Fetch airport data
+                dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
+                arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
+
+                if not dep_airport or not arr_airport:
+                    logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
+                    continue
+
+                dep_code_iata = dep_airport.iata_code
+                arr_code_iata = arr_airport.iata_code
+
+                # Define unique criteria
+                unique_criteria = {
+                    'flight_no': flight_no,
+                    'tail_no': tail_no,
+                    'sd_date_utc': sd_date_utc,
+                    'dep_code_icao': dep_code_icao,
+                    'arr_code_icao': arr_code_icao,
+                    'sa_date_utc': sa_date_utc,
+                    'std_utc': std_utc,
+                    'sta_utc': sta_utc,
+                }
+               
+
+                # Check if any record exists with the same unique criteria
+                existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
+
+                if existing_record:
+                    logger.info(f"Record for flight {flight_no} on {sd_date_utc} Exists,no update needed")
+                    continue  # Skip insertion if a record exists, regardless of ACARS data
+
+                # Create a new record if no matching record exists
+                FdmFlightData.objects.create(
+                    flight_no=flight_no,
+                    tail_no=tail_no,
+                    dep_code_iata=dep_code_iata,
+                    dep_code_icao=dep_code_icao,
+                    arr_code_iata=arr_code_iata,
+                    arr_code_icao=arr_code_icao,
+                    sd_date_utc=sd_date_utc,
+                    std_utc=std_utc,
+                    sta_utc=sta_utc,
+                    sa_date_utc=sa_date_utc,
+                    flight_type=flight_type,
+                    etd_utc=etd_utc,
+                    eta_utc=eta_utc,
+                    raw_content=line
+                )
+                logger.info(f"Created new fdm flight record: {flight_no} on {sd_date_utc}")
+
+            except ValueError as ve:
+                logger.error(f"Error processing fdm flight record on line {line_num}: {ve} - {line}")
+                continue
+
+        logger.info("FDM Flight schedule file processed successfully.")
+
+    except Exception as e:
+        logger.error(f"Error processing fdm flight schedule file: {e}", exc_info=True)
+
+
+
+
+def process_fdm_email_attachment(item, process_function):
+    """
+    Generalized function to handle processing of email attachments.
+    `process_function` is the specific function that processes the attachment (e.g., process_airport_file).
+    """
+    try:
+        if item.attachments:
+            for attachment in item.attachments:
+                if isinstance(attachment, FileAttachment):
+                    logger.info(f"Processing attachment: {attachment.name}")
+                    process_function(attachment)  # Call the relevant function for each attachment
+    except Exception as e:
+        logger.error(f"Error processing fdm email attachment: {e}")
+
+
+from datetime import datetime
+from .models import CrewMember
+def process_crew_details_file(attachment):
+    """
+    Process the crew details file and update the CrewMember table.
+    """
+    try:
+        content = attachment.content.decode('utf-8').splitlines()
+        logger.info("Starting to process the crew details file...")
+
+        for line_num, line in enumerate(content, start=1):
+            fields = line.split()
+            
+            # Extract mandatory flight and route details
+            try:
+                flight_no = fields[0]
+                flight_date = fields[1]  # Format: DDMMYYYY
+                origin = fields[2]
+                destination = fields[3]
+                
+                sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
+            except (IndexError, ValueError):
+                logger.error(f"Skipping line {line_num} due to missing or invalid flight details: {line}")
+                continue
+
+            # Process the rest of the line for crew details
+            crew_data = fields[4:]
+            for i in range(0, len(crew_data), 2):  # Assuming alternating role and ID/name
+                try:
+                    role = crew_data[i]
+                    raw_data = crew_data[i + 1]
+                    crew_id, name = raw_data[:8], raw_data[8:].strip()
+
+                    # Validate role and crew_id
+                    if role not in dict(CrewMember.ROLE_CHOICES):
+                        logger.warning(f"Skipping invalid role {role} on line {line_num}: {line}")
+                        continue
+
+                    # Update or create CrewMember
+                    CrewMember.objects.update_or_create(
+                        crew_id=crew_id,
+                        defaults={
+                            'flight_no': flight_no,
+                            'sd_date_utc': sd_date_utc,
+                            'origin': origin,
+                            'destination': destination,
+                            'name': name,
+                            'role': role,
+                        }
+                    )
+                    logger.info(f"Processed crew member {name} ({role}) for flight {flight_no}.")
+
+                except (IndexError, ValueError):
+                    logger.error(f"Error parsing crew data on line {line_num}: {line}")
+                    continue
+
+        logger.info("Crew details file processed successfully.")
+
+    except Exception as e:
+        logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
+
+
+
+def process_fdm_crew_email_attachment(item, process_function):
+    """
+    Generalized function to handle processing of email attachments.
+    `process_function` is the specific function that processes the attachment (e.g., process_airport_file).
+    """
+    try:
+        if item.attachments:
+            for attachment in item.attachments:
+                if isinstance(attachment, FileAttachment):
+                    logger.info(f"Processing attachment: {attachment.name}")
+                    process_function(attachment)  # Call the relevant function for each attachment
+    except Exception as e:
+        logger.error(f"Error processing fdm email attachment: {e}")

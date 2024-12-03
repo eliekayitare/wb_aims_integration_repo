@@ -33,7 +33,7 @@
     <ul>
       <li><a href="{% url 'dashboard' %}">ACARS</a></li>
       <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
-      <li><a href="{% url 'fdm' %}">FDM</a></li>
+      <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
     </ul>
   </aside>
 
@@ -75,6 +75,9 @@
             <th>Touch Down</th>
             <th>ATA</th>
             <th>STA</th>
+            <th>Flight Type</th>
+            <th>ETD</th>
+            <th>ETA</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -94,6 +97,9 @@
             <td>{{ flight.touchdown_utc|date:"H:i"|default:'--' }}</td>
             <td>{{ flight.ata_utc|date:"H:i"|default:'--' }}</td>
             <td>{{ flight.sta_utc|date:"H:i"}}</td>
+            <td>{{ flight.flight_type }}</td>
+            <td>{{ flight.etd_utc|date:"H:i" }}</td>
+            <td>{{ flight.eta_utc|date:"H:i" }}</td>
             <td><button class="btn-action">View</button></td>
           </tr>
           {% endfor %}
@@ -134,7 +140,7 @@
     const query = document.getElementById("search-input").value;
     const selectedDate = document.getElementById("date-picker").value;
 
-    fetch(`/aims/dashboard/?query=${query}&date=${selectedDate}`, {
+    fetch(`/aims/fdm_dashboard/?query=${query}&date=${selectedDate}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
       },
@@ -203,7 +209,7 @@ socket.onmessage = function(event) {
 
 function updateDashboard() {
     // Make an AJAX call to fetch updated data
-    fetch('/aims/dashboard/')
+    fetch('/aims/fdm_dashboard/')
         .then(response => response.json())
         .then(data => {
             // Update the dashboard with the new data
