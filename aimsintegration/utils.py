@@ -892,17 +892,11 @@ import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
-import pandas as pd
-from datetime import datetime
-from .models import CrewMember  # Replace `your_app` with your actual app name
-from django.db import transaction
-
 def process_crew_details_file(attachment):
     """
-    Process the crew details file received as an email attachment and save to the database.
+    Process the crew details file with robust parsing for inconsistent data.
     """
     try:
-        # Decode the email attachment content
         raw_content = attachment.content.decode('utf-8').splitlines()
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
@@ -916,80 +910,96 @@ def process_crew_details_file(attachment):
                 origin = line[12:15].strip()
                 destination = line[15:18].strip()
 
-                # Convert flight_date
+                # Validate and convert flight_date
                 try:
                     sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
                 except ValueError:
                     raise ValueError(f"Invalid date format: {flight_date}")
 
-                # Parse crew data
+                # Extract and dynamically parse crew data
                 crew_data = line[18:].strip()
+                crew_segments = crew_data.split()  # Split by spaces
+
                 i = 0
-                while i < len(crew_data):
-                    # Extract role
-                    role = crew_data[i:i + 2].strip()
-                    if not role.isalpha() or len(role) != 2:
-                        raise ValueError(f"Invalid role at index {i}: {role}")
-                    i += 2
+                while i < len(crew_segments):
+                    try:
+                        # Extract role (2 uppercase letters)
+                        role = crew_segments[i].strip()
+                        if role not in dict(CrewMember.ROLE_CHOICES):
+                            raise ValueError(f"Invalid role: {role}")
 
-                    # Extract crew_id
-                    crew_id = crew_data[i:i + 8].strip()
-                    if not (crew_id.isdigit() and len(crew_id) == 8):
-                        raise ValueError(f"Invalid crew ID at index {i}: {crew_id}")
-                    i += 8
+                        # Crew ID should follow (8 characters)
+                        raw_data = crew_segments[i + 1] if i + 1 < len(crew_segments) else ""
+                        crew_id = raw_data[:8].strip()
 
-                    # Extract name until the next role or end of string
-                    name_start = i
-                    while i < len(crew_data) and not crew_data[i:i + 2].strip().isalpha():
-                        i += 1
-                    name = crew_data[name_start:i].strip()
+                        if not (crew_id.isdigit() and len(crew_id) == 8):
+                            raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                    if len(name) > 100:
-                        print(f"Warning: Name too long for crew ID {crew_id}, trimming to 100 characters.")
-                        name = name[:100]
+                        # Extract name until the next role or invalid data
+                        name_parts = []
+                        for j in range(i + 2, len(crew_segments)):
+                            if crew_segments[j].strip() in dict(CrewMember.ROLE_CHOICES):
+                                break
+                            name_parts.append(crew_segments[j])
 
-                    # Add parsed data
-                    parsed_data.append({
-                        "flight_no": flight_no,
-                        "sd_date_utc": sd_date_utc,
-                        "origin": origin,
-                        "destination": destination,
-                        "role": role,
-                        "crew_id": crew_id,
-                        "name": name,
-                    })
+                        name = " ".join(name_parts).strip()
+                        if len(name) > 100:
+                            logger.warning(f"Trimming name for crew ID {crew_id}: {name}")
+                            name = name[:100]  # Trim to fit the database limit
+
+                        # Add parsed data
+                        parsed_data.append({
+                            "flight_no": flight_no,
+                            "sd_date_utc": sd_date_utc,
+                            "origin": origin,
+                            "destination": destination,
+                            "role": role,
+                            "crew_id": crew_id,
+                            "name": name,
+                        })
+
+                        # Adjust index to continue from the next crew member
+                        i = j
+                    except (IndexError, ValueError) as e:
+                        logger.warning(f"Skipping invalid crew data segment: {crew_segments[i:]} on line {line_num} - Error: {e}")
+                        i += 1  # Skip invalid data and move on
 
             except Exception as e:
-                print(f"Error parsing line {line_num}: {line} - {e}")
+                logger.warning(f"Skipping line {line_num}: {line} - Error: {e}")
                 continue
 
-        # Save parsed data to the database
-        if parsed_data:
-            with transaction.atomic():
-                for crew_row in parsed_data:
-                    try:
-                        CrewMember.objects.update_or_create(
-                            crew_id=crew_row["crew_id"],
-                            defaults={
-                                'flight_no': crew_row["flight_no"],
-                                'sd_date_utc': crew_row["sd_date_utc"],
-                                'origin': crew_row["origin"],
-                                'destination': crew_row["destination"],
-                                'name': crew_row["name"],
-                                'role': crew_row["role"],
-                            }
-                        )
-                        print(f"Saved crew member {crew_row['name']} ({crew_row['role']}) for flight {crew_row['flight_no']}.")
-                    except Exception as db_error:
-                        print(f"Error saving crew member {crew_row['name']} to the database: {db_error}")
+        # Convert to DataFrame
+        crew_df = pd.DataFrame(parsed_data)
+        if crew_df.empty:
+            logger.error("No valid data extracted.")
+            return
 
-        print("Data extraction and saving completed successfully.")
-        return pd.DataFrame(parsed_data)  # Optional: Return a DataFrame for further use
+        # DEBUG: Print the parsed DataFrame for review
+        print("Parsed DataFrame:\n", crew_df.head())
+
+        # Save to the database
+        for _, crew_row in crew_df.iterrows():
+            try:
+                CrewMember.objects.update_or_create(
+                    crew_id=crew_row["crew_id"],
+                    defaults={
+                        'flight_no': crew_row["flight_no"],
+                        'sd_date_utc': crew_row["sd_date_utc"],
+                        'origin': crew_row["origin"],
+                        'destination': crew_row["destination"],
+                        'name': crew_row["name"],
+                        'role': crew_row["role"],
+                    }
+                )
+                logger.info(f"Processed crew member {crew_row['name']} ({crew_row['role']}) for flight {crew_row['flight_no']}.")
+
+            except Exception as e:
+                logger.error(f"Error saving crew member: {crew_row} - {e}")
+
+        logger.info("Crew details file processed successfully.")
 
     except Exception as e:
-        print(f"Error processing the email attachment: {e}")
-        return None
-
+        logger.error(f"Error processing crew details file: {e}", exc_info=True)
 
 
 
