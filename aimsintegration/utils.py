@@ -750,18 +750,19 @@ def process_fdm_flight_schedule_file(attachment):
 
             try:
                 # Extract fields based on fixed-width columns including spaces
-                flight_date = line[0:10].strip()      # Column 1-10
-                tail_no = line[10:27].strip()        # Column 11-26
-                # Check if column 26 has a non-space character
-                flight_no = line[26:33].strip() if line[26] != " " else line[27:33].strip()
-                dep_code_icao = line[33:38].strip()  # Column 33-37
-                arr_code_icao = line[38:43].strip()  # Column 38-42
-                std_utc = line[43:50].strip()        # Column 43-49
-                sta_utc = line[50:57].strip()        # Column 50-56
-                flight_type = line[57:60].strip()    # Column 57-59
-                etd_utc = line[60:67].strip()        # Column 60-66
-                eta_utc = line[67:74].strip()        # Column 67-73
-                arrival_date = line[74:84].strip()   # Column 74-83
+                # Extract fields based on fixed-width columns including spaces
+                flight_date = line[0:10].strip()  # Column 1-10
+                tail_no = line[10:27].strip()[:10]  # Column 11-26, max 10 characters
+                flight_no = line[26:33].strip() if line[26] != " " else line[27:33].strip()[:6]  # Ensure max length
+                dep_code_icao = line[33:38].strip()[:4]  # Max 4 characters for ICAO codes
+                arr_code_icao = line[38:43].strip()[:4]  # Max 4 characters for ICAO codes
+                std_utc = line[43:50].strip()  # Column 43-49
+                sta_utc = line[50:57].strip()  # Column 50-56
+                flight_type = line[57:60].strip()[:10]  # Max 10 characters
+                etd_utc = line[60:67].strip()  # Column 60-66
+                eta_utc = line[67:74].strip()  # Column 67-73
+                arrival_date = line[74:84].strip()  # Column 74-83
+
 
                 # Parse dates
                 sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
