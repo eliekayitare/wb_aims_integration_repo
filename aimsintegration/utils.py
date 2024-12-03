@@ -894,7 +894,7 @@ from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
-    Process the crew details file with improved parsing for inconsistent data.
+    Process the crew details file with robust parsing for inconsistent data.
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
