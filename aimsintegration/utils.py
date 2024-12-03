@@ -892,6 +892,11 @@ import pandas as pd
 from .models import CrewMember
 
 
+from datetime import datetime
+import pandas as pd
+from .models import CrewMember
+
+
 def process_crew_details_file(attachment):
     """
     Process the crew details file using pandas for unstructured data.
@@ -906,6 +911,11 @@ def process_crew_details_file(attachment):
         # Convert to a dataframe
         df = pd.DataFrame(rows, columns=["raw_line"])
 
+        # DEBUG: Print the raw DataFrame for review
+        print("====================================")
+        print("Raw DataFrame:\n", df.head())
+        print("====================================")
+
         # Define a function to parse a single line
         def parse_line(line):
             """
@@ -918,6 +928,9 @@ def process_crew_details_file(attachment):
                 origin = line[12:15].strip()
                 destination = line[15:18].strip()
                 crew_data = line[18:].strip()
+
+                # DEBUG: Print crew_data for review
+                print(f"Processing crew data: {crew_data}")
 
                 # Convert flight date
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
@@ -936,6 +949,9 @@ def process_crew_details_file(attachment):
                         crew_id = raw_data[:8].strip()
                         name = raw_data[8:].strip()
 
+                        # DEBUG: Print extracted details for review
+                        print(f"Extracted role: {role}, crew_id: {crew_id}, name: {name}")
+
                         # Validate crew ID
                         if len(crew_id) == 8 and crew_id.isdigit():
                             crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
@@ -952,7 +968,6 @@ def process_crew_details_file(attachment):
                 logger.error(f"Error parsing line: {line} - {e}")
                 return []
 
-
         # Parse all lines into structured rows
         all_crew_data = []
         for _, row in df.iterrows():
@@ -961,6 +976,11 @@ def process_crew_details_file(attachment):
 
         # Create a dataframe for parsed crew details
         crew_df = pd.DataFrame(all_crew_data, columns=["flight_no", "sd_date_utc", "origin", "destination", "role", "crew_id", "name"])
+
+        # DEBUG: Print the parsed DataFrame for review
+        print("+++++++++++++++++++++++++++++++++++++++++++")
+        print("Parsed DataFrame:\n", crew_df.head())
+        print("+++++++++++++++++++++++++++++++++++++++++++")
 
         # Process and save data to the database
         for _, crew_row in crew_df.iterrows():
@@ -991,6 +1011,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
