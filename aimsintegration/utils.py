@@ -892,14 +892,9 @@ import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
-import re
-import pandas as pd
-from datetime import datetime
-from .models import CrewMember
-
 def process_crew_details_file(attachment):
     """
-    Process the crew details file using regex and pandas for flexible parsing.
+    Process the crew details file using dynamic splitting and validation.
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -921,34 +916,46 @@ def process_crew_details_file(attachment):
                 except ValueError:
                     raise ValueError(f"Invalid date format: {flight_date}")
 
-                # Extract crew details using regex
+                # Extract and dynamically parse crew data
                 crew_data = line[18:].strip()
-                # Refined regex to match roles, IDs, and names
-                crew_matches = re.findall(r'(\b[A-Z]{2}\b)\s+(\d{8})\s+([A-Za-z\s]+)', crew_data)
+                crew_segments = crew_data.split()  # Split by spaces
+                
+                i = 0
+                while i < len(crew_segments):
+                    try:
+                        # Assume the role is 2 characters
+                        role = crew_segments[i].strip()
 
-                if not crew_matches:
-                    raise ValueError("No valid crew data found")
+                        # Validate role
+                        if role not in dict(CrewMember.ROLE_CHOICES):
+                            raise ValueError(f"Invalid role: {role}")
 
-                for role, crew_id, name in crew_matches:
-                    # Validate role
-                    if role not in dict(CrewMember.ROLE_CHOICES):
-                        logger.warning(f"Invalid role: {role} on line {line}")
-                        continue
+                        # Next segment should be crew ID (8 digits)
+                        crew_id = crew_segments[i + 1].strip()
+                        if not (crew_id.isdigit() and len(crew_id) == 8):
+                            raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                    # Validate crew_id
-                    if not (crew_id.isdigit() and len(crew_id) == 8):
-                        logger.warning(f"Invalid crew ID: {crew_id} on line {line}")
-                        continue
+                        # The rest is the name
+                        name = " ".join(crew_segments[i + 2:]).strip()
+                        if not name:
+                            raise ValueError("Invalid name")
 
-                    parsed_data.append({
-                        "flight_no": flight_no,
-                        "sd_date_utc": sd_date_utc,
-                        "origin": origin,
-                        "destination": destination,
-                        "role": role,
-                        "crew_id": crew_id,
-                        "name": name.strip(),
-                    })
+                        # Add parsed data
+                        parsed_data.append({
+                            "flight_no": flight_no,
+                            "sd_date_utc": sd_date_utc,
+                            "origin": origin,
+                            "destination": destination,
+                            "role": role,
+                            "crew_id": crew_id,
+                            "name": name,
+                        })
+
+                        # Move to the next crew record
+                        i += 3
+                    except (IndexError, ValueError) as e:
+                        logger.warning(f"Skipping invalid crew data segment: {crew_segments[i:]} on line {line_num}")
+                        i += 1  # Move to the next segment
 
             except Exception as e:
                 logger.warning(f"Skipping line {line_num}: {line} - Error: {e}")
