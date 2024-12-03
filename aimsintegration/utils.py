@@ -908,6 +908,9 @@ def process_crew_details_file(attachment):
 
         # Define a function to parse a single line
         def parse_line(line):
+            """
+            Parse a single line of unstructured crew data into structured components.
+            """
             try:
                 # Extract flight details
                 flight_no = line[:4].strip()
@@ -921,38 +924,34 @@ def process_crew_details_file(attachment):
 
                 # Process crew data
                 crew_list = []
-                parts = crew_data.split()  # Split by whitespace
-
-                # Iterate through parts to identify roles, IDs, and names
                 i = 0
-                while i < len(parts):
-                    role = parts[i].strip()
+                while i < len(crew_data):
+                    # Extract role (assume 2 characters)
+                    role = crew_data[i:i + 2].strip()
 
                     # Validate role
                     if role in dict(CrewMember.ROLE_CHOICES):
-                        if i + 1 < len(parts):  # Ensure there's another part for ID and name
-                            raw_data = parts[i + 1].strip()
-                            crew_id = raw_data[:8].strip()
-                            name = raw_data[8:].strip()
+                        # Extract crew ID (8 characters) and name
+                        raw_data = crew_data[i + 2:i + 20].strip()  # Adjust the width as needed
+                        crew_id = raw_data[:8].strip()
+                        name = raw_data[8:].strip()
 
-                            # Validate crew ID
-                            if len(crew_id) == 8 and crew_id.isdigit():
-                                crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
-                                i += 2  # Move to the next role
-                            else:
-                                logger.warning(f"Invalid crew ID or name format: {raw_data} on line: {line}")
-                                i += 1  # Skip this chunk and move on
+                        # Validate crew ID
+                        if len(crew_id) == 8 and crew_id.isdigit():
+                            crew_list.append((flight_no, sd_date_utc, origin, destination, role, crew_id, name))
+                            i += 20  # Move to the next record
                         else:
-                            logger.warning(f"Incomplete data for role: {role} on line: {line}")
-                            i += 1  # Skip this chunk and move on
+                            logger.warning(f"Invalid crew ID or name format: {raw_data} on line: {line}")
+                            i += 2  # Skip invalid data
                     else:
                         logger.warning(f"Skipping invalid role: {role} on line: {line}")
-                        i += 1  # Skip invalid role
+                        i += 2  # Skip invalid role
 
                 return crew_list
             except Exception as e:
                 logger.error(f"Error parsing line: {line} - {e}")
                 return []
+
 
         # Parse all lines into structured rows
         all_crew_data = []
