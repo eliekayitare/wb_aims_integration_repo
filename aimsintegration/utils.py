@@ -734,7 +734,7 @@ def process_cargo_email_attachment(item, process_function):
 from datetime import datetime
 from .models import FdmFlightData, AirportData
 
-def process_fdm_flight_schedule_file_fixed_columns(attachment):
+def process_fdm_flight_schedule_file(attachment):
     """
     Process the FDM flight schedule file using fixed column positions, accounting for spaces.
     """
