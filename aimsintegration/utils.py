@@ -892,6 +892,11 @@ import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
+import re
+import pandas as pd
+from datetime import datetime
+from .models import CrewMember
+
 def process_crew_details_file(attachment):
     """
     Process the crew details file using regex and pandas for flexible parsing.
@@ -904,12 +909,12 @@ def process_crew_details_file(attachment):
 
         for line_num, line in enumerate(rows, start=1):
             try:
-                # Extract general details (first fixed-width fields)
+                # Extract general flight details
                 flight_no = line[:4].strip()
                 flight_date = line[4:12].strip()
                 origin = line[12:15].strip()
                 destination = line[15:18].strip()
-                
+
                 # Validate and convert flight_date
                 try:
                     sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
@@ -918,7 +923,8 @@ def process_crew_details_file(attachment):
 
                 # Extract crew details using regex
                 crew_data = line[18:].strip()
-                crew_matches = re.findall(r'(\w{2})\s+(\d{8})([A-Za-z\s]+)', crew_data)
+                # Refined regex to match roles, IDs, and names
+                crew_matches = re.findall(r'(\b[A-Z]{2}\b)\s+(\d{8})\s+([A-Za-z\s]+)', crew_data)
 
                 if not crew_matches:
                     raise ValueError("No valid crew data found")
@@ -926,11 +932,13 @@ def process_crew_details_file(attachment):
                 for role, crew_id, name in crew_matches:
                     # Validate role
                     if role not in dict(CrewMember.ROLE_CHOICES):
-                        raise ValueError(f"Invalid role: {role}")
+                        logger.warning(f"Invalid role: {role} on line {line}")
+                        continue
 
                     # Validate crew_id
                     if not (crew_id.isdigit() and len(crew_id) == 8):
-                        raise ValueError(f"Invalid crew ID: {crew_id}")
+                        logger.warning(f"Invalid crew ID: {crew_id} on line {line}")
+                        continue
 
                     parsed_data.append({
                         "flight_no": flight_no,
@@ -952,6 +960,9 @@ def process_crew_details_file(attachment):
             logger.error("No valid data extracted.")
             return
 
+        # DEBUG: Print the parsed DataFrame for review
+        print("Parsed DataFrame:\n", crew_df.head())
+
         # Save to the database
         for _, crew_row in crew_df.iterrows():
             try:
@@ -967,6 +978,7 @@ def process_crew_details_file(attachment):
                     }
                 )
                 logger.info(f"Processed crew member {crew_row['name']} ({crew_row['role']}) for flight {crew_row['flight_no']}.")
+
             except Exception as e:
                 logger.error(f"Error saving crew member: {crew_row} - {e}")
 
@@ -974,6 +986,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
