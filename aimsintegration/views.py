@@ -170,8 +170,7 @@ def fdm_dashboard_view(request):
 
         # Serialize data for JSON response
         data = list(fdm_schedules.values('sd_date_utc', 'flight_no', 'tail_no', 'dep_code_icao',
-                                     'arr_code_icao', 'std_utc', 'atd_utc',
-                                      'takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc','flight_type','etd_utc','eta_utc'))
+                                     'arr_code_icao', 'std_utc', 'atd_utc','takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc','flight_type','etd_utc','eta_utc'))
         return JsonResponse(data, safe=False)
     
     # Non-AJAX request loads all today's flights, ordered by std_utc
