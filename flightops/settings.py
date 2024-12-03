@@ -277,14 +277,14 @@ CELERY_BEAT_SCHEDULE = {
      # Flight Schedules - Runs every 10 minutes after initial run
     'fetch-fdm_flight-schedules-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
-        'schedule': crontab(minute='*/3'),  # Every 15 minutes
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
         'options': {'run_immediately': False}
     },
 
     #Fetch Crew Data - Runs every 15 minutes
     'fetch-crew-data-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-        'schedule': crontab(minute='*/4'),  # Every 15 minutes
+        'schedule': crontab(minute='*/2'),  # Every 15 minutes
         'options': {'run_immediately': False}
     },
     

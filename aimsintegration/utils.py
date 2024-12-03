@@ -895,11 +895,14 @@ def process_crew_details_file(attachment):
     """
     try:
         # Read the raw content from the file
-        raw_content = attachment.content.decode('utf-8').splitlines()
+        raw_content = attachment.content.decode('utf-8')
+
+        # Preprocess the content to ensure one flight per row
+        formatted_content = preprocess_crew_file(raw_content)
 
         logger.info("Starting to process the crew details file...")
 
-        for line_num, line in enumerate(raw_content, start=1):
+        for line_num, line in enumerate(formatted_content, start=1):
             try:
                 # Extract mandatory fields based on fixed-width columns
                 flight_no = line[0:4].strip()  # Columns 1-4
@@ -914,19 +917,23 @@ def process_crew_details_file(attachment):
                 # Convert flight date
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
 
-                # Process crew details (roles and names)
+                # Process crew details (roles, crew IDs, names)
                 crew_data = line[18:].strip()  # Start from column 19 onwards
-                if len(crew_data) % 17 != 0:
+                chunks = crew_data.split()
+
+                if len(chunks) % 2 != 0:
                     raise ValueError(f"Incomplete crew data on line {line_num}")
 
                 # Iterate through crew data
-                for i in range(0, len(crew_data), 17):
-                    role = crew_data[i:i+2].strip()  # Role (Columns 19-20)
-                    crew_id = crew_data[i+2:i+10].strip()  # Crew ID (Columns 21-28)
-                    name = crew_data[i+10:i+17].strip()  # Name (Columns 29-35)
+                for i in range(0, len(chunks), 2):
+                    role = chunks[i].strip()  # Role (e.g., CP, FO, SA, etc.)
+                    crew_info = chunks[i + 1].strip()
 
-                    if len(crew_id) != 8:
-                        raise ValueError(f"Invalid crew ID format: {crew_id}")
+                    if len(crew_info) < 8:
+                        raise ValueError(f"Invalid crew data format: {crew_info}")
+
+                    crew_id = crew_info[:8].strip()
+                    name = crew_info[8:].strip()
 
                     # Validate role
                     if role not in dict(CrewMember.ROLE_CHOICES):
@@ -954,6 +961,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
