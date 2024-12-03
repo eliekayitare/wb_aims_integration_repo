@@ -886,54 +886,47 @@ def preprocess_crew_file(content):
 from datetime import datetime
 from .models import CrewMember
 
+from datetime import datetime
+from .models import CrewMember
+
 def process_crew_details_file(attachment):
     """
     Process the crew details file and update the CrewMember table.
     """
     try:
-        # Preprocess the file content
-        raw_content = attachment.content.decode('utf-8')
-        formatted_content = preprocess_crew_file(raw_content)
+        # Read the raw content from the file
+        raw_content = attachment.content.decode('utf-8').splitlines()
 
         logger.info("Starting to process the crew details file...")
 
-        for line_num, line in enumerate(formatted_content, start=1):
-            fields = line.split()
-
-            # Extract mandatory flight and route details
+        for line_num, line in enumerate(raw_content, start=1):
             try:
-                if len(fields) < 4:
-                    raise ValueError("Insufficient flight details")
+                # Extract mandatory fields based on fixed-width columns
+                flight_no = line[0:4].strip()  # Columns 1-4
+                flight_date = line[4:12].strip()  # Columns 5-12 (DDMMYYYY)
+                origin = line[12:15].strip()  # Columns 13-15
+                destination = line[15:18].strip()  # Columns 16-18
 
-                flight_no = fields[0].strip()
-                flight_date = fields[1].strip()  # Format: DDMMYYYY
-                origin = fields[2].strip()
-                destination = fields[3].strip()
-
+                # Validate flight number
                 if not flight_no.isdigit():
-                    raise ValueError("Invalid flight number format")
+                    raise ValueError(f"Invalid flight number format: {flight_no}")
 
+                # Convert flight date
                 sd_date_utc = datetime.strptime(flight_date, "%d%m%Y").date()
-            except ValueError as e:
-                logger.error(f"Skipping line {line_num} due to invalid flight details: {line} - {e}")
-                continue
 
-            # Process the rest of the line for crew details
-            crew_data = fields[4:]
-            if len(crew_data) % 2 != 0:
-                logger.warning(f"Skipping line {line_num} due to incomplete crew data: {line}")
-                continue
+                # Process crew details (roles and names)
+                crew_data = line[18:].strip()  # Start from column 19 onwards
+                if len(crew_data) % 17 != 0:
+                    raise ValueError(f"Incomplete crew data on line {line_num}")
 
-            for i in range(0, len(crew_data), 2):
-                try:
-                    role = crew_data[i].strip()
-                    raw_data = crew_data[i + 1].strip()
+                # Iterate through crew data
+                for i in range(0, len(crew_data), 17):
+                    role = crew_data[i:i+2].strip()  # Role (Columns 19-20)
+                    crew_id = crew_data[i+2:i+10].strip()  # Crew ID (Columns 21-28)
+                    name = crew_data[i+10:i+17].strip()  # Name (Columns 29-35)
 
-                    if len(raw_data) < 8:
-                        raise ValueError("Invalid crew ID or name format")
-
-                    crew_id = raw_data[:8].strip()
-                    name = raw_data[8:].strip()
+                    if len(crew_id) != 8:
+                        raise ValueError(f"Invalid crew ID format: {crew_id}")
 
                     # Validate role
                     if role not in dict(CrewMember.ROLE_CHOICES):
@@ -953,14 +946,15 @@ def process_crew_details_file(attachment):
                     )
                     logger.info(f"Processed crew member {name} ({role}) for flight {flight_no}.")
 
-                except ValueError as e:
-                    logger.error(f"Error parsing crew data on line {line_num}: {line} - {e}")
-                    continue
+            except ValueError as e:
+                logger.error(f"Skipping line {line_num} due to error: {e} - Line: {line}")
+                continue
 
         logger.info("Crew details file processed successfully.")
 
     except Exception as e:
         logger.error(f"Error processing crew details file: {e}", exc_info=True)
+
 
 
 
