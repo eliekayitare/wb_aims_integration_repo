@@ -964,11 +964,13 @@ from datetime import datetime
 #                         next_role_pos = next((i for i in range(name_start, len(crew_data)) 
 #                                               if crew_data[i:i+2].strip() in valid_roles), len(crew_data))
 #                         name = crew_data[name_start:next_role_pos].strip()
-#                         crew_data = crew_data[next_role_pos:].strip()  # Update crew_data to the remaining part
 
 #                         # If no name is found, move to the next iteration
 #                         if not name:
 #                             break
+
+#                         # Update crew_data to the remaining part
+#                         crew_data = crew_data[next_role_pos:].strip()
 
 #                         # Truncate name if necessary
 #                         if len(name) > 100:
@@ -1020,6 +1022,7 @@ from datetime import datetime
 #     except Exception as e:
 #         print(f"Error processing crew details file: {e}")
 
+import re
 
 def process_crew_details_file(attachment):
     """
@@ -1031,11 +1034,11 @@ def process_crew_details_file(attachment):
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
         parsed_data = []
-        valid_roles = dict(CrewMember.ROLE_CHOICES)
+        valid_roles = {'CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC'}  # Valid roles
 
         for line_num, line in enumerate(rows, start=1):
             try:
-                # Detect flight header
+                # Detect flight header (4 digits for flight number)
                 if line[:4].strip().isdigit():
                     # Extract flight details
                     flight_no = line[:4].strip()
@@ -1045,6 +1048,7 @@ def process_crew_details_file(attachment):
                     print("=======================================================")
                     print(f"\nFlight Number {flight_no}\n Date:{flight_date_str}\n Origin: {origin}\n Destination: {destination}")
                     print("\n====================================================")
+                    
                     # Convert date
                     try:
                         sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
@@ -1079,7 +1083,7 @@ def process_crew_details_file(attachment):
                         if len(crew_id) != 8 or not crew_id.isdigit():
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                        # Name starts after the crew ID (position 12 onward)
+                        # Name starts after the crew ID (position 12 onward) and ends before the next role
                         name_start = 12
                         
                         # Look for the next role marker (two characters) or end of line
@@ -1143,7 +1147,6 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
-
 
 
 

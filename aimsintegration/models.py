@@ -165,6 +165,8 @@ class CrewMember(models.Model):
         ('AC', 'Air Crew'),
     ]
 
+     
+
     flight_no = models.CharField(max_length=6, null=False, blank=False)  # To associate with the flight indirectly
     sd_date_utc = models.DateField(null=False, blank=False)  # Scheduled departure date
     origin = models.CharField(max_length=10, null=False, blank=False)  # IATA or ICAO code for origin
