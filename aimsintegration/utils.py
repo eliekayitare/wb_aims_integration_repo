@@ -950,12 +950,12 @@ def process_crew_details_file(attachment):
                         if role not in valid_roles:
                             raise ValueError(f"Invalid role: {role}")
 
-                        crew_id = crew_data[2:10].strip()
+                        crew_id = crew_data[2:12].strip()
                         if not (crew_id.isdigit() and len(crew_id) == 8):
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
                         # Name starts after ID
-                        name_start = 10
+                        name_start = 12
                         name_end = crew_data.find(" CP", name_start)  # Find next role
                         if name_end == -1:
                             name = crew_data[name_start:].strip()
@@ -975,6 +975,13 @@ def process_crew_details_file(attachment):
                             "crew_id": crew_id,
                             "name": name,
                         })
+
+                        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                        print(crew_id)
+                        print(name)
+                        print(role)
+                        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                        
 
                     except ValueError as ve:
                         print(f"Error in crew data on line {line_num}: {ve}")
