@@ -920,7 +920,7 @@ def process_crew_details_file(attachment):
                     origin = line[13:17].strip()
                     destination = line[17:20].strip()
                     print("=======================================================")
-                    print(f"\nFlight Number {flight_no}\n Origin: {origin}\n Destination: {destination}")
+                    print(f"\nFlight Number {flight_no}\n Date:{flight_date_str}\n Origin: {origin}\n Destination: {destination}")
                     print("\n====================================================")
                     # Convert date
                     try:
