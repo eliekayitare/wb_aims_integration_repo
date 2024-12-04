@@ -1107,7 +1107,6 @@ def process_crew_details_file(attachment):
                     except ValueError as ve:
                         print(f"Error in crew data on line {line_num}: {ve}")
                         break  # Exit loop if an error occurs
-
             except Exception as e:
                 print(f"Error processing line {line_num}: {e}")
 
@@ -1138,6 +1137,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 
 # def process_crew_details_file(attachment):
