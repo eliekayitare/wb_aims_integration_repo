@@ -891,89 +891,93 @@ import re
 import pandas as pd
 from datetime import datetime
 from .models import CrewMember
-from django.db.utils import IntegrityError
+
+import pandas as pd
+from datetime import datetime
+
 def process_crew_details_file(attachment):
     """
-    Process crew details from an attachment with fixed-width data fields.
+    Parse and process crew details from a structured file.
     """
     try:
-        # Step 1: Read the file and split lines
+        # Read the file content
         raw_content = attachment.content.decode('utf-8').splitlines()
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
+        # Initialize parsed data
         parsed_data = []
 
-        # Step 2: Process each line
+        # Valid roles
+        valid_roles = dict(CrewMember.ROLE_CHOICES)
+
         for line_num, line in enumerate(rows, start=1):
             try:
-                # Extract general flight details
+                # Extract flight details
                 flight_no = line[:4].strip()
                 flight_date_str = line[4:12].strip()
                 origin = line[12:15].strip()
                 destination = line[15:18].strip()
 
-                # Validate and convert flight_date
+                # Convert date to a valid format
                 try:
                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
                 except ValueError:
                     raise ValueError(f"Invalid date format: {flight_date_str}")
 
-                # Step 3: Extract crew details
+                # Extract crew details starting from position 18
                 crew_data = line[18:].strip()
-
-                # Ensure the crew_data length is sufficient for parsing
-                if len(crew_data) < 10:
-                    raise ValueError("Insufficient data for crew parsing.")
-
                 i = 0
+
                 while i < len(crew_data):
-                    try:
-                        # Extract role (ensure exactly 2 characters)
-                        role = crew_data[i:i+2].strip()
-                        if role not in dict(CrewMember.ROLE_CHOICES):
-                            raise ValueError(f"Invalid role: {role}")
+                    # Extract role (2 characters)
+                    role = crew_data[i:i+2].strip()
+                    if role not in valid_roles:
+                        raise ValueError(f"Invalid role: {role}")
 
-                        # Extract crew ID (8 characters following the role)
-                        crew_id = crew_data[i+2:i+10].strip()
-                        if not (crew_id.isdigit() and len(crew_id) == 8):
-                            raise ValueError(f"Invalid crew ID: {crew_id}")
+                    # Extract crew ID (next 8 characters)
+                    crew_id = crew_data[i+2:i+10].strip()
+                    if not (crew_id.isdigit() and len(crew_id) == 8):
+                        raise ValueError(f"Invalid crew ID: {crew_id}")
 
-                        # Extract name (from i+10 to the next role or end of line)
-                        name_start = i + 10
-                        name_end = crew_data.find(role, name_start)
-                        name = crew_data[name_start:name_end].strip() if name_end != -1 else crew_data[name_start:].strip()
+                    # Extract name
+                    name_start = i + 10
+                    next_role_index = crew_data.find("CP", name_start)  # Look for next role
+                    if next_role_index == -1:
+                        name = crew_data[name_start:].strip()
+                        i = len(crew_data)  # End of line
+                    else:
+                        name = crew_data[name_start:next_role_index].strip()
+                        i = next_role_index
 
-                        if len(name) > 100:
-                            name = name[:100]  # Truncate if needed
+                    if len(name) > 100:
+                        name = name[:100]  # Truncate if needed
 
-                        # Store parsed data
-                        parsed_data.append({
-                            "flight_no": flight_no,
-                            "sd_date_utc": sd_date_utc,
-                            "origin": origin,
-                            "destination": destination,
-                            "role": role,
-                            "crew_id": crew_id,
-                            "name": name,
-                        })
+                    # Append parsed data
+                    parsed_data.append({
+                        "flight_no": flight_no,
+                        "sd_date_utc": sd_date_utc,
+                        "origin": origin,
+                        "destination": destination,
+                        "role": role,
+                        "crew_id": crew_id,
+                        "name": name,
+                    })
 
-                        # Advance to the next segment
-                        i = name_end if name_end != -1 else len(crew_data)
-                    except ValueError as ve:
-                        logger.warning(f"Skipping invalid segment on line {line_num}: {ve}")
-                        break
-
+            except ValueError as ve:
+                # Log invalid data segment and continue
+                logger.warning(f"Skipping invalid segment on line {line_num}: {ve}")
             except Exception as e:
-                logger.warning(f"Error processing line {line_num}: {line} - {e}")
+                # Log unexpected errors
+                logger.error(f"Error processing line {line_num}: {line} - {e}")
                 continue
 
-        # Step 4: Save to database or display parsed data
+        # Convert parsed data to DataFrame
         crew_df = pd.DataFrame(parsed_data)
         if crew_df.empty:
             logger.error("No valid data extracted.")
             return
 
-        # Print for debug
+        # Print for debugging
         print("Parsed DataFrame:\n", crew_df.head())
 
         # Save to database
@@ -990,7 +994,7 @@ def process_crew_details_file(attachment):
                         "name": row["name"],
                     }
                 )
-            except IntegrityError as db_err:
+            except Exception as db_err:
                 logger.error(f"Database error for {row['crew_id']}: {db_err}")
 
         logger.info("Crew details file processed successfully.")
