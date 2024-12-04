@@ -898,128 +898,6 @@ from datetime import datetime
 import pandas as pd
 from datetime import datetime
 
-# def process_crew_details_file(attachment):
-#     """
-#     Parse and process crew details from a structured file.
-#     """
-#     try:
-#         # Read file content
-#         raw_content = attachment.content.decode('utf-8').splitlines()
-#         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
-
-#         parsed_data = []
-#         valid_roles = dict(CrewMember.ROLE_CHOICES)
-
-#         for line_num, line in enumerate(rows, start=1):
-#             try:
-#                 # Detect flight header
-#                 if line[:4].strip().isdigit():
-#                     # Extract flight details
-#                     flight_no = line[:4].strip()
-#                     flight_date_str = line[4:13].strip()
-#                     origin = line[13:17].strip()
-#                     destination = line[17:20].strip()
-#                     print("=======================================================")
-#                     print(f"\nFlight Number {flight_no}\n Origin: {origin}\n Destination: {destination}")
-#                     print("\n====================================================")
-#                     # Convert date
-#                     try:
-#                         sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
-#                     except ValueError:
-#                         raise ValueError(f"Invalid date format: {flight_date_str}")
-
-#                     # Flight context
-#                     flight_context = {
-#                         "flight_no": flight_no,
-#                         "sd_date_utc": sd_date_utc,
-#                         "origin": origin,
-#                         "destination": destination,
-#                     }
-
-#                     # Crew data starts at position 18
-#                     crew_data = line[20:].strip()
-
-#                 else:
-#                     # Continuation line for crew data
-#                     crew_data = line.strip()
-
-#                 # Process each crew member in the line
-#                 while crew_data:
-#                     try:
-#                         role = crew_data[:2].strip()
-#                         if role not in valid_roles:
-#                             raise ValueError(f"Invalid role: {role}")
-
-#                         crew_id = crew_data[2:12].strip()
-#                         if not (crew_id.isdigit() and len(crew_id) == 8):
-#                             raise ValueError(f"Invalid crew ID: {crew_id}")
-
-#                         # Name starts after ID
-#                         name_start = 12
-#                         name_end = crew_data.find(" CP", name_start)  # Find next role
-#                         if name_end == -1:
-#                             name = crew_data[name_start:].strip()
-#                             crew_data = ""  # No more data
-#                         else:
-#                             name = crew_data[name_start:name_end].strip()
-#                             crew_data = crew_data[name_end:]  # Remainder of the line
-
-#                         # Truncate name if necessary
-#                         if len(name) > 100:
-#                             name = name[:100]
-
-#                         # Append to parsed data
-#                         parsed_data.append({
-#                             **flight_context,
-#                             "role": role,
-#                             "crew_id": crew_id,
-#                             "name": name,
-#                         })
-
-#                         print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-#                         print(f"\n Crew ID: {crew_id}\n Name: {name}\n ROle: {role}")
-#                         print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                        
-
-#                     except ValueError as ve:
-#                         print(f"Error in crew data on line {line_num}: {ve}")
-#                         break  # Exit loop if an error occurs
-#             except Exception as e:
-#                 print(f"Error processing line {line_num}: {e}")
-
-#         # Convert parsed data to DataFrame
-#         crew_df = pd.DataFrame(parsed_data)
-#         if crew_df.empty:
-#             print("No valid data extracted.")
-#             return
-
-#         print("Parsed DataFrame:\n", crew_df.head())
-
-#         # Save to the database
-#         for _, row in crew_df.iterrows():
-#             try:
-#                 CrewMember.objects.update_or_create(
-#                     crew_id=row["crew_id"],
-#                     defaults={
-#                         "flight_no": row["flight_no"],
-#                         "sd_date_utc": row["sd_date_utc"],
-#                         "origin": row["origin"],
-#                         "destination": row["destination"],
-#                         "role": row["role"],
-#                         "name": row["name"],
-#                     }
-#                 )
-#             except Exception as db_err:
-#                 print(f"Database error for {row['crew_id']}: {db_err}")
-
-#         print("Crew details file processed successfully.")
-
-#     except Exception as e:
-#         print(f"Error processing crew details file: {e}")
-
-
-
-
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from a structured file.
@@ -1037,15 +915,13 @@ def process_crew_details_file(attachment):
                 # Detect flight header
                 if line[:4].strip().isdigit():
                     # Extract flight details
-                    flight_no = line[0:4].strip()
-                    flight_date_str = line[5:13].strip()  # Adjusted position
-                    origin = line[13:16].strip()         # Adjusted position
-                    destination = line[16:19].strip()    # Adjusted position
-
+                    flight_no = line[:4].strip()
+                    flight_date_str = line[4:13].strip()
+                    origin = line[13:17].strip()
+                    destination = line[17:20].strip()
                     print("=======================================================")
                     print(f"\nFlight Number {flight_no}\n Origin: {origin}\n Destination: {destination}")
-                    print("=======================================================")
-
+                    print("\n====================================================")
                     # Convert date
                     try:
                         sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
@@ -1060,47 +936,54 @@ def process_crew_details_file(attachment):
                         "destination": destination,
                     }
 
-                    # Start parsing crew members
-                    crew_data = line[19:].strip()
+                    # Crew data starts at position 18
+                    crew_data = line[20:].strip()
 
-                    # Process each crew member in the line
-                    while crew_data:
-                        try:
-                            # Extract crew details
-                            role = crew_data[:2].strip()  # Crew Position
-                            if role not in valid_roles:
-                                raise ValueError(f"Invalid role: {role}")
-
-                            crew_id = crew_data[6:14].strip()  # Crew ID (68-75)
-                            if not (crew_id.isdigit() and len(crew_id) == 8):
-                                raise ValueError(f"Invalid crew ID: {crew_id}")
-
-                            # Extract crew name
-                            name = crew_data[14:44].strip()  # Name (76-105 or similar)
-                            if len(name) > 30:
-                                name = name[:30]  # Truncate name if it exceeds 30 characters
-
-                            # Append to parsed data
-                            parsed_data.append({
-                                **flight_context,
-                                "role": role,
-                                "crew_id": crew_id,
-                                "name": name,
-                            })
-
-                            # Debugging output
-                            print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                            print(f"\n Crew ID: {crew_id}\n Name: {name}\n Role: {role}")
-                            print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-
-                            # Move to the next crew member
-                            crew_data = crew_data[58:]  # Move to next crew member position
-                        except ValueError as ve:
-                            print(f"Error in crew data on line {line_num}: {ve}")
-                            break  # Exit loop if an error occurs
                 else:
-                    print(f"Skipping non-flight line {line_num}: {line}")
+                    # Continuation line for crew data
+                    crew_data = line.strip()
 
+                # Process each crew member in the line
+                while crew_data:
+                    try:
+                        role = crew_data[:2].strip()
+                        if role not in valid_roles:
+                            raise ValueError(f"Invalid role: {role}")
+
+                        crew_id = crew_data[2:12].strip()
+                        if not (crew_id.isdigit() and len(crew_id) == 8):
+                            raise ValueError(f"Invalid crew ID: {crew_id}")
+
+                        # Name starts after ID
+                        name_start = 12
+                        name_end = crew_data.find(" CP", name_start)  # Find next role
+                        if name_end == -1:
+                            name = crew_data[name_start:].strip()
+                            crew_data = ""  # No more data
+                        else:
+                            name = crew_data[name_start:name_end].strip()
+                            crew_data = crew_data[name_end:]  # Remainder of the line
+
+                        # Truncate name if necessary
+                        if len(name) > 100:
+                            name = name[:100]
+
+                        # Append to parsed data
+                        parsed_data.append({
+                            **flight_context,
+                            "role": role,
+                            "crew_id": crew_id,
+                            "name": name,
+                        })
+
+                        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                        print(f"\n Crew ID: {crew_id}\n Name: {name}\n ROle: {role}")
+                        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                        
+
+                    except ValueError as ve:
+                        print(f"Error in crew data on line {line_num}: {ve}")
+                        break  # Exit loop if an error occurs
             except Exception as e:
                 print(f"Error processing line {line_num}: {e}")
 
@@ -1133,11 +1016,6 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
-
-
-
-
-
 
 
 
