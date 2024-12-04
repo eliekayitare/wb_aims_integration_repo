@@ -891,11 +891,7 @@ import re
 import pandas as pd
 from datetime import datetime
 from .models import CrewMember
-
-import pandas as pd
-from datetime import datetime
 from django.db.utils import IntegrityError
-
 def process_crew_details_file(attachment):
     """
     Process crew details from an attachment with fixed-width data fields.
@@ -924,23 +920,28 @@ def process_crew_details_file(attachment):
 
                 # Step 3: Extract crew details
                 crew_data = line[18:].strip()
-                i = 0
 
+                # Ensure the crew_data length is sufficient for parsing
+                if len(crew_data) < 10:
+                    raise ValueError("Insufficient data for crew parsing.")
+
+                i = 0
                 while i < len(crew_data):
                     try:
-                        # Extract role
+                        # Extract role (ensure exactly 2 characters)
                         role = crew_data[i:i+2].strip()
                         if role not in dict(CrewMember.ROLE_CHOICES):
                             raise ValueError(f"Invalid role: {role}")
 
-                        # Extract crew ID
+                        # Extract crew ID (8 characters following the role)
                         crew_id = crew_data[i+2:i+10].strip()
                         if not (crew_id.isdigit() and len(crew_id) == 8):
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
                         # Extract name (from i+10 to the next role or end of line)
-                        name_end = crew_data.find(role, i + 10)
-                        name = crew_data[i+10:name_end].strip() if name_end != -1 else crew_data[i+10:].strip()
+                        name_start = i + 10
+                        name_end = crew_data.find(role, name_start)
+                        name = crew_data[name_start:name_end].strip() if name_end != -1 else crew_data[name_start:].strip()
 
                         if len(name) > 100:
                             name = name[:100]  # Truncate if needed
@@ -956,7 +957,7 @@ def process_crew_details_file(attachment):
                             "name": name,
                         })
 
-                        # Advance to next crew segment
+                        # Advance to the next segment
                         i = name_end if name_end != -1 else len(crew_data)
                     except ValueError as ve:
                         logger.warning(f"Skipping invalid segment on line {line_num}: {ve}")
