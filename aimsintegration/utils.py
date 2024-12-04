@@ -1071,12 +1071,12 @@ def process_crew_details_file(attachment):
                             raise ValueError(f"Invalid role: {role}")
 
                         # Extract crew ID (next 8 digits)
-                        crew_id = crew_data[2:12].strip()
+                        crew_id = crew_data[2:10].strip()
                         if len(crew_id) != 8 or not crew_id.isdigit():
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
                         # Name starts after the crew ID (position 10 onward)
-                        name_start = 12
+                        name_start = 10
                         
                         # Look for the next role marker (two characters) or end of line
                         next_role_pos = next((i for i in range(name_start, len(crew_data)) 
@@ -1107,6 +1107,7 @@ def process_crew_details_file(attachment):
                     except ValueError as ve:
                         print(f"Error in crew data on line {line_num}: {ve}")
                         break  # Exit loop if an error occurs
+
             except Exception as e:
                 print(f"Error processing line {line_num}: {e}")
 
@@ -1137,6 +1138,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 # def process_crew_details_file(attachment):
 #     """
