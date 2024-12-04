@@ -917,8 +917,8 @@ def process_crew_details_file(attachment):
                     # Extract flight details
                     flight_no = line[:4].strip()
                     flight_date_str = line[4:13].strip()
-                    origin = line[13:16].strip()
-                    destination = line[16:19].strip()
+                    origin = line[13:17].strip()
+                    destination = line[17:20].strip()
                     print("=======================================================")
                     print(f"Parsing Flight {flight_no}: {origin} -> {destination}")
                     print("====================================================")
@@ -937,7 +937,7 @@ def process_crew_details_file(attachment):
                     }
 
                     # Crew data starts at position 18
-                    crew_data = line[19:].strip()
+                    crew_data = line[20:].strip()
 
                 else:
                     # Continuation line for crew data
