@@ -1071,9 +1071,9 @@ def process_crew_details_file(attachment):
                         if role not in valid_roles:
                             raise ValueError(f"Invalid role: {role}")
 
-                        # Extract crew ID (next 8 digits)
+                        # Extract crew ID (next 8 digits), ensuring that it is 8 digits
                         crew_id = crew_data[2:10].strip()
-                        if not (crew_id.isdigit() and len(crew_id) == 8):
+                        if len(crew_id) != 8 or not crew_id.isdigit():
                             raise ValueError(f"Invalid crew ID: {crew_id}")
 
                         # Name starts after the crew ID (position 10 onward)
