@@ -1024,6 +1024,8 @@ from datetime import datetime
 
 import re
 
+import re
+
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from a structured file.
@@ -1147,6 +1149,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 
 
