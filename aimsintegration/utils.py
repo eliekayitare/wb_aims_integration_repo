@@ -897,77 +897,99 @@ from datetime import datetime
 
 def process_crew_details_file(attachment):
     """
-    Parse and process crew details from a structured file.
+    Parse and process crew details from a structured file, handling multi-row flights.
     """
     try:
         # Read the file content
         raw_content = attachment.content.decode('utf-8').splitlines()
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
-        # Initialize parsed data
         parsed_data = []
-
-        # Valid roles
+        current_flight = None  # Track the current flight details
         valid_roles = dict(CrewMember.ROLE_CHOICES)
 
         for line_num, line in enumerate(rows, start=1):
             try:
-                # Extract flight details
-                flight_no = line[:4].strip()
-                flight_date_str = line[4:12].strip()
-                origin = line[12:15].strip()
-                destination = line[15:18].strip()
+                # Detect if this line starts a new flight
+                if line[:4].strip().isdigit():
+                    # Extract flight details
+                    flight_no = line[:4].strip()
+                    flight_date_str = line[4:12].strip()
+                    origin = line[12:15].strip()
+                    destination = line[15:18].strip()
+                    print("==================================")
+                    print(flight_no)
+                    print(flight_date_str)
+                    print(origin)
+                    print(destination)
+                    print("==================================")
+                    # Convert date to a valid format
+                    try:
+                        sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
+                    except ValueError:
+                        raise ValueError(f"Invalid date format: {flight_date_str}")
 
-                # Convert date to a valid format
-                try:
-                    sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
-                except ValueError:
-                    raise ValueError(f"Invalid date format: {flight_date_str}")
-
-                # Extract crew details starting from position 18
-                crew_data = line[18:].strip()
-                i = 0
-
-                while i < len(crew_data):
-                    # Extract role (2 characters)
-                    role = crew_data[i:i+2].strip()
-                    if role not in valid_roles:
-                        raise ValueError(f"Invalid role: {role}")
-
-                    # Extract crew ID (next 8 characters)
-                    crew_id = crew_data[i+2:i+10].strip()
-                    if not (crew_id.isdigit() and len(crew_id) == 8):
-                        raise ValueError(f"Invalid crew ID: {crew_id}")
-
-                    # Extract name
-                    name_start = i + 10
-                    next_role_index = crew_data.find("CP", name_start)  # Look for next role
-                    if next_role_index == -1:
-                        name = crew_data[name_start:].strip()
-                        i = len(crew_data)  # End of line
-                    else:
-                        name = crew_data[name_start:next_role_index].strip()
-                        i = next_role_index
-
-                    if len(name) > 100:
-                        name = name[:100]  # Truncate if needed
-
-                    # Append parsed data
-                    parsed_data.append({
+                    # Update current flight context
+                    current_flight = {
                         "flight_no": flight_no,
                         "sd_date_utc": sd_date_utc,
                         "origin": origin,
                         "destination": destination,
-                        "role": role,
-                        "crew_id": crew_id,
-                        "name": name,
-                    })
+                    }
+                    crew_data = line[18:].strip()
+                else:
+                    # Continuation of the previous flight
+                    if not current_flight:
+                        raise ValueError(f"Invalid continuation line without flight context: {line}")
+                    crew_data = line.strip()
 
-            except ValueError as ve:
-                # Log invalid data segment and continue
-                logger.warning(f"Skipping invalid segment on line {line_num}: {ve}")
+                # Process crew data
+                i = 0
+                while i < len(crew_data):
+                    try:
+                        # Debug: Print current segment being processed
+                        print(f"Processing crew segment: {crew_data[i:i+20]}")
+
+                        # Extract role (2 characters)
+                        role = crew_data[i:i+2].strip()
+                        if role not in valid_roles:
+                            raise ValueError(f"Invalid role: {role}")
+
+                        # Extract crew ID (next 8 characters)
+                        crew_id = crew_data[i+2:i+10].strip()
+                        if not (crew_id.isdigit() and len(crew_id) == 8):
+                            raise ValueError(f"Invalid crew ID: {crew_id}")
+
+                        # Extract name
+                        name_start = i + 10
+                        next_role_index = crew_data.find("CP", name_start)  # Look for next role
+                        if next_role_index == -1:
+                            name = crew_data[name_start:].strip()
+                            i = len(crew_data)  # End of line
+                        else:
+                            name = crew_data[name_start:next_role_index].strip()
+                            i = next_role_index
+
+                        if len(name) > 100:
+                            name = name[:100]  # Truncate if needed
+
+                        # Debug: Print extracted details
+                        print("++++++++++++++++++++++++++++++++++++++++++++++++++")
+                        print(f"Extracted: role={role}, crew_id={crew_id}, name={name}")
+                        print("++++++++++++++++++++++++++++++++++++++++++++++++++")
+                        # Append parsed data
+                        parsed_data.append({
+                            **current_flight,
+                            "role": role,
+                            "crew_id": crew_id,
+                            "name": name,
+                        })
+
+                    except ValueError as ve:
+                        logger.warning(f"Skipping invalid segment on line {line_num}: {ve}")
+                        break
+
             except Exception as e:
-                # Log unexpected errors
                 logger.error(f"Error processing line {line_num}: {line} - {e}")
                 continue
 
