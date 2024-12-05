@@ -1052,9 +1052,9 @@ def process_crew_details_file(attachment):
                 origin = line[13:17].strip()
                 destination = line[17:20].strip()
 
-                print("=======================================================")
-                print(f"Flight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
-                print("=======================================================")
+                print("\n=======================================================")
+                print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
+                print("\n=======================================================\n")
 
                 # Convert date
                 try:
@@ -1093,9 +1093,9 @@ def process_crew_details_file(attachment):
                         "name": name,
                     })
 
-                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                    print(f"Crew ID: {crew_id}\nRole: {role}\nName: {name}")
-                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                    print(f"\nCrew ID: {crew_id}\nRole: {role}\nName: {name}")
+                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
             except ValueError as ve:
                 print(f"Error in crew data on line {line_num}: {ve}")
