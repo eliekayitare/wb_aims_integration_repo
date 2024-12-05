@@ -194,6 +194,9 @@ def get_crew_details(request):
         # If the date is in "Dec. 5, 2024" format, convert it to "2024-12-05"
         date_obj = datetime.strptime(date, '%b. %d, %Y')
         formatted_date = date_obj.strftime('%Y-%m-%d')
+        print("=========================")
+        print(formatted_date)
+        print("=========================")
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
