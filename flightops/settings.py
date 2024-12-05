@@ -285,7 +285,7 @@ CELERY_BEAT_SCHEDULE = {
     #Fetch Crew Data - Runs every 15 minutes
     'fetch-crew-data-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-        'schedule': crontab(minute='*/15'),  # Every 15 minutes
+        'schedule': crontab(minute='*/2'),  # Every 15 minutes
         'options': {'run_immediately': False}
     },
     
