@@ -241,15 +241,20 @@
 <div id="toast-container" class="toast-container"></div>
 
 <!-- Modal for Crew Details -->
-<div id="crewModal" class="modal">
-  <div class="modal-content">
-    <span class="close" onclick="closeModal()">&times;</span>
-    <div class="modal-header">Crew Members</div>
-    <div id="crew-details" class="modal-body">
-      <!-- Crew details will be injected here dynamically -->
+<!-- Modal for Crew Details -->
+<div id="crewModal" class="modal" onclick="closeModalOnOutsideClick(event)">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <div class="modal-header">
+        <span id="modal-flight-details"> <!-- Add this element -->
+        </span>
+      </div>
+      <div id="crew-details" class="modal-body">
+        <!-- Crew details will be injected here dynamically -->
+      </div>
     </div>
   </div>
-</div>
+  
 
 <!-- WebSocket, Toast, and Search Script -->
 <script>
@@ -331,6 +336,13 @@
   function viewCrewDetails(flightNo, origin, destination, date) {
     console.log("Date received from table:", date);
   
+    // Validate modal-flight-details existence
+    const flightDetailsElement = document.getElementById("modal-flight-details");
+    if (!flightDetailsElement) {
+      console.error("Element with id 'modal-flight-details' not found in the DOM.");
+      return;
+    }
+  
     const formattedDate = date; // Use the exact date passed from the table
     console.log("Date sent to backend:", formattedDate);
   
@@ -351,7 +363,7 @@
   
         // Add flight details to the header
         const flightDetails = `Flight: ${flightNo} | From: ${origin} | To: ${destination} | Date: ${date}`;
-        document.getElementById("modal-flight-details").innerText = flightDetails;
+        flightDetailsElement.innerText = flightDetails;
   
         // Add crew details
         if (data.length > 0) {
@@ -388,6 +400,7 @@
       closeModal();
     }
   }
+  
   
   
 
