@@ -182,7 +182,6 @@ def fdm_dashboard_view(request):
 
 from .models import CrewMember
 
-
 def get_crew_details(request):
     flight_no = request.GET.get('flight_no')
     origin = request.GET.get('origin')
@@ -191,11 +190,12 @@ def get_crew_details(request):
 
     # Parse the date to the required format
     try:
-        # If the date is in "Dec. 5, 2024" format, convert it to "2024-12-05"
+        # Handle multiple possible date formats
+        # The primary format expected is "%b. %d, %Y" (e.g. "Dec. 5, 2024")
         date_obj = datetime.strptime(date, '%b. %d, %Y')
         formatted_date = date_obj.strftime('%Y-%m-%d')
         print("=========================")
-        print(formatted_date)
+        print(formatted_date)  # This will show "2024-12-05"
         print("=========================")
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
