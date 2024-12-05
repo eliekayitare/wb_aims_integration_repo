@@ -1043,9 +1043,9 @@ def process_crew_details_file(attachment):
                 if flight_header_match:
                     # Extract flight details
                     flight_no = line[:4].strip()
-                    flight_date_str = line[4:12].strip()
-                    origin = line[12:15].strip()
-                    destination = line[15:18].strip()
+                    flight_date_str = line[4:13].strip()
+                    origin = line[13:17].strip()
+                    destination = line[17:20].strip()
                     
                     print("=======================================================")
                     print(f"\nFlight Number {flight_no}\n Date:{flight_date_str}\n Origin: {origin}\n Destination: {destination}")
@@ -1066,7 +1066,7 @@ def process_crew_details_file(attachment):
                     }
 
                     # Process crew data for this line
-                    crew_data = line[18:].strip()
+                    crew_data = line[20:].strip()
                 else:
                     # Continuation line for crew data
                     crew_data = line.strip()
