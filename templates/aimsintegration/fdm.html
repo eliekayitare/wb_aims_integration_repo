@@ -307,7 +307,7 @@
   function viewCrewDetails(flightNo, origin, destination, date) {
     // Convert the date into 'YYYY-MM-DD' format (if needed)
     const formattedDate = new Date(date).toISOString().split('T')[0];  // This ensures a 'YYYY-MM-DD' format
-
+    console.log(formattedDate);
     fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",

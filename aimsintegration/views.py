@@ -189,14 +189,14 @@ def get_crew_details(request):
     destination = request.GET.get('destination')
     date = request.GET.get('date')
 
-    # Parse the date to the required format (YYYY-MM-DD)
+    # Ensure the date is in 'YYYY-MM-DD' format
     try:
-        date_obj = datetime.strptime(date, '%Y-%m-%d')  # Expecting 'YYYY-MM-DD' format
+        date_obj = datetime.strptime(date, '%Y-%m-%d')
         formatted_date = date_obj.strftime('%Y-%m-%d')
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
-    # Fetch crew members and compare only the date portion of sd_date_utc
+    # Fetch crew members with date truncation to compare only the date portion of sd_date_utc
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
