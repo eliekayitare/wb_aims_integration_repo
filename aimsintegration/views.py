@@ -178,35 +178,33 @@ def fdm_dashboard_view(request):
     return render(request, 'aimsintegration/fdm.html', {'fdm_schedules': fdm_schedules})
 
 
-
-import logging
+from django.db.models.functions import TruncDate
+from datetime import datetime
+from django.http import JsonResponse
 from .models import CrewMember
-logger = logging.getLogger(__name__)
+
 def get_crew_details(request):
     flight_no = request.GET.get('flight_no')
     origin = request.GET.get('origin')
     destination = request.GET.get('destination')
     date = request.GET.get('date')
 
-    # Parse the date to the required format
+    # Parse the date to the required format (YYYY-MM-DD)
     try:
-        # Handle multiple possible date formats
-        # The primary format expected is "%b. %d, %Y" (e.g. "Dec. 5, 2024")
-        date_obj = datetime.strptime(date, '%b. %d, %Y')
+        date_obj = datetime.strptime(date, '%Y-%m-%d')  # Expecting 'YYYY-MM-DD' format
         formatted_date = date_obj.strftime('%Y-%m-%d')
-        print("=========================")
-        print(formatted_date)  # This will show "2024-12-05"
-        logger.info("Formatted date: %s", formatted_date)
-        print("=========================")
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
-    # Fetch crew members based on the filters
+    # Fetch crew members and compare only the date portion of sd_date_utc
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
-        destination=destination,
-        sd_date_utc=formatted_date
+        destination=destination
+    ).annotate(
+        truncated_date=TruncDate('sd_date_utc')  # Strip the time from sd_date_utc
+    ).filter(
+        truncated_date=formatted_date  # Compare only the date part
     ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
 
     # Return the crew details as a response
