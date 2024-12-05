@@ -4,74 +4,83 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
-  .modal {
-    display: none;
-    position: fixed;
-    z-index: 9999;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0, 0, 0, 0.5); /* Background with transparency */
-    padding-top: 100px;
-    transition: opacity 0.3s ease; /* Smooth fade in/out */
-  }
-
-  .modal-content {
-    background-color: #fff;
-    margin: auto;
-    padding: 20px;
-    border-radius: 8px;
-    max-width: 600px;
-    position: relative;
-    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .modal-header {
-    font-size: 22px;
-    font-weight: bold;
-    margin-bottom: 15px;
-    color: #333;
-  }
-
-  .modal-body {
-    font-size: 16px;
-    color: #555;
-  }
-
-  .close {
-    color: #aaa;
-    font-size: 30px;
-    font-weight: bold;
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    cursor: pointer;
-  }
-
-  .close:hover,
-  .close:focus {
-    color: #000;
-    text-decoration: none;
-  }
-
-  .crew-info {
-    margin-bottom: 20px;
-    padding: 10px;
-    border-radius: 4px;
-    background-color: #f8f8f8;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-
-  .crew-info strong {
-    color: #333;
-  }
-
-  .crew-info p {
-    margin: 5px 0;
-    font-size: 14px;
-  }
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden; /* Prevent scrolling on the page when modal is active */
+        background-color: rgba(0, 0, 0, 0.5); /* Background with transparency */
+        padding-top: 100px;
+        transition: opacity 0.3s ease; /* Smooth fade in/out */
+      }
+      
+      .modal-content {
+        background-color: #fff;
+        margin: auto;
+        padding: 20px;
+        border-radius: 8px;
+        max-width: 600px;
+        position: relative;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+        max-height: 80%; /* Limits the height of the modal */
+        overflow: hidden;
+      }
+      
+      .modal-header {
+        font-size: 22px;
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: #333;
+        position: relative;
+        border-bottom: 1px solid #ddd; /* Add a subtle separator */
+        padding-bottom: 10px;
+      }
+      
+      .modal-body {
+        font-size: 16px;
+        color: #555;
+        overflow-y: auto; /* Enables vertical scrolling */
+        max-height: calc(100% - 50px); /* Subtract header height */
+        padding: 10px 0;
+      }
+      
+      .close {
+        color: #aaa;
+        font-size: 30px;
+        font-weight: bold;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+      }
+      
+      .close:hover,
+      .close:focus {
+        color: #000;
+        text-decoration: none;
+      }
+      
+      .crew-info {
+        margin-bottom: 20px;
+        padding: 10px;
+        border-radius: 4px;
+        background-color: #f8f8f8;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      
+      .crew-info strong {
+        color: #333;
+      }
+      
+      .crew-info p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+      
 
   /* Table Styling */
   table {
@@ -322,9 +331,7 @@
   function viewCrewDetails(flightNo, origin, destination, date) {
     console.log("Date received from table:", date);
   
-    // Use the exact date passed from the table
-    const formattedDate = date;
-  
+    const formattedDate = date; // Use the exact date passed from the table
     console.log("Date sent to backend:", formattedDate);
   
     // Fetch crew details
@@ -341,11 +348,16 @@
       })
       .then(data => {
         console.log("Crew details returned:", data);
+  
+        // Add flight details to the header
+        const flightDetails = `Flight: ${flightNo} | From: ${origin} | To: ${destination} | Date: ${date}`;
+        document.getElementById("modal-flight-details").innerText = flightDetails;
+  
+        // Add crew details
         if (data.length > 0) {
           const crewDetails = data.map(crew => `
             <div class="crew-info">
               <strong>${crew.name}</strong> (${crew.role})<br>
-              Flight No: ${crew.flight_no}, ${crew.origin} to ${crew.destination}<br>
               Crew ID: ${crew.crew_id}
             </div>
           `).join('');
@@ -353,6 +365,8 @@
         } else {
           document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
         }
+  
+        // Show the modal
         document.getElementById("crewModal").style.display = "block";
       })
       .catch(error => {
@@ -362,10 +376,19 @@
       });
   }
   
-  // Close the modal
+  // Close the modal when clicking the close icon
   function closeModal() {
     document.getElementById("crewModal").style.display = "none";
   }
+  
+  // Close the modal when clicking outside the modal content
+  function closeModalOnOutsideClick(event) {
+    const modalContent = document.querySelector(".modal-content");
+    if (!modalContent.contains(event.target)) {
+      closeModal();
+    }
+  }
+  
   
 
 
