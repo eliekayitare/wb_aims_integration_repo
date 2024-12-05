@@ -297,7 +297,11 @@
           <td>${flight.flight_type}</td>
           <td>${flight.etd_utc || "--"}</td>
           <td>${flight.eta_utc || "--"}</td>
-          <td><button class="btn-action" onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc }}')">View</button></td>`;
+          <td><button
+            class="btn-action"
+            onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc|date:"Y-m-d" }}')">
+            View
+          </button></td>`;
         tableBody.appendChild(row);
       });
     }
