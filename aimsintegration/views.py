@@ -131,63 +131,61 @@ def todays_completion_records_view(request):
 
 
 #FDM
-from django.utils.timezone import make_aware
-from datetime import datetime, date, timezone
+
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.utils.timezone import make_aware
+from datetime import datetime, date, timezone
 from .models import FdmFlightData
+import logging
+
+logger = logging.getLogger(__name__)
 
 def fdm_dashboard_view(request):
-    query = request.GET.get('query', '')
-    selected_date = request.GET.get('date', '')
+    query = request.GET.get('query', '').strip()  # Get the query string, remove leading/trailing spaces
+    selected_date = request.GET.get('date', '').strip()  # Get the selected date, remove spaces
 
-    # Set filter date based on selected date or default to today
-    filter_date = date.today() if not selected_date else datetime.strptime(selected_date, "%Y-%m-%d").date()
+    # Set the filter date
+    if selected_date:
+        try:
+            filter_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+        except ValueError:
+            logger.error(f"Invalid date format received: {selected_date}")
+            return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
+    else:
+        filter_date = date.today()
 
     # Convert filter_date to a timezone-aware datetime object (UTC)
     filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
 
-    # Log the selected and filter dates for debugging
-    print(f"Selected Date: {selected_date}, Filter Date (UTC): {filter_date}")
+    logger.info(f"Selected Date: {selected_date}, Filter Date (UTC): {filter_date}")
 
     # Check if it's an AJAX request
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # Filter based on query and selected date, then order by std_utc
-        fdm_schedules = (
-            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(
-                flight_no__icontains=query
-            ) | FdmFlightData.objects.filter(
-                sd_date_utc=filter_date
-            ).filter(
-                dep_code_iata__icontains=query
-            ) | FdmFlightData.objects.filter(
-                sd_date_utc=filter_date
-            ).filter(
-                arr_code_iata__icontains=query
-            ) | FdmFlightData.objects.filter(
-                sd_date_utc=filter_date
-            ).filter(
-                dep_code_icao__icontains=query
-            ) | FdmFlightData.objects.filter(
-                sd_date_utc=filter_date
-            ).filter(
-                arr_code_icao__icontains=query
-            ) | FdmFlightData.objects.filter(
-                sd_date_utc=filter_date
-            ).filter(
-                tail_no__icontains=query)
-        ).order_by('std_utc')
+        # Build the filter for the query
+        filters = (
+            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(flight_no__icontains=query) |
+            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(dep_code_iata__icontains=query) |
+            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(arr_code_iata__icontains=query) |
+            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(dep_code_icao__icontains=query) |
+            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(arr_code_icao__icontains=query) |
+            FdmFlightData.objects.filter(sd_date_utc=filter_date).filter(tail_no__icontains=query)
+        ).distinct().order_by('std_utc')
 
         # Serialize data for JSON response
-        data = list(fdm_schedules.values(
-            'sd_date_utc', 'flight_no', 'tail_no', 'dep_code_icao',
-            'arr_code_icao', 'std_utc', 'atd_utc', 'takeoff_utc',
-            'touchdown_utc', 'ata_utc', 'sta_utc', 'flight_type', 'etd_utc', 'eta_utc'
+        data = list(filters.values(
+            'sd_date_utc', 'flight_no', 'tail_no', 'dep_code_icao', 'arr_code_icao',
+            'std_utc', 'atd_utc', 'takeoff_utc', 'touchdown_utc', 'ata_utc',
+            'sta_utc', 'flight_type', 'etd_utc', 'eta_utc'
         ))
+
+        logger.info(f"Filtered schedules (AJAX): {len(data)} records found.")
         return JsonResponse(data, safe=False)
 
-    # Non-AJAX request loads all today's flights, ordered by std_utc
+    # Handle normal (non-AJAX) requests
     fdm_schedules = FdmFlightData.objects.filter(sd_date_utc=filter_date).order_by('std_utc')
+    logger.info(f"Filtered schedules (non-AJAX): {len(fdm_schedules)} records found.")
+
     return render(request, 'aimsintegration/fdm.html', {'fdm_schedules': fdm_schedules})
 
 
