@@ -178,14 +178,13 @@ def fdm_dashboard_view(request):
     return render(request, 'aimsintegration/fdm.html', {'fdm_schedules': fdm_schedules})
 
 
-from django.db.models.functions import TruncDate
-from datetime import datetime
+
+
 from django.http import JsonResponse
 from .models import CrewMember
+from datetime import datetime
 
-from django.http import JsonResponse
 import logging
-
 logger = logging.getLogger(__name__)
 
 def get_crew_details(request):
@@ -194,21 +193,20 @@ def get_crew_details(request):
     destination = request.GET.get('destination')
     date = request.GET.get('date')
 
-    logger.info(f"Received parameters: flight_no={flight_no}, origin={origin}, destination={destination}, date={date}")
+    logger.info(f"Fetching crew details for: flight_no={flight_no}, origin={origin}, destination={destination}, date={date}")
 
     try:
         date_obj = datetime.strptime(date, '%Y-%m-%d')
-        formatted_date = date_obj.strftime('%Y-%m-%d')
     except ValueError:
+        logger.error("Invalid date format")
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
         destination=destination,
-        sd_date_utc=formatted_date
+        sd_date_utc=date_obj
     ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
 
-    logger.info(f"Crew members found: {crew_members}")
-
+    logger.info(f"Crew members found: {list(crew_members)}")
     return JsonResponse(list(crew_members), safe=False)

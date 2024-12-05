@@ -297,56 +297,57 @@
           <td>${flight.flight_type}</td>
           <td>${flight.etd_utc || "--"}</td>
           <td>${flight.eta_utc || "--"}</td>
-          <td><button class="btn-action" onclick="viewCrewDetails('${flight.flight_no}', '${flight.dep_code_icao}', '${flight.arr_code_icao}', '${flight.sd_date_utc}')">View</button></td>
-        `;
+          <td><button class="btn-action" onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc }}')">View</button></td>`;
         tableBody.appendChild(row);
       });
     }
 
   // Show Crew Details in Modal
   function viewCrewDetails(flightNo, origin, destination, date) {
-      // Ensure the date is in 'YYYY-MM-DD' format
-      const formattedDate = new Date(date).toISOString().split('T')[0];
-      console.log(`Fetching crew details for:
-        Flight No: ${flightNo},
-        Origin: ${origin},
-        Destination: ${destination},
-        Date: ${formattedDate}`);
+    // Format the date as 'YYYY-MM-DD'
+    const formattedDate = new Date(date).toISOString().split('T')[0];
 
-      fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
+    console.log(`Fetching crew details for:
+      Flight No: ${flightNo},
+      Origin: ${origin},
+      Destination: ${destination},
+      Date: ${formattedDate}`);
+
+    // Fetch crew details
+    fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
       })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          // Check if data has crew details
-          if (data.length > 0) {
-            const crewDetails = data.map(crew => `
-              <div class="crew-info">
-                <strong>${crew.name}</strong> (${crew.role})<br>
-                Flight No: ${crew.flight_no}, ${crew.origin} to ${crew.destination}<br>
-                Crew ID: ${crew.crew_id}
-              </div>
-            `).join('');
-            document.getElementById("crew-details").innerHTML = crewDetails;
-          } else {
-            document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
-          }
-          // Show the modal
-          document.getElementById("crewModal").style.display = "block";
-        })
-        .catch(error => {
-          console.error("Error fetching crew details:", error);
-          document.getElementById("crew-details").innerHTML = `<p>Error fetching crew details: ${error.message}</p>`;
-          document.getElementById("crewModal").style.display = "block";
-        });
-    }
+      .then(data => {
+        if (data.length > 0) {
+          const crewDetails = data.map(crew => `
+            <div class="crew-info">
+              <strong>${crew.name}</strong> (${crew.role})<br>
+              Flight No: ${crew.flight_no}, ${crew.origin} to ${crew.destination}<br>
+              Crew ID: ${crew.crew_id}
+            </div>
+          `).join('');
+          document.getElementById("crew-details").innerHTML = crewDetails;
+        } else {
+          document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
+        }
+        // Show the modal
+        document.getElementById("crewModal").style.display = "block";
+      })
+      .catch(error => {
+        console.error("Error fetching crew details:", error);
+        document.getElementById("crew-details").innerHTML = `<p>Error fetching crew details: ${error.message}</p>`;
+        document.getElementById("crewModal").style.display = "block";
+      });
+  }
+
 
     // Close the modal
     function closeModal() {
