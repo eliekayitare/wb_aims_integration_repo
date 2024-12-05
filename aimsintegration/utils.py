@@ -1018,15 +1018,13 @@ def preprocess_crew_file(content):
 #         print(f"Error processing crew details file: {e}")
 
 
-import re
-import pandas as pd
-from datetime import datetime
-from .models import CrewMember
+
 
 import re
 import pandas as pd
 from datetime import datetime
 from .models import CrewMember
+
 
 def process_crew_details_file(attachment):
     """
@@ -1048,9 +1046,9 @@ def process_crew_details_file(attachment):
                 if flight_header_match:
                     # Extract flight details
                     flight_no = line[:4].strip()
-                    flight_date_str = line[4:13].strip()
-                    origin = line[13:17].strip()
-                    destination = line[17:20].strip()
+                    flight_date_str = line[4:12].strip()
+                    origin = line[12:15].strip()
+                    destination = line[15:18].strip()
                     
                     print("=======================================================")
                     print(f"Flight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
@@ -1100,7 +1098,7 @@ def process_crew_details_file(attachment):
                     )
                     name = crew_data[name_start:next_role_pos].strip()
 
-                    # Handle malformed name cases
+                    # Ensure name does not include parts of the next role or invalid characters
                     if not name or len(name) < 3:  # Assuming a valid name has at least 3 characters
                         print(f"Skipping malformed name: {name}")
                         break
@@ -1156,6 +1154,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 
 
