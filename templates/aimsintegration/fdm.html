@@ -215,7 +215,7 @@
             <td>
                 <button
                   class="btn-action"
-                  onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc }}')"
+                  onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc|date:"Y-m-d" }}')"
                 >
                   View
                 </button>
@@ -303,16 +303,13 @@
     }
 
   // Show Crew Details in Modal
-  // Show Crew Details in Modal
-function viewCrewDetails(flightNo, origin, destination, date) {
-    // Convert the date to 'YYYY-MM-DD' format
-    const formattedDate = new Date(date).toISOString().split('T')[0];
+  function viewCrewDetails(flightNo, origin, destination, date) {
+    console.log("Date received from table:", date);
   
-    console.log(`Fetching crew details for:
-      Flight No: ${flightNo},
-      Origin: ${origin},
-      Destination: ${destination},
-      Date: ${formattedDate}`);
+    // Use the exact date passed from the table
+    const formattedDate = date;
+  
+    console.log("Date sent to backend:", formattedDate);
   
     // Fetch crew details
     fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
@@ -340,7 +337,6 @@ function viewCrewDetails(flightNo, origin, destination, date) {
         } else {
           document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
         }
-        // Show the modal
         document.getElementById("crewModal").style.display = "block";
       })
       .catch(error => {

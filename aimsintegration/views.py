@@ -207,17 +207,16 @@ def get_crew_details(request):
     destination = request.GET.get('destination')
     date = request.GET.get('date')  # Expected as 'YYYY-MM-DD'
 
+    logger.info(f"Fetching crew details for flight_no={flight_no}, origin={origin}, destination={destination}, sd_date_utc={date}")
+
     # Validate and parse the date
     try:
-        date_obj = datetime.strptime(date, '%Y-%m-%d')
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
     except ValueError:
         logger.error(f"Invalid date format received: {date}")
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
-    # Log the query parameters
-    logger.info(f"Fetching crew details for flight_no={flight_no}, origin={origin}, destination={destination}, sd_date_utc={date_obj}")
-
-    # Fetch crew members
+    # Fetch all matching crew members
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
