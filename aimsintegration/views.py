@@ -131,6 +131,11 @@ def todays_completion_records_view(request):
 
 
 #FDM
+from django.utils.timezone import make_aware
+from datetime import datetime, date, timezone
+from django.http import JsonResponse
+from django.shortcuts import render
+from .models import FdmFlightData
 
 def fdm_dashboard_view(request):
     query = request.GET.get('query', '')
@@ -138,6 +143,12 @@ def fdm_dashboard_view(request):
 
     # Set filter date based on selected date or default to today
     filter_date = date.today() if not selected_date else datetime.strptime(selected_date, "%Y-%m-%d").date()
+
+    # Convert filter_date to a timezone-aware datetime object (UTC)
+    filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
+
+    # Log the selected and filter dates for debugging
+    print(f"Selected Date: {selected_date}, Filter Date (UTC): {filter_date}")
 
     # Check if it's an AJAX request
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -165,14 +176,16 @@ def fdm_dashboard_view(request):
                 sd_date_utc=filter_date
             ).filter(
                 tail_no__icontains=query)
-
         ).order_by('std_utc')
 
         # Serialize data for JSON response
-        data = list(fdm_schedules.values('sd_date_utc', 'flight_no', 'tail_no', 'dep_code_icao',
-                                     'arr_code_icao', 'std_utc', 'atd_utc','takeoff_utc', 'touchdown_utc', 'ata_utc', 'sta_utc','flight_type','etd_utc','eta_utc'))
+        data = list(fdm_schedules.values(
+            'sd_date_utc', 'flight_no', 'tail_no', 'dep_code_icao',
+            'arr_code_icao', 'std_utc', 'atd_utc', 'takeoff_utc',
+            'touchdown_utc', 'ata_utc', 'sta_utc', 'flight_type', 'etd_utc', 'eta_utc'
+        ))
         return JsonResponse(data, safe=False)
-    
+
     # Non-AJAX request loads all today's flights, ordered by std_utc
     fdm_schedules = FdmFlightData.objects.filter(sd_date_utc=filter_date).order_by('std_utc')
     return render(request, 'aimsintegration/fdm.html', {'fdm_schedules': fdm_schedules})
