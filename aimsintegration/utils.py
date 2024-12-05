@@ -1025,6 +1025,12 @@ import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
+import re
+from datetime import datetime
+import pandas as pd
+from .models import CrewMember
+
+
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file.
@@ -1040,7 +1046,7 @@ def process_crew_details_file(attachment):
 
         for line_num, line in enumerate(rows, start=1):
             try:
-                # Extract flight details
+                # Detect flight header
                 flight_no = line[:4].strip()
                 flight_date_str = line[4:13].strip()
                 origin = line[13:17].strip()
@@ -1067,60 +1073,29 @@ def process_crew_details_file(attachment):
                 # Crew data starts after position 20
                 crew_data = line[20:].strip()
 
-                # Extract crew details from the current line
-                while crew_data:
-                    try:
-                        # Extract role (first 2 characters)
-                        role = crew_data[:2].strip()
-                        if role not in valid_roles:
-                            print(f"Skipping invalid role: {role}")
-                            break
+                # Regex to match role, crew ID, and name
+                crew_pattern = re.compile(r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)")
 
-                        # Extract crew ID (next 8 characters after the role and two spaces)
-                        crew_id_start = 4  # Role (2 chars) + 2 spaces
-                        crew_id_end = crew_id_start + 8  # Crew ID is exactly 8 digits
-                        crew_id = crew_data[crew_id_start:crew_id_end].strip()
-                        if len(crew_id) != 8 or not crew_id.isdigit():
-                            print(f"Skipping invalid crew ID: {crew_id}")
-                            crew_data = crew_data[crew_id_end:].strip()  # Move to the next segment
-                            continue
+                for match in crew_pattern.finditer(crew_data):
+                    role = match.group("role")
+                    crew_id = match.group("crew_id")
+                    name = match.group("name").strip()
 
-                        # Extract name (immediately follows crew ID and ends before the next role or end of line)
-                        name_start = crew_id_end
-                        next_role_pos = next(
-                            (i for i in range(name_start, len(crew_data))
-                             if crew_data[i:i+2].strip() in valid_roles), len(crew_data)
-                        )
-                        name = crew_data[name_start:next_role_pos].strip()
+                    if not role or not crew_id or not name:
+                        print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
+                        continue
 
-                        # Handle malformed name cases
-                        if not name or len(name) < 3:  # Assuming a valid name has at least 3 characters
-                            print(f"Skipping malformed name: {name}")
-                            crew_data = crew_data[next_role_pos:].strip()  # Move to the next segment
-                            continue
+                    # Append parsed data
+                    parsed_data.append({
+                        **flight_context,
+                        "role": role,
+                        "crew_id": crew_id,
+                        "name": name,
+                    })
 
-                        # Update remaining crew data for further processing
-                        crew_data = crew_data[next_role_pos:].strip()
-
-                        # Truncate name if necessary
-                        if len(name) > 100:
-                            name = name[:100]
-
-                        # Append parsed data
-                        parsed_data.append({
-                            **flight_context,
-                            "role": role,
-                            "crew_id": crew_id,
-                            "name": name,
-                        })
-
-                        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                        print(f"Crew ID: {crew_id}\nRole: {role}\nName: {name}")
-                        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-
-                    except Exception as inner_e:
-                        print(f"Error parsing crew data on line {line_num}: {inner_e}")
-                        break
+                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                    print(f"Crew ID: {crew_id}\nRole: {role}\nName: {name}")
+                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
             except ValueError as ve:
                 print(f"Error in crew data on line {line_num}: {ve}")
