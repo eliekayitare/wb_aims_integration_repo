@@ -1045,7 +1045,7 @@ def process_crew_details_file(attachment):
                 flight_date_str = line[4:13].strip()
                 origin = line[13:17].strip()
                 destination = line[17:20].strip()
-                
+
                 print("=======================================================")
                 print(f"Flight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
                 print("=======================================================")
@@ -1081,7 +1081,8 @@ def process_crew_details_file(attachment):
                     crew_id = crew_data[crew_id_start:crew_id_end].strip()
                     if len(crew_id) != 8 or not crew_id.isdigit():
                         print(f"Skipping invalid crew ID: {crew_id}")
-                        break
+                        crew_data = crew_data[crew_id_end:].strip()  # Move to the next segment
+                        continue
 
                     # Extract name (immediately follows crew ID and ends before the next role or end of line)
                     name_start = crew_id_end
@@ -1091,10 +1092,11 @@ def process_crew_details_file(attachment):
                     )
                     name = crew_data[name_start:next_role_pos].strip()
 
-                    # Ensure name does not include parts of the next role or invalid characters
+                    # Handle malformed name cases
                     if not name or len(name) < 3:  # Assuming a valid name has at least 3 characters
                         print(f"Skipping malformed name: {name}")
-                        break
+                        crew_data = crew_data[next_role_pos:].strip()  # Move to the next segment
+                        continue
 
                     # Update remaining crew data for further processing
                     crew_data = crew_data[next_role_pos:].strip()
