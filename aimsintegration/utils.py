@@ -989,7 +989,7 @@ def preprocess_crew_file(content):
 #         print(f"Error processing crew details file: {e}")
 
 
-def process_crew_details_file_with_skips(attachment):
+def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file and log skipped data.
     """
