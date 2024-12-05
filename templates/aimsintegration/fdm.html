@@ -244,110 +244,126 @@
 
 <!-- WebSocket, Toast, and Search Script -->
 <script>
-  // Show or hide the date picker based on filter selection
-  document.getElementById("filter-select").addEventListener("change", function () {
-    const datePicker = document.getElementById("date-picker");
-    if (this.value === "date") {
-      datePicker.style.display = "inline-block";
-    } else {
-      datePicker.style.display = "none";
-      datePicker.value = ""; // Clear date picker value when not used
-      searchFlights(); // Re-run the search if filter is cleared
+    // Show or hide the date picker based on filter selection
+    document.getElementById("filter-select").addEventListener("change", function () {
+      const datePicker = document.getElementById("date-picker");
+      if (this.value === "date") {
+        datePicker.style.display = "inline-block";
+      } else {
+        datePicker.style.display = "none";
+        datePicker.value = ""; // Clear date picker value when not used
+        searchFlights(); // Re-run the search if filter is cleared
+      }
+    });
+
+    // Listen for input events on the search bar and date picker
+    document.getElementById("search-input").addEventListener("input", searchFlights);
+    document.getElementById("date-picker").addEventListener("change", searchFlights);
+
+    function searchFlights() {
+      const query = document.getElementById("search-input").value;
+      const selectedDate = document.getElementById("date-picker").value;
+
+      fetch(`/aims/fdm_dashboard/?query=${query}&date=${selectedDate}`, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      })
+      .then(response => response.json())
+      .then(data => {
+        updateFlightTable(data); // Update the flight data table with the filtered results
+      });
     }
-  });
 
-  // Listen for input events on the search bar and date picker
-  document.getElementById("search-input").addEventListener("input", searchFlights);
-  document.getElementById("date-picker").addEventListener("change", searchFlights);
+    // Function to dynamically update flight table
+    function updateFlightTable(flightData) {
+      const tableBody = document.getElementById("flight-data");
+      tableBody.innerHTML = ""; // Clear the current table content
 
-  function searchFlights() {
-    const query = document.getElementById("search-input").value;
-    const selectedDate = document.getElementById("date-picker").value;
-
-    fetch(`/aims/fdm_dashboard/?query=${query}&date=${selectedDate}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    })
-    .then(response => response.json())
-    .then(data => {
-      updateFlightTable(data); // Update the flight data table with the filtered results
-    });
-  }
-
-  // Function to dynamically update flight table
-  function updateFlightTable(flightData) {
-    const tableBody = document.getElementById("flight-data");
-    tableBody.innerHTML = ""; // Clear the current table content
-
-    flightData.forEach((flight) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${flight.sd_date_utc}</td>
-        <td>${flight.flight_no}</td>
-        <td>${flight.tail_no}</td>
-        <td>${flight.dep_code_icao}</td>
-        <td>${flight.arr_code_icao}</td>
-        <td>${flight.std_utc}</td>
-        <td>${flight.atd_utc || "--"}</td>
-        <td>${flight.takeoff_utc || "--"}</td>
-        <td>${flight.touchdown_utc || "--"}</td>
-        <td>${flight.ata_utc || "--"}</td>
-        <td>${flight.sta_utc}</td>
-        <td>${flight.flight_type}</td>
-        <td>${flight.etd_utc || "--"}</td>
-        <td>${flight.eta_utc || "--"}</td>
-        <td><button class="btn-action" onclick="viewCrewDetails('${flight.flight_no}', '${flight.dep_code_icao}', '${flight.arr_code_icao}', '${flight.sd_date_utc}')">View</button></td>
-      `;
-      tableBody.appendChild(row);
-    });
-  }
+      flightData.forEach((flight) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${flight.sd_date_utc}</td>
+          <td>${flight.flight_no}</td>
+          <td>${flight.tail_no}</td>
+          <td>${flight.dep_code_icao}</td>
+          <td>${flight.arr_code_icao}</td>
+          <td>${flight.std_utc}</td>
+          <td>${flight.atd_utc || "--"}</td>
+          <td>${flight.takeoff_utc || "--"}</td>
+          <td>${flight.touchdown_utc || "--"}</td>
+          <td>${flight.ata_utc || "--"}</td>
+          <td>${flight.sta_utc}</td>
+          <td>${flight.flight_type}</td>
+          <td>${flight.etd_utc || "--"}</td>
+          <td>${flight.eta_utc || "--"}</td>
+          <td><button class="btn-action" onclick="viewCrewDetails('${flight.flight_no}', '${flight.dep_code_icao}', '${flight.arr_code_icao}', '${flight.sd_date_utc}')">View</button></td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
 
   // Show Crew Details in Modal
   function viewCrewDetails(flightNo, origin, destination, date) {
-    // Convert the date into 'YYYY-MM-DD' format (if needed)
-    const formattedDate = new Date(date + "T00:00:00").toISOString().split('T')[0];  // This ensures a 'YYYY-MM-DD' format
-    console.log(formattedDate);
-    fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        const crewDetails = data.crew_members.map(crew => `
-          <div class="crew-info">
-            <strong>${crew.name}</strong> (${crew.role})<br>
-            Flight No: ${crew.flight_no}, ${crew.origin} to ${crew.destination}<br>
-            Crew ID: ${crew.crew_id}
-          </div>
-        `).join('');
-        document.getElementById("crew-details").innerHTML = crewDetails;
-        document.getElementById("crewModal").style.display = "block";
-      } else {
-        document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
-        document.getElementById("crewModal").style.display = "block";
-      }
-    });
-  }
+      // Ensure the date is in 'YYYY-MM-DD' format
+      const formattedDate = new Date(date).toISOString().split('T')[0];
+      console.log(`Fetching crew details for:
+        Flight No: ${flightNo},
+        Origin: ${origin},
+        Destination: ${destination},
+        Date: ${formattedDate}`);
+
+      fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          // Check if data has crew details
+          if (data.length > 0) {
+            const crewDetails = data.map(crew => `
+              <div class="crew-info">
+                <strong>${crew.name}</strong> (${crew.role})<br>
+                Flight No: ${crew.flight_no}, ${crew.origin} to ${crew.destination}<br>
+                Crew ID: ${crew.crew_id}
+              </div>
+            `).join('');
+            document.getElementById("crew-details").innerHTML = crewDetails;
+          } else {
+            document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
+          }
+          // Show the modal
+          document.getElementById("crewModal").style.display = "block";
+        })
+        .catch(error => {
+          console.error("Error fetching crew details:", error);
+          document.getElementById("crew-details").innerHTML = `<p>Error fetching crew details: ${error.message}</p>`;
+          document.getElementById("crewModal").style.display = "block";
+        });
+    }
+
+    // Close the modal
+    function closeModal() {
+      document.getElementById("crewModal").style.display = "none";
+    }
 
 
-  // Close the modal
-  function closeModal() {
-    document.getElementById("crewModal").style.display = "none";
-  }
-
-  // Handle displaying toast messages based on Django's messages framework
-  {% if messages %}
-  {% for message in messages %}
-    {% if message.tags == 'success' %}
-      showToast("{{ message }}", "success");
-    {% elif message.tags == 'error' %}
-      showToast("{{ message }}", "error");
+    // Handle displaying toast messages based on Django's messages framework
+    {% if messages %}
+    {% for message in messages %}
+      {% if message.tags == 'success' %}
+        showToast("{{ message }}", "success");
+      {% elif message.tags == 'error' %}
+        showToast("{{ message }}", "error");
+      {% endif %}
+    {% endfor %}
     {% endif %}
-  {% endfor %}
-  {% endif %}
 </script>
 
 {% endblock %}

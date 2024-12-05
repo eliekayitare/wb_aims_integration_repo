@@ -183,29 +183,32 @@ from datetime import datetime
 from django.http import JsonResponse
 from .models import CrewMember
 
+from django.http import JsonResponse
+import logging
+
+logger = logging.getLogger(__name__)
+
 def get_crew_details(request):
     flight_no = request.GET.get('flight_no')
     origin = request.GET.get('origin')
     destination = request.GET.get('destination')
     date = request.GET.get('date')
 
-    # Ensure the date is in 'YYYY-MM-DD' format
+    logger.info(f"Received parameters: flight_no={flight_no}, origin={origin}, destination={destination}, date={date}")
+
     try:
         date_obj = datetime.strptime(date, '%Y-%m-%d')
         formatted_date = date_obj.strftime('%Y-%m-%d')
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
-    # Fetch crew members with date truncation to compare only the date portion of sd_date_utc
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
-        destination=destination
-    ).annotate(
-        truncated_date=TruncDate('sd_date_utc')  # Strip the time from sd_date_utc
-    ).filter(
-        truncated_date=formatted_date  # Compare only the date part
+        destination=destination,
+        sd_date_utc=formatted_date
     ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
 
-    # Return the crew details as a response
+    logger.info(f"Crew members found: {crew_members}")
+
     return JsonResponse(list(crew_members), safe=False)
