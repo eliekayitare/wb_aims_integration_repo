@@ -179,9 +179,9 @@ def fdm_dashboard_view(request):
 
 
 
-
+import logging
 from .models import CrewMember
-
+logger = logging.getLogger(__name__)
 def get_crew_details(request):
     flight_no = request.GET.get('flight_no')
     origin = request.GET.get('origin')
@@ -196,6 +196,7 @@ def get_crew_details(request):
         formatted_date = date_obj.strftime('%Y-%m-%d')
         print("=========================")
         print(formatted_date)  # This will show "2024-12-05"
+        logger.info("Formatted date: %s", formatted_date)
         print("=========================")
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
