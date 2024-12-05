@@ -4,27 +4,147 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
-  /* Toast styling */
+
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5); /* Background with transparency */
+    padding-top: 100px;
+    transition: opacity 0.3s ease; /* Smooth fade in/out */
+  }
+  
+  .modal-content {
+    background-color: #fff;
+    margin: auto;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 600px;
+    position: relative;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .modal-header {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+  }
+  
+  .modal-body {
+    font-size: 16px;
+    color: #555;
+  }
+  
+  .close {
+    color: #aaa;
+    font-size: 30px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+  }
+  
+  .close:hover,
+  .close:focus {
+    color: #000;
+    text-decoration: none;
+  }
+  
+  .crew-info {
+    margin-bottom: 20px;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #f8f8f8;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .crew-info strong {
+    color: #333;
+  }
+  
+  .crew-info p {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+  
+  /* Table Styling */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Arial', sans-serif;
+    margin-top: 20px;
+  }
+  
+  th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  th {
+    background-color: #f4f4f4;
+    color: #333;
+  }
+  
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  
+  tr:hover {
+    background-color: #f1f1f1;
+  }
+  
+  button.btn-action {
+    padding: 8px 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  button.btn-action:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Toast Notification Styling */
   .toast {
     padding: 15px;
     margin-bottom: 10px;
     border-radius: 5px;
     color: white;
-    width: 250px;
+    width: 300px;
     opacity: 0.9;
     position: fixed;
     top: 20px;
     right: 20px;
     z-index: 1000;
+    font-size: 14px;
+    transition: opacity 0.3s ease-in-out;
   }
-
+  
   .toast.success {
-    background-color: green;
+    background-color: #28a745;
   }
-
+  
   .toast.error {
-    background-color: red;
+    background-color: #dc3545;
   }
+  
+  .toast-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  
 </style>
 {% endblock %} {% block content %}
 <div class="dashboard-container">
@@ -46,14 +166,11 @@
         class="search-input"
         id="search-input"
       />
-      {% comment %} <button class="search-btn"><i class="fas fa-search"></i></button> {% endcomment %}
-
       <select class="filter-select" id="filter-select">
         <option value="none">Filter by</option>
         <option value="date">Date</option>
       </select>
 
-      <!-- Date picker input (initially hidden, shown when "Date" is selected) -->
       <input type="date" id="date-picker" style="display: none" />
     </div>
 
@@ -96,7 +213,14 @@
             <td>{{ flight.flight_type }}</td>
             <td>{{ flight.etd_utc|date:"H:i" }}</td>
             <td>{{ flight.eta_utc|date:"H:i" }}</td>
-            <td><button class="btn-action">View</button></td>
+            <td>
+              <button
+                class="btn-action"
+                onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc }}')"
+              >
+                View
+              </button>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -108,29 +232,34 @@
 <!-- Toast Container for displaying messages -->
 <div id="toast-container" class="toast-container"></div>
 
+<!-- Modal for Crew Details -->
+<div id="crewModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <div class="modal-header">Crew Members</div>
+    <div id="crew-details" class="modal-body">
+      <!-- Crew details will be injected here dynamically -->
+    </div>
+  </div>
+</div>
+
 <!-- WebSocket, Toast, and Search Script -->
 <script>
   // Show or hide the date picker based on filter selection
-  document
-    .getElementById("filter-select")
-    .addEventListener("change", function () {
-      const datePicker = document.getElementById("date-picker");
-      if (this.value === "date") {
-        datePicker.style.display = "inline-block";
-      } else {
-        datePicker.style.display = "none";
-        datePicker.value = ""; // Clear date picker value when not used
-        searchFlights(); // Re-run the search if filter is cleared
-      }
-    });
+  document.getElementById("filter-select").addEventListener("change", function () {
+    const datePicker = document.getElementById("date-picker");
+    if (this.value === "date") {
+      datePicker.style.display = "inline-block";
+    } else {
+      datePicker.style.display = "none";
+      datePicker.value = ""; // Clear date picker value when not used
+      searchFlights(); // Re-run the search if filter is cleared
+    }
+  });
 
   // Listen for input events on the search bar and date picker
-  document
-    .getElementById("search-input")
-    .addEventListener("input", searchFlights);
-  document
-    .getElementById("date-picker")
-    .addEventListener("change", searchFlights);
+  document.getElementById("search-input").addEventListener("input", searchFlights);
+  document.getElementById("date-picker").addEventListener("change", searchFlights);
 
   function searchFlights() {
     const query = document.getElementById("search-input").value;
@@ -141,10 +270,10 @@
         "X-Requested-With": "XMLHttpRequest",
       },
     })
-      .then((response) => response.json())
-      .then((data) => {
-        updateFlightTable(data); // Update the flight data table with the filtered results
-      });
+    .then(response => response.json())
+    .then(data => {
+      updateFlightTable(data); // Update the flight data table with the filtered results
+    });
   }
 
   // Function to dynamically update flight table
@@ -169,50 +298,42 @@
         <td>${flight.flight_type}</td>
         <td>${flight.etd_utc || "--"}</td>
         <td>${flight.eta_utc || "--"}</td>
-        <td><button class="btn-action">View</button></td>
+        <td><button class="btn-action" onclick="viewCrewDetails('${flight.flight_no}', '${flight.dep_code_icao}', '${flight.arr_code_icao}', '${flight.sd_date_utc}')">View</button></td>
       `;
       tableBody.appendChild(row);
     });
   }
 
-  // Function to show toast messages
-  function showToast(message, type = "info") {
-    const toastContainer = document.getElementById("toast-container");
-    if (!toastContainer) return; // Exit if no container is found
-
-    // Create the toast element
-    const toast = document.createElement("div");
-    toast.classList.add("toast", type); // Add 'success', 'error', etc. based on the type
-    toast.innerText = message;
-
-    // Append the toast to the container
-    toastContainer.appendChild(toast);
-
-    // Automatically remove the toast after 5 seconds
-    setTimeout(() => {
-      toast.remove();
-    }, 5000); // Remove the toast after 5 seconds
+  // Show Crew Details in Modal
+  function viewCrewDetails(flightNo, origin, destination, date) {
+    fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${date}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const crewDetails = data.crew_members.map(crew => `
+          <div class="crew-info">
+            <strong>${crew.name}</strong> (${crew.role})<br>
+            Flight No: ${crew.flight_no}, ${crew.origin} to ${crew.destination}<br>
+            Crew ID: ${crew.crew_id}
+          </div>
+        `).join('');
+        document.getElementById("crew-details").innerHTML = crewDetails;
+        document.getElementById("crewModal").style.display = "block";
+      } else {
+        document.getElementById("crew-details").innerHTML = "<p>No crew details found.</p>";
+        document.getElementById("crewModal").style.display = "block";
+      }
+    });
   }
 
-  const socket = new WebSocket('ws://' + window.location.host + '/ws/flight-updates/');
-
-socket.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    if (data.message === 'Flight data updated') {
-        // Trigger a function to refresh the dashboard data
-        updateDashboard();
-    }
-};
-
-function updateDashboard() {
-    // Make an AJAX call to fetch updated data
-    fetch('/aims/fdm_dashboard/')
-        .then(response => response.json())
-        .then(data => {
-            // Update the dashboard with the new data
-            console.log("Dashboard updated", data);
-        });
-}
+  // Close the modal
+  function closeModal() {
+    document.getElementById("crewModal").style.display = "none";
+  }
 
   // Handle displaying toast messages based on Django's messages framework
   {% if messages %}
@@ -224,7 +345,6 @@ function updateDashboard() {
     {% endif %}
   {% endfor %}
   {% endif %}
-
 </script>
 
 {% endblock %}

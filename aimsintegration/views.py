@@ -177,3 +177,26 @@ def fdm_dashboard_view(request):
     fdm_schedules = FdmFlightData.objects.filter(sd_date_utc=filter_date).order_by('std_utc')
     return render(request, 'aimsintegration/fdm.html', {'fdm_schedules': fdm_schedules})
 
+
+
+
+from .models import CrewMember
+
+def get_crew_details(request):
+    flight_no = request.GET.get('flight_no')
+    origin = request.GET.get('origin')
+    destination = request.GET.get('destination')
+    date = request.GET.get('date')
+
+    # Fetch crew members based on these filters
+    crew_members = CrewMember.objects.filter(
+        flight_no=flight_no,
+        origin=origin,
+        destination=destination,
+        sd_date_utc=date
+    ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
+
+    if crew_members.exists():
+        return JsonResponse({'success': True, 'crew_members': list(crew_members)})
+    else:
+        return JsonResponse({'success': False, 'message': 'No crew found for this flight.'})
