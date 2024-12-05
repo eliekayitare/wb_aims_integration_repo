@@ -213,13 +213,13 @@
             <td>{{ flight.etd_utc|date:"H:i" }}</td>
             <td>{{ flight.eta_utc|date:"H:i" }}</td>
             <td>
-              <button
-                class="btn-action"
-                onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc }}')"
-              >
-                View
-              </button>
-            </td>
+                <button
+                  class="btn-action"
+                  onclick="viewCrewDetails('{{ flight.flight_no }}', '{{ flight.dep_code_icao }}', '{{ flight.arr_code_icao }}', '{{ flight.sd_date_utc }}')"
+                >
+                  View
+                </button>
+              </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -303,16 +303,17 @@
     }
 
   // Show Crew Details in Modal
-  function viewCrewDetails(flightNo, origin, destination, date) {
-    // Format the date as 'YYYY-MM-DD'
+  // Show Crew Details in Modal
+function viewCrewDetails(flightNo, origin, destination, date) {
+    // Convert the date to 'YYYY-MM-DD' format
     const formattedDate = new Date(date).toISOString().split('T')[0];
-
+  
     console.log(`Fetching crew details for:
       Flight No: ${flightNo},
       Origin: ${origin},
       Destination: ${destination},
       Date: ${formattedDate}`);
-
+  
     // Fetch crew details
     fetch(`/aims/get_crew_details/?flight_no=${flightNo}&origin=${origin}&destination=${destination}&date=${formattedDate}`, {
       headers: {
@@ -326,6 +327,7 @@
         return response.json();
       })
       .then(data => {
+        console.log("Crew details returned:", data);
         if (data.length > 0) {
           const crewDetails = data.map(crew => `
             <div class="crew-info">
@@ -347,12 +349,12 @@
         document.getElementById("crewModal").style.display = "block";
       });
   }
-
-
-    // Close the modal
-    function closeModal() {
-      document.getElementById("crewModal").style.display = "none";
-    }
+  
+  // Close the modal
+  function closeModal() {
+    document.getElementById("crewModal").style.display = "none";
+  }
+  
 
 
     // Handle displaying toast messages based on Django's messages framework
