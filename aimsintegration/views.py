@@ -181,23 +181,26 @@ def fdm_dashboard_view(request):
 
 
 from .models import CrewMember
-
-
 def get_crew_details(request):
     flight_no = request.GET.get('flight_no')
     origin = request.GET.get('origin')
     destination = request.GET.get('destination')
     date = request.GET.get('date')
 
-    # Parse the date to the required format
+    # Log the received date
+    print(f"Received date: {date}")
+
+    # Try parsing and formatting the date to check for errors
     try:
-        # If the date is in "Dec. 5, 2024" format, convert it to "2024-12-05"
-        date_obj = datetime.strptime(date, '%b. %d, %Y')
+        # Ensure the date is in the correct format
+        date_obj = datetime.strptime(date, '%Y-%m-%d')
         formatted_date = date_obj.strftime('%Y-%m-%d')
     except ValueError:
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
-    # Fetch crew members based on the filters
+    print(f"Formatted date: {formatted_date}")
+
+    # Query the database with the formatted date
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
@@ -205,5 +208,4 @@ def get_crew_details(request):
         sd_date_utc=formatted_date
     ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
 
-    # Return the crew details as a response
     return JsonResponse(list(crew_members), safe=False)
