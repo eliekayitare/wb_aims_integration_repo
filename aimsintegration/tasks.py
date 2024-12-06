@@ -562,7 +562,7 @@ crew_data = CrewMember.objects.filter(
 # import csv
 # from django.conf import settings
 
-# def generate_csv_for_aims(flight_data, crew_data):
+# def generate_csv_for_fdm(flight_data, crew_data):
 #     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
 #     file_path = f"{settings.MEDIA_ROOT}/{file_name}"  # Save in media folder
 
@@ -626,7 +626,7 @@ from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 # Initialize logger
 logger = logging.getLogger(__name__)
 
-def generate_csv_without_crew(flight_data):
+def generate_csv_for_fdm(flight_data):
     """
     Generate a CSV file for flight data without crew details.
     """
@@ -768,7 +768,7 @@ def hourly_upload_csv_to_fdm():
     )
 
     # Generate CSV
-    local_file_path = generate_csv_for_aims(flight_data, crew_data)
+    local_file_path = generate_csv_for_fdm(flight_data, crew_data)
 
     # Fetch server details from settings
     fdm_host = settings.FDM_HOST
