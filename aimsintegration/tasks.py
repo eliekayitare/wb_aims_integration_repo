@@ -628,6 +628,7 @@ from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 # Initialize logger
 logger = logging.getLogger(__name__)
 
+@shared_task
 def hourly_upload_csv_to_fdm():
     from django.utils.timezone import now, timedelta
 
