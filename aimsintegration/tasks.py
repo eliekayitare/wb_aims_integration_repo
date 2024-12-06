@@ -741,11 +741,10 @@ def generate_csv_for_fdm(flight_data):
 #     except Exception as e:
 #         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
 
-
-
 import os
 import paramiko
 import logging
+from django.utils.timezone import now, timedelta
 from django.conf import settings
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 from celery import shared_task
@@ -755,20 +754,17 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def hourly_upload_csv_to_fdm():
-    from django.utils.timezone import now, timedelta
-
+    """
+    Celery task to generate, upload CSV to FDM server, and clean up old files.
+    """
     # Calculate the time range
     one_hour_ago = now() - timedelta(hours=1)
 
-    # Fetch data
+    # Fetch flight data
     flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
-    crew_data = CrewMember.objects.filter(
-        flight_no__in=flight_data.values_list('flight_no', flat=True),
-        sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
-    )
 
-    # Generate CSV
-    local_file_path = generate_csv_for_fdm(flight_data, crew_data)
+    # Generate CSV file (new version: without crew data)
+    local_file_path = generate_csv_for_fdm(flight_data)
 
     # Fetch server details from settings
     fdm_host = settings.FDM_HOST
@@ -796,14 +792,11 @@ def hourly_upload_csv_to_fdm():
         sftp.put(local_file_path, remote_path)
         logger.info(f"File successfully uploaded to {remote_path}.")
 
-        # Log success
-        logger.info(f"Upload completed successfully: {local_file_path} -> {remote_path}")
-
         # Close connections
         sftp.close()
         transport.close()
 
-        # Cleanup: Delete old files from the local directory
+        # Clean up local files after successful upload
         local_dir = os.path.dirname(local_file_path)
         for file in os.listdir(local_dir):
             if file.startswith("aims_") and file.endswith(".csv"):
