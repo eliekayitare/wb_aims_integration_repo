@@ -285,7 +285,14 @@ CELERY_BEAT_SCHEDULE = {
     #Fetch Crew Data - Runs every 15 minutes
     'fetch-crew-data-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-        'schedule': crontab(minute='*/2'),  # Every 15 minutes
+        'schedule': crontab(minute='*/35'),  # Every 15 minutes
+        'options': {'run_immediately': False}
+    },
+
+    # UPload FDM Data - runs every 1 hour
+    'upload-fdm-data-every-hour': {
+        'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
+        'schedule': crontab(minute='*/2'),  # Every 1 hour
         'options': {'run_immediately': False}
     },
     
@@ -342,3 +349,13 @@ DAYS = config('DAYS')  # Optional: Define default and typecast
 CPAT_AIMS_PATH = config('CPAT_AIMS_PATH')
 
 # daphne -p 8000 flightops.asgi:application
+
+
+
+#FDM configurations
+
+FDM_HOST = config('FDM_HOST')
+FDM_USERNAME = config('FDM_USERNAME')
+FDM_PASSWORD = config('FDM_PASSWORD')
+FDM_PORT = config('FDM_PORT')
+FDM_DESTINATION_DIR = config('FDM_DESTINATION_DIR')

@@ -532,3 +532,155 @@ def fetch_fdm_crew_data():
         process_fdm_crew_email_attachment(email, process_crew_details_file)
     else:
         logger.info("No new fdm flight schedule email found.")
+
+
+
+
+# FDM project tasks
+
+
+#Fetch flight and crew data modified within the last hour
+from django.utils.timezone import now, timedelta
+from django.db.models import F
+from .models import FdmFlightData, CrewMember
+# Calculate time range
+one_hour_ago = now() - timedelta(hours=1)
+
+# Fetch flights updated in the last hour
+flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+
+# Fetch crew details for those flights
+crew_data = CrewMember.objects.filter(
+    flight_no__in=flight_data.values_list('flight_no', flat=True),
+    sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
+)
+
+
+
+
+#Create a CSV file with flight and crew data
+import csv
+from django.conf import settings
+
+def generate_csv_for_aims(flight_data, crew_data):
+    file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
+    file_path = f"{settings.MEDIA_ROOT}/{file_name}"  # Save in media folder
+
+    # Open the file for writing
+    with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        # Write header
+        writer.writerow([
+            "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
+            "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA", "CREW_ID", "NAME", "ROLE"
+        ])
+
+        # Write flight data
+        for flight in flight_data:
+            flight_row = [
+                flight.sd_date_utc,  # DAY
+                flight.flight_no,  # FLT
+                flight.flight_type,  # FLTYPE
+                flight.tail_no,  # REG
+                flight.dep_code_icao,  # DEP
+                flight.arr_code_icao,  # ARR
+                flight.std_utc,  # STD
+                flight.sta_utc,  # STA
+                flight.takeoff_utc,  # TKOF
+                flight.touchdown_utc,  # TDOWN
+                flight.atd_utc,  # BLOF
+                flight.ata_utc,  # BLON
+                flight.etd_utc,  # ETD
+                flight.eta_utc,  # ETA
+                None,  # Placeholder for crew
+                None,  # Placeholder for name
+                None,  # Placeholder for role
+            ]
+            writer.writerow(flight_row)
+
+            # Add crew details
+            flight_crews = crew_data.filter(
+                flight_no=flight.flight_no,
+                sd_date_utc=flight.sd_date_utc
+            )
+            for crew in flight_crews:
+                crew_row = [
+                    None, None, None, None, None, None, None, None,
+                    None, None, None, None, None, None,  # Placeholder for flight columns
+                    crew.crew_id,  # CREW_ID
+                    crew.name,  # NAME
+                    crew.get_role_display(),  # ROLE
+                ]
+                writer.writerow(crew_row)
+    return file_path
+
+
+
+
+# Upload the CSV File to the AIMS Server
+
+import os
+import paramiko
+import logging
+from django.conf import settings
+from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+def hourly_upload_csv_to_fdm():
+    from django.utils.timezone import now, timedelta
+
+    # Calculate the time range
+    one_hour_ago = now() - timedelta(hours=1)
+
+    # Fetch data
+    flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+    crew_data = CrewMember.objects.filter(
+        flight_no__in=flight_data.values_list('flight_no', flat=True),
+        sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
+    )
+
+    # Generate CSV
+    local_file_path = generate_csv_for_aims(flight_data, crew_data)
+
+    # Fetch server details from settings
+    fdm_host = settings.FDM_HOST
+    fdm_port = int(settings.FDM_PORT)
+    fdm_username = settings.FDM_USERNAME
+    fdm_password = settings.FDM_PASSWORD
+    fdm_destination_dir = settings.FDM_DESTINATION_DIR
+
+    # Ensure the file exists
+    if not os.path.exists(local_file_path):
+        logger.error(f"File {local_file_path} does not exist. Skipping upload.")
+        return
+
+    try:
+        # SFTP Upload Logic
+        transport = paramiko.Transport((fdm_host, fdm_port))
+        transport.connect(username=fdm_username, password=fdm_password)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+
+        # Define remote path
+        remote_path = os.path.join(fdm_destination_dir, os.path.basename(local_file_path))
+        logger.info(f"Uploading file to {remote_path}...")
+
+        # Upload file
+        sftp.put(local_file_path, remote_path)
+        logger.info(f"File successfully uploaded to {remote_path}.")
+
+        # Log success
+        logger.info(f"Upload completed successfully: {local_file_path} -> {remote_path}")
+
+        # Close connections
+        sftp.close()
+        transport.close()
+
+    except (SSHException, NoValidConnectionsError) as e:
+        logger.error(f"SFTP upload failed: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
+
+
+
