@@ -755,7 +755,7 @@ logger = logging.getLogger(__name__)
 @shared_task
 def hourly_upload_csv_to_fdm():
     """
-    Celery task to generate, upload CSV to FDM server, and clean up old files.
+    Celery task to generate, upload CSV to FDM server, and clean up old files except the current one.
     """
     # Calculate the time range
     one_hour_ago = now() - timedelta(hours=1)
@@ -796,16 +796,17 @@ def hourly_upload_csv_to_fdm():
         sftp.close()
         transport.close()
 
-        # Clean up local files after successful upload
+        # Clean up local files, excluding the current file
         local_dir = os.path.dirname(local_file_path)
         for file in os.listdir(local_dir):
-            if file.startswith("aims_") and file.endswith(".csv"):
-                file_path = os.path.join(local_dir, file)
+            file_path = os.path.join(local_dir, file)
+            # Skip the currently uploaded file
+            if file_path != local_file_path and file.startswith("aims_") and file.endswith(".csv"):
                 try:
                     os.remove(file_path)
-                    logger.info(f"Deleted local file: {file_path}")
+                    logger.info(f"Deleted old local file: {file_path}")
                 except Exception as e:
-                    logger.error(f"Failed to delete file {file_path}: {e}")
+                    logger.error(f"Failed to delete old file {file_path}: {e}")
 
     except (SSHException, NoValidConnectionsError) as e:
         logger.error(f"SFTP upload failed: {e}", exc_info=True)
