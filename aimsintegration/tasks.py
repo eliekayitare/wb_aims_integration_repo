@@ -616,35 +616,40 @@ crew_data = CrewMember.objects.filter(
 
 
 import csv
+import os
+import paramiko
+import logging
 from django.utils.timezone import now
 from django.conf import settings
+from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 
-def generate_csv_for_aims(flight_data, crew_data):
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+def generate_csv_without_crew(flight_data):
+    """
+    Generate a CSV file for flight data without crew details.
+    """
     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
-    file_path = f"{settings.MEDIA_ROOT}/{file_name}"  # Save in media folder
+    file_path = os.path.join(settings.MEDIA_ROOT, file_name)
 
-    # Define possible crew roles
-    crew_roles = ['CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC']
-
-    # Generate dynamic crew headers
-    crew_headers = [f"{role}_ID" for role in crew_roles] + [f"{role}_NAME" for role in crew_roles] + [f"{role}_ROLE" for role in crew_roles]
-
-    # Full header row
+    # Header row
     header = [
         "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
         "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA"
-    ] + crew_headers
+    ]
 
-    # Write the CSV file
+    # Create the CSV file
     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(header)  # Write the header row
+        writer.writerow(header)  # Write header row
 
+        # Write flight data rows
         for flight in flight_data:
             # Format times as HH:MM
             format_time = lambda t: t.strftime("%H:%M") if t else None
 
-            # Base flight row
+            # Flight data row
             flight_row = [
                 flight.sd_date_utc,  # DAY
                 flight.flight_no,  # FLT
@@ -661,47 +666,89 @@ def generate_csv_for_aims(flight_data, crew_data):
                 format_time(flight.etd_utc),  # ETD
                 format_time(flight.eta_utc),  # ETA
             ]
+            writer.writerow(flight_row)
 
-            # Fetch and organize crew data for the flight
-            flight_crews = crew_data.filter(
-                flight_no=flight.flight_no,
-                sd_date_utc=flight.sd_date_utc
-            )
-
-            # Initialize empty crew columns
-            crew_details = {role: {"ID": None, "NAME": None, "ROLE": None} for role in crew_roles}
-
-            # Fill crew details for each role
-            for crew in flight_crews:
-                crew_details[crew.role] = {
-                    "ID": crew.crew_id,
-                    "NAME": crew.name,
-                    "ROLE": crew.get_role_display(),
-                }
-
-            # Flatten crew details into the row
-            crew_row = []
-            for role in crew_roles:
-                crew_row.extend([
-                    crew_details[role]["ID"],  # Role ID
-                    crew_details[role]["NAME"],  # Role Name
-                    crew_details[role]["ROLE"],  # Role Display
-                ])
-
-            # Write the combined row
-            writer.writerow(flight_row + crew_row)
-
+    logger.info(f"CSV file generated at: {file_path}")
     return file_path
 
 
 
-# Upload the CSV File to the AIMS Server
+
+
+# # Upload the CSV File to the AIMS Server
+
+# import os
+# import paramiko
+# import logging
+# from django.conf import settings
+# from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+
+# # Initialize logger
+# logger = logging.getLogger(__name__)
+
+# @shared_task
+# def hourly_upload_csv_to_fdm():
+#     from django.utils.timezone import now, timedelta
+
+#     # Calculate the time range
+#     one_hour_ago = now() - timedelta(hours=1)
+
+#     # Fetch data
+#     flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+#     crew_data = CrewMember.objects.filter(
+#         flight_no__in=flight_data.values_list('flight_no', flat=True),
+#         sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
+#     )
+
+#     # Generate CSV
+#     local_file_path = generate_csv_for_aims(flight_data, crew_data)
+
+#     # Fetch server details from settings
+#     fdm_host = settings.FDM_HOST
+#     fdm_port = int(settings.FDM_PORT)
+#     fdm_username = settings.FDM_USERNAME
+#     fdm_password = settings.FDM_PASSWORD
+#     fdm_destination_dir = settings.FDM_DESTINATION_DIR
+
+#     # Ensure the file exists
+#     if not os.path.exists(local_file_path):
+#         logger.error(f"File {local_file_path} does not exist. Skipping upload.")
+#         return
+
+#     try:
+#         # SFTP Upload Logic
+#         transport = paramiko.Transport((fdm_host, fdm_port))
+#         transport.connect(username=fdm_username, password=fdm_password)
+#         sftp = paramiko.SFTPClient.from_transport(transport)
+
+#         # Define remote path
+#         remote_path = os.path.join(fdm_destination_dir, os.path.basename(local_file_path))
+#         logger.info(f"Uploading file to {remote_path}...")
+
+#         # Upload file
+#         sftp.put(local_file_path, remote_path)
+#         logger.info(f"File successfully uploaded to {remote_path}.")
+
+#         # Log success
+#         logger.info(f"Upload completed successfully: {local_file_path} -> {remote_path}")
+
+#         # Close connections
+#         sftp.close()
+#         transport.close()
+
+#     except (SSHException, NoValidConnectionsError) as e:
+#         logger.error(f"SFTP upload failed: {e}", exc_info=True)
+#     except Exception as e:
+#         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
+
+
 
 import os
 import paramiko
 import logging
 from django.conf import settings
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+from celery import shared_task
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -756,10 +803,18 @@ def hourly_upload_csv_to_fdm():
         sftp.close()
         transport.close()
 
+        # Cleanup: Delete old files from the local directory
+        local_dir = os.path.dirname(local_file_path)
+        for file in os.listdir(local_dir):
+            if file.startswith("aims_") and file.endswith(".csv"):
+                file_path = os.path.join(local_dir, file)
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Deleted local file: {file_path}")
+                except Exception as e:
+                    logger.error(f"Failed to delete file {file_path}: {e}")
+
     except (SSHException, NoValidConnectionsError) as e:
         logger.error(f"SFTP upload failed: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
-
-
-
