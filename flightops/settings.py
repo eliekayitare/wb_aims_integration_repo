@@ -294,6 +294,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
         'schedule': crontab(minute='*/60'),  # Every 1 hour
         'options': {'run_immediately': False}
+        
     },
     
 }
