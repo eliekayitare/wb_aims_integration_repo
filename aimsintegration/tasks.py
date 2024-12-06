@@ -559,24 +559,92 @@ crew_data = CrewMember.objects.filter(
 
 
 #Create a CSV file with flight and crew data
+# import csv
+# from django.conf import settings
+
+# def generate_csv_for_aims(flight_data, crew_data):
+#     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
+#     file_path = f"{settings.MEDIA_ROOT}/{file_name}"  # Save in media folder
+
+#     # Open the file for writing
+#     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+#         writer = csv.writer(csvfile)
+#         # Write header
+#         writer.writerow([
+#             "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
+#             "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA", "CREW_ID", "NAME", "ROLE"
+#         ])
+
+#         # Write flight data
+#         for flight in flight_data:
+#             flight_row = [
+#                 flight.sd_date_utc,  # DAY
+#                 flight.flight_no,  # FLT
+#                 flight.flight_type,  # FLTYPE
+#                 flight.tail_no,  # REG
+#                 flight.dep_code_icao,  # DEP
+#                 flight.arr_code_icao,  # ARR
+#                 flight.std_utc,  # STD
+#                 flight.sta_utc,  # STA
+#                 flight.takeoff_utc,  # TKOF
+#                 flight.touchdown_utc,  # TDOWN
+#                 flight.atd_utc,  # BLOF
+#                 flight.ata_utc,  # BLON
+#                 flight.etd_utc,  # ETD
+#                 flight.eta_utc,  # ETA
+#                 None,  # Placeholder for crew
+#                 None,  # Placeholder for name
+#                 None,  # Placeholder for role
+#             ]
+#             writer.writerow(flight_row)
+
+#             # Add crew details
+#             flight_crews = crew_data.filter(
+#                 flight_no=flight.flight_no,
+#                 sd_date_utc=flight.sd_date_utc
+#             )
+#             for crew in flight_crews:
+#                 crew_row = [
+#                     None, None, None, None, None, None, None, None,
+#                     None, None, None, None, None, None,  # Placeholder for flight columns
+#                     crew.crew_id,  # CREW_ID
+#                     crew.name,  # NAME
+#                     crew.get_role_display(),  # ROLE
+#                 ]
+#                 writer.writerow(crew_row)
+#     return file_path
+
+
 import csv
+from django.utils.timezone import now
 from django.conf import settings
 
 def generate_csv_for_aims(flight_data, crew_data):
     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
     file_path = f"{settings.MEDIA_ROOT}/{file_name}"  # Save in media folder
 
-    # Open the file for writing
+    # Define possible crew roles
+    crew_roles = ['CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC']
+
+    # Generate dynamic crew headers
+    crew_headers = [f"{role}_ID" for role in crew_roles] + [f"{role}_NAME" for role in crew_roles] + [f"{role}_ROLE" for role in crew_roles]
+
+    # Full header row
+    header = [
+        "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
+        "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA"
+    ] + crew_headers
+
+    # Write the CSV file
     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        # Write header
-        writer.writerow([
-            "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
-            "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA", "CREW_ID", "NAME", "ROLE"
-        ])
+        writer.writerow(header)  # Write the header row
 
-        # Write flight data
         for flight in flight_data:
+            # Format times as HH:MM
+            format_time = lambda t: t.strftime("%H:%M") if t else None
+
+            # Base flight row
             flight_row = [
                 flight.sd_date_utc,  # DAY
                 flight.flight_no,  # FLT
@@ -584,36 +652,46 @@ def generate_csv_for_aims(flight_data, crew_data):
                 flight.tail_no,  # REG
                 flight.dep_code_icao,  # DEP
                 flight.arr_code_icao,  # ARR
-                flight.std_utc,  # STD
-                flight.sta_utc,  # STA
-                flight.takeoff_utc,  # TKOF
-                flight.touchdown_utc,  # TDOWN
-                flight.atd_utc,  # BLOF
-                flight.ata_utc,  # BLON
-                flight.etd_utc,  # ETD
-                flight.eta_utc,  # ETA
-                None,  # Placeholder for crew
-                None,  # Placeholder for name
-                None,  # Placeholder for role
+                format_time(flight.std_utc),  # STD
+                format_time(flight.sta_utc),  # STA
+                format_time(flight.takeoff_utc),  # TKOF
+                format_time(flight.touchdown_utc),  # TDOWN
+                format_time(flight.atd_utc),  # BLOF
+                format_time(flight.ata_utc),  # BLON
+                format_time(flight.etd_utc),  # ETD
+                format_time(flight.eta_utc),  # ETA
             ]
-            writer.writerow(flight_row)
 
-            # Add crew details
+            # Fetch and organize crew data for the flight
             flight_crews = crew_data.filter(
                 flight_no=flight.flight_no,
                 sd_date_utc=flight.sd_date_utc
             )
-            for crew in flight_crews:
-                crew_row = [
-                    None, None, None, None, None, None, None, None,
-                    None, None, None, None, None, None,  # Placeholder for flight columns
-                    crew.crew_id,  # CREW_ID
-                    crew.name,  # NAME
-                    crew.get_role_display(),  # ROLE
-                ]
-                writer.writerow(crew_row)
-    return file_path
 
+            # Initialize empty crew columns
+            crew_details = {role: {"ID": None, "NAME": None, "ROLE": None} for role in crew_roles}
+
+            # Fill crew details for each role
+            for crew in flight_crews:
+                crew_details[crew.role] = {
+                    "ID": crew.crew_id,
+                    "NAME": crew.name,
+                    "ROLE": crew.get_role_display(),
+                }
+
+            # Flatten crew details into the row
+            crew_row = []
+            for role in crew_roles:
+                crew_row.extend([
+                    crew_details[role]["ID"],  # Role ID
+                    crew_details[role]["NAME"],  # Role Name
+                    crew_details[role]["ROLE"],  # Role Display
+                ])
+
+            # Write the combined row
+            writer.writerow(flight_row + crew_row)
+
+    return file_path
 
 
 
