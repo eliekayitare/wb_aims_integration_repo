@@ -206,155 +206,6 @@ def fetch_acars_messages(self):
 #     if not email:
 #         logger.info("No more unread ACARS messages or only 'M16' messages left. Task will run again at the next schedule.")
 
-
-
-#Tasks for CPAT project
-
-import os
-import csv
-import requests
-from datetime import datetime
-from django.conf import settings
-from .models import CompletionRecord
-import paramiko
-import logging
-from celery import shared_task
-from django.core.mail import send_mail
-import time
-logger = logging.getLogger(__name__)
-
-# Settings
-LMS_BASE_URL = settings.LMS_BASE_URL
-LMS_KEY = settings.LMS_KEY
-API_TOKEN = settings.API_TOKEN
-DAYS = settings.DAYS
-AIMS_HOST = settings.AIMS_SERVER_ADDRESS
-AIMS_PORT = int(settings.AIMS_PORT)
-AIMS_USERNAME = settings.AIMS_SERVER_USER
-AIMS_PASSWORD = settings.AIMS_SERVER_PASSWORD
-CPAT_AIMS_PATH = settings.CPAT_AIMS_PATH
-
-
-@shared_task
-def fetch_and_store_completion_records():
-    """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
-    url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
-    headers = {
-        "apitoken": API_TOKEN,
-        "Content-Type": "application/json",
-    }
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        data = response.json()
-        records_for_file = []
-
-        # Process each record
-        for record in data:
-            existing_record = CompletionRecord.objects.filter(
-                employee_id=record.get("EmployeeID"),
-                course_code=record.get("CourseCode"),
-                completion_date=record.get("CompletionDate"),
-            ).first()
-
-            if existing_record:
-                is_identical = (
-                    existing_record.employee_email == record.get("EmployeeEmail") and
-                    existing_record.score == record.get("Score") and
-                    existing_record.time_in_seconds == record.get("TimeInSecond") and
-                    existing_record.start_date == record.get("StartDate") and
-                    existing_record.end_date == record.get("EndDate")
-                )
-                if is_identical:
-                    logger.info(f"Skipping identical record: {record.get('EmployeeID')} - {record.get('CourseCode')}")
-                    continue
-
-            CompletionRecord.objects.update_or_create(
-                employee_id=record.get("EmployeeID"),
-                course_code=record.get("CourseCode"),
-                completion_date=record.get("CompletionDate"),
-                defaults={
-                    "employee_email": record.get("EmployeeEmail"),
-                    "score": record.get("Score"),
-                    "time_in_seconds": record.get("TimeInSecond"),
-                    "start_date": record.get("StartDate"),
-                    "end_date": record.get("EndDate"),
-                },
-            )
-
-            # Prepare record for JOB8.txt
-            records_for_file.append({
-                "StaffNumber": record.get("EmployeeID"),
-                "ExpiryCode": record.get("CourseCode"),
-                "LastDoneDate": format_date(record.get("CompletionDate")),
-                "ExpiryDate": format_date(record.get("EndDate")),
-            })
-
-        if not records_for_file:
-            logger.info("No new data to process.")
-            return
-
-        file_path = generate_job8_file(records_for_file)
-        upload_cpat_to_aims_server(file_path)
-        email_job8_file(file_path, data)
-
-        logger.info("CPAT completion records processed successfully.")
-    else:
-        logger.error(f"Failed to fetch data: {response.status_code} - {response.text}")
-
-
-
-
-# def fixed_length(value, length):
-#     """Ensure the value is right-padded or truncated to the fixed length."""
-#     if value is None:
-#         value = ""
-#     value = str(value)
-#     return value[:length].ljust(length)
-
-
-def format_date(date_str):
-    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
-    if date_str:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
-    return ""
-
-
-# def generate_job8_file(records):
-#     """Generate the JOB8.txt file in the specified format."""
-#     file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
-#     with open(file_path, "w", newline="") as file:
-#         for record in records:
-#             staff_number = fixed_length(record["StaffNumber"], 8)
-#             expiry_code = fixed_length(record["ExpiryCode"], 6)
-#             last_done_date = record["LastDoneDate"] or ""
-#             expiry_date = record["ExpiryDate"] or ""
-
-#             # Write formatted row to file
-#             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
-
-#     logger.info(f"JOB8.txt file created at: {file_path}")
-#     return file_path
-
-def generate_job8_file(records):
-    """Generate the JOB8.txt file without adding padding to fields."""
-    file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
-    with open(file_path, "w", newline="") as file:
-        for record in records:
-            # Extract fields without padding
-            staff_number = str(record["StaffNumber"])  # Write as-is
-            expiry_code = str(record["ExpiryCode"])  # Write as-is
-            last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
-            expiry_date = record["ExpiryDate"] or ""  # Leave blank if missing
-
-            # Write the row to the file
-            file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
-
-    logger.info(f"JOB8.txt file created at: {file_path}")
-    return file_path
-
-
 import os
 import paramiko
 import time
@@ -423,6 +274,159 @@ def upload_acars_to_aims_server(local_file_path):
 
 
 
+
+#Tasks for CPAT project
+
+import os
+import requests
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+from django.conf import settings
+from .models import CompletionRecord
+import paramiko
+import logging
+from celery import shared_task
+
+logger = logging.getLogger(__name__)
+
+# Settings
+LMS_BASE_URL = settings.LMS_BASE_URL
+LMS_KEY = settings.LMS_KEY
+API_TOKEN = settings.API_TOKEN
+DAYS = settings.DAYS
+AIMS_HOST = settings.AIMS_SERVER_ADDRESS
+AIMS_PORT = int(settings.AIMS_PORT)
+AIMS_USERNAME = settings.AIMS_SERVER_USER
+AIMS_PASSWORD = settings.AIMS_SERVER_PASSWORD
+CPAT_AIMS_PATH = settings.CPAT_AIMS_PATH
+
+# Validity periods for courses
+VALIDITY_PERIODS = {
+    "FRMS": 12,     # Fatigue Education & Awareness Training
+    "ETPG": 36,     # ETOPS Ground
+    "LVO-G": 36,    # LVO Ground
+    "PBNGRN": 12,   # PBN Ground
+    "RVSMGS": 0,    # RVSM Ground (never expires)
+}
+
+def calculate_expiry_date(completion_date_str, course_code):
+    """Calculate expiry date based on completion date and course validity."""
+    if not completion_date_str:
+        return ""  # No completion date available
+    
+    completion_date = datetime.strptime(completion_date_str, "%Y-%m-%d")
+    validity_period = VALIDITY_PERIODS.get(course_code, 0)
+    
+    if validity_period == 0:
+        return ""  # No expiry date (never expires)
+    
+    expiry_date = completion_date + relativedelta(months=validity_period)
+    return expiry_date.strftime("%d%m%Y")
+
+def format_date(date_str):
+    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
+    if date_str:
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
+    return ""
+
+def generate_job8_file(records):
+    """Generate the JOB8.txt file without adding padding to fields."""
+    file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
+    with open(file_path, "w", newline="") as file:
+        for record in records:
+            # Extract fields without padding
+            staff_number = str(record["StaffNumber"])  # Write as-is
+            expiry_code = str(record["ExpiryCode"])  # Write as-is
+            last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
+            expiry_date = record["ExpiryDate"] or ""  # Leave blank if missing
+
+            # Write the row to the file
+            file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
+
+    logger.info(f"JOB8.txt file created at: {file_path}")
+    return file_path
+
+@shared_task
+def fetch_and_store_completion_records():
+    """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
+    url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
+    headers = {
+        "apitoken": API_TOKEN,
+        "Content-Type": "application/json",
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+        records_for_file = []
+
+        # Process each record
+        for record in data:
+            employee_id = record.get("EmployeeID")
+            course_code = record.get("CourseCode")
+
+            # Skip records with missing EmployeeID or CourseCode
+            if not employee_id:
+                logger.warning(f"Skipping record with missing EmployeeID: {record}")
+                continue
+
+            if not course_code:
+                logger.warning(f"Skipping record with missing CourseCode: {record}")
+                continue
+
+            # Check for existing record
+            existing_record = CompletionRecord.objects.filter(
+                employee_id=employee_id,
+                course_code=course_code,
+                completion_date=record.get("CompletionDate"),
+            ).first()
+
+            if existing_record:
+                is_identical = (
+                    existing_record.employee_email == record.get("EmployeeEmail") and
+                    existing_record.score == record.get("Score") and
+                    existing_record.time_in_seconds == record.get("TimeInSecond") and
+                    existing_record.start_date == record.get("StartDate") and
+                    existing_record.end_date == record.get("EndDate")
+                )
+                if is_identical:
+                    logger.info(f"Skipping identical record: {employee_id} - {course_code}")
+                    continue
+
+            # Update or create the record in the database
+            CompletionRecord.objects.update_or_create(
+                employee_id=employee_id,
+                course_code=course_code,
+                completion_date=record.get("CompletionDate"),
+                defaults={
+                    "employee_email": record.get("EmployeeEmail"),
+                    "score": record.get("Score"),
+                    "time_in_seconds": record.get("TimeInSecond"),
+                    "start_date": record.get("StartDate"),
+                    "end_date": record.get("EndDate"),
+                },
+            )
+
+            # Prepare record for JOB8.txt
+            records_for_file.append({
+                "StaffNumber": employee_id,
+                "ExpiryCode": course_code,
+                "LastDoneDate": format_date(record.get("CompletionDate")),
+                "ExpiryDate": calculate_expiry_date(record.get("CompletionDate"), course_code),
+            })
+
+        if not records_for_file:
+            logger.info("No new data to process.")
+            return
+
+        file_path = generate_job8_file(records_for_file)
+        upload_cpat_to_aims_server(file_path)
+
+        logger.info("CPAT completion records processed successfully.")
+    else:
+        logger.error(f"Failed to fetch data: {response.status_code} - {response.text}")
+
 def upload_cpat_to_aims_server(local_file_path):
     """Upload JOB8.txt to the AIMS server."""
     attempts = 3
@@ -455,41 +459,6 @@ def upload_cpat_to_aims_server(local_file_path):
     except Exception as e:
         logger.error(f"Error during JOB8.txt upload: {e}", exc_info=True)
 
-
-
-def email_job8_file(file_path, data):
-    """Email the JOB8.txt file to flight dispatch."""
-    subject = "CPAT Completion Records (JOB8.txt)"
-    body = (
-        "Dear Team,\n\n"
-        "Attached is the JOB8.txt file containing CPAT completion records.\n\n"
-        "Best regards,\nFlightOps Team"
-    )
-    recipient_list = [
-        settings.FIRST_CPAT_EMAIL_RECEIVER,
-        settings.SECOND_CPAT_EMAIL_RECEIVER,
-    ]
-
-    summary_file_path = None
-    if data:
-        summary_file_path = os.path.join(settings.MEDIA_ROOT, "CPAT_Summary.csv")
-        with open(summary_file_path, "w", newline="") as file:
-            writer = csv.DictWriter(file, fieldnames=data[0].keys())
-            writer.writeheader()
-            writer.writerows(data)
-
-    attachments = [file_path]
-    if summary_file_path:
-        attachments.append(summary_file_path)
-
-    send_mail(
-        subject=subject,
-        message=body,
-        from_email=settings.EMAIL_HOST_USER,
-        recipient_list=recipient_list,
-        fail_silently=False,
-    )
-    logger.info("JOB8.txt emailed to flight dispatch.")
 
 
 
@@ -557,64 +526,6 @@ crew_data = CrewMember.objects.filter(
 
 
 
-
-#Create a CSV file with flight and crew data
-# import csv
-# from django.conf import settings
-
-# def generate_csv_for_fdm(flight_data, crew_data):
-#     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
-#     file_path = f"{settings.MEDIA_ROOT}/{file_name}"  # Save in media folder
-
-#     # Open the file for writing
-#     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
-#         writer = csv.writer(csvfile)
-#         # Write header
-#         writer.writerow([
-#             "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
-#             "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA", "CREW_ID", "NAME", "ROLE"
-#         ])
-
-#         # Write flight data
-#         for flight in flight_data:
-#             flight_row = [
-#                 flight.sd_date_utc,  # DAY
-#                 flight.flight_no,  # FLT
-#                 flight.flight_type,  # FLTYPE
-#                 flight.tail_no,  # REG
-#                 flight.dep_code_icao,  # DEP
-#                 flight.arr_code_icao,  # ARR
-#                 flight.std_utc,  # STD
-#                 flight.sta_utc,  # STA
-#                 flight.takeoff_utc,  # TKOF
-#                 flight.touchdown_utc,  # TDOWN
-#                 flight.atd_utc,  # BLOF
-#                 flight.ata_utc,  # BLON
-#                 flight.etd_utc,  # ETD
-#                 flight.eta_utc,  # ETA
-#                 None,  # Placeholder for crew
-#                 None,  # Placeholder for name
-#                 None,  # Placeholder for role
-#             ]
-#             writer.writerow(flight_row)
-
-#             # Add crew details
-#             flight_crews = crew_data.filter(
-#                 flight_no=flight.flight_no,
-#                 sd_date_utc=flight.sd_date_utc
-#             )
-#             for crew in flight_crews:
-#                 crew_row = [
-#                     None, None, None, None, None, None, None, None,
-#                     None, None, None, None, None, None,  # Placeholder for flight columns
-#                     crew.crew_id,  # CREW_ID
-#                     crew.name,  # NAME
-#                     crew.get_role_display(),  # ROLE
-#                 ]
-#                 writer.writerow(crew_row)
-#     return file_path
-
-
 import csv
 import os
 import paramiko
@@ -674,72 +585,6 @@ def generate_csv_for_fdm(flight_data):
 
 
 
-
-# # Upload the CSV File to the AIMS Server
-
-# import os
-# import paramiko
-# import logging
-# from django.conf import settings
-# from paramiko.ssh_exception import SSHException, NoValidConnectionsError
-
-# # Initialize logger
-# logger = logging.getLogger(__name__)
-
-# @shared_task
-# def hourly_upload_csv_to_fdm():
-#     from django.utils.timezone import now, timedelta
-
-#     # Calculate the time range
-#     one_hour_ago = now() - timedelta(hours=1)
-
-#     # Fetch data
-#     flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
-#     crew_data = CrewMember.objects.filter(
-#         flight_no__in=flight_data.values_list('flight_no', flat=True),
-#         sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
-#     )
-
-#     # Generate CSV
-#     local_file_path = generate_csv_for_aims(flight_data, crew_data)
-
-#     # Fetch server details from settings
-#     fdm_host = settings.FDM_HOST
-#     fdm_port = int(settings.FDM_PORT)
-#     fdm_username = settings.FDM_USERNAME
-#     fdm_password = settings.FDM_PASSWORD
-#     fdm_destination_dir = settings.FDM_DESTINATION_DIR
-
-#     # Ensure the file exists
-#     if not os.path.exists(local_file_path):
-#         logger.error(f"File {local_file_path} does not exist. Skipping upload.")
-#         return
-
-#     try:
-#         # SFTP Upload Logic
-#         transport = paramiko.Transport((fdm_host, fdm_port))
-#         transport.connect(username=fdm_username, password=fdm_password)
-#         sftp = paramiko.SFTPClient.from_transport(transport)
-
-#         # Define remote path
-#         remote_path = os.path.join(fdm_destination_dir, os.path.basename(local_file_path))
-#         logger.info(f"Uploading file to {remote_path}...")
-
-#         # Upload file
-#         sftp.put(local_file_path, remote_path)
-#         logger.info(f"File successfully uploaded to {remote_path}.")
-
-#         # Log success
-#         logger.info(f"Upload completed successfully: {local_file_path} -> {remote_path}")
-
-#         # Close connections
-#         sftp.close()
-#         transport.close()
-
-#     except (SSHException, NoValidConnectionsError) as e:
-#         logger.error(f"SFTP upload failed: {e}", exc_info=True)
-#     except Exception as e:
-#         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
 
 import os
 import paramiko

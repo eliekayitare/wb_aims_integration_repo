@@ -98,9 +98,9 @@ class CargoFlightData(models.Model):
 from django.db import models
 
 class CompletionRecord(models.Model):
-    employee_id = models.CharField(max_length=100, db_index=True)  # Unique identifier for the employee
+    employee_id = models.CharField(max_length=100, null=True, blank=True)  # ID of the user
     employee_email = models.EmailField(max_length=255, null=True, blank=True)  # Email of the user
-    course_code = models.CharField(max_length=50, db_index=True)  # Identifier for the course
+    course_code = models.CharField(max_length=50, null=True, blank=True)  # Code of the course
     completion_date = models.DateTimeField(null=True, blank=True)  # Date of course completion
     score = models.FloatField(null=True, blank=True)  # Score achieved in the course
     time_in_seconds = models.PositiveIntegerField(null=True, blank=True)  # Time spent on the course
