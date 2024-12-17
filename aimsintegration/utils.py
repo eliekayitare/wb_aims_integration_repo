@@ -848,8 +848,8 @@ from .models import FdmFlightData, AirportData, FlightData
 
 def process_fdm_flight_schedule_file(attachment):
     """
-    Process the FDM flight schedule file using fixed column positions, 
-    accounting for spaces, and update FlightData and FdmFlightData.
+    Process the FDM flight schedule file using fixed column positions,
+    and ensure records are inserted or updated correctly without duplicates.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -896,23 +896,35 @@ def process_fdm_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code
                 arr_code_iata = arr_airport.iata_code
 
-                # Insert or update FdmFlightData
-                fdm_record, created = FdmFlightData.objects.get_or_create(
+                # Check for existing record in FdmFlightData
+                fdm_record = FdmFlightData.objects.filter(
                     flight_no=flight_no,
                     tail_no=tail_no,
-                    dep_code_icao=dep_code_icao,
-                    arr_code_icao=arr_code_icao,
                     sd_date_utc=sd_date_utc,
-                    defaults={
-                        'std_utc': std_utc_time,
-                        'sta_utc': sta_utc_time,
-                        'sa_date_utc': sa_date_utc,
-                        'raw_content': line
-                    }
-                )
-                logger.info(f"{'Created' if created else 'Found'} FDM record for flight {flight_no} on {sd_date_utc}")
+                    dep_code_icao=dep_code_icao,
+                    arr_code_icao=arr_code_icao
+                ).first()
 
-                # Insert or update FlightData
+                if fdm_record:
+                    logger.info(f"FDM record already exists for flight {flight_no} on {sd_date_utc}. Skipping.")
+                else:
+                    # Insert new FdmFlightData record
+                    FdmFlightData.objects.create(
+                        flight_no=flight_no,
+                        tail_no=tail_no,
+                        dep_code_iata=dep_code_iata,
+                        dep_code_icao=dep_code_icao,
+                        arr_code_iata=arr_code_iata,
+                        arr_code_icao=arr_code_icao,
+                        sd_date_utc=sd_date_utc,
+                        std_utc=std_utc_time,
+                        sta_utc=sta_utc_time,
+                        sa_date_utc=sa_date_utc,
+                        raw_content=line
+                    )
+                    logger.info(f"Inserted new FDM record for flight {flight_no} on {sd_date_utc}")
+
+                # Ensure uniqueness in FlightData
                 flight_data, created = FlightData.objects.get_or_create(
                     flight_no=flight_no,
                     dep_code_iata=dep_code_iata,
@@ -928,29 +940,6 @@ def process_fdm_flight_schedule_file(attachment):
                     }
                 )
 
-                # Update only missing actual timing fields
-                updated = False
-                if not flight_data.atd_utc and atd_utc_time:
-                    flight_data.atd_utc = atd_utc_time
-                    updated = True
-                if not flight_data.takeoff_utc and takeoff_utc_time:
-                    flight_data.takeoff_utc = takeoff_utc_time
-                    updated = True
-                if not flight_data.touchdown_utc and touchdown_utc_time:
-                    flight_data.touchdown_utc = touchdown_utc_time
-                    updated = True
-                if not flight_data.ata_utc and ata_utc_time:
-                    flight_data.ata_utc = ata_utc_time
-                    updated = True
-
-                if updated:
-                    flight_data.save()
-                    logger.info(f"Updated missing actual timing fields for flight {flight_no} on {sd_date_utc}.")
-                elif created:
-                    logger.info(f"Inserted new FlightData record for flight {flight_no} on {sd_date_utc}.")
-                else:
-                    logger.info(f"No updates needed for FlightData record for flight {flight_no}.")
-
             except Exception as e:
                 logger.error(f"Error processing line {line_num}: {e} - {line}")
                 continue
@@ -959,6 +948,7 @@ def process_fdm_flight_schedule_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing FDM flight schedule file: {e}", exc_info=True)
+
 
 
 
