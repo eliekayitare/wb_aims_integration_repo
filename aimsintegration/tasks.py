@@ -377,12 +377,12 @@ def fetch_and_store_completion_records():
                 if employee_id.upper().startswith("WB"):
                     employee_id = employee_id[2:]  # Remove the 'WB' prefix
 
-                course_code = record.get("CourseCode")
-                completion_date = record.get("CompletionDate")
+                course_code = record.get("courseCode")
+                completion_date = record.get("completionDate")
 
                 # Validate critical fields
                 if not employee_id:
-                    logger.warning(f"Skipping record due to missing or invalid EmployeeID: {record.get('EmployeeID')}")
+                    logger.warning(f"Skipping record due to missing or invalid EmployeeID: {record.get('employeeID')}")
                     continue
 
                 if not course_code and not completion_date:
