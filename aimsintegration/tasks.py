@@ -357,7 +357,9 @@ def fetch_and_store_completion_records():
 
     if response.status_code == 200:
         data = response.json()
-
+        print("===============================================")
+        print(data)
+        print("===============================================")
         # Debugging: Log the raw API response for inspection
         logger.debug(f"API Response: {data}")
 
@@ -372,7 +374,7 @@ def fetch_and_store_completion_records():
                     continue
 
                 # Strip any whitespace around the EmployeeID and remove 'WB' prefix if present
-                employee_id = record.get("EmployeeID", "").strip()
+                employee_id = record.get("employeeID", "").strip()
                 # Remove 'WB' prefix, case-insensitively
                 if employee_id.upper().startswith("WB"):
                     employee_id = employee_id[2:]  # Remove the 'WB' prefix
