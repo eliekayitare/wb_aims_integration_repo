@@ -409,11 +409,11 @@ def fetch_and_store_completion_records():
                     course_code=course_code,
                     completion_date=completion_date,
                     defaults={
-                        "employee_email": record.get("EmployeeEmail"),
-                        "score": record.get("Score"),
-                        "time_in_seconds": record.get("TimeInSecond"),
-                        "start_date": record.get("StartDate"),
-                        "end_date": record.get("EndDate"),
+                        "employee_email": record.get("employeeEmail"),
+                        "score": record.get("score"),
+                        "time_in_seconds": record.get("timeInSecond"),
+                        "start_date": record.get("startDate"),
+                        "end_date": record.get("endDate"),
                     },
                 )
 
