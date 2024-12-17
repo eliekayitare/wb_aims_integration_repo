@@ -357,9 +357,7 @@ def fetch_and_store_completion_records():
 
     if response.status_code == 200:
         data = response.json()
-        print("===============================================")
-        print(data)
-        print("===============================================")
+
         # Debugging: Log the raw API response for inspection
         logger.debug(f"API Response: {data}")
 
