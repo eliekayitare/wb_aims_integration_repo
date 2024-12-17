@@ -339,6 +339,7 @@ def generate_job8_file(records):
             last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
             expiry_date = record["ExpiryDate"] or ""       # Leave blank if missing
 
+            # Format and write the record
             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
 
     logger.info(f"JOB8.txt file created at: {file_path}")
@@ -374,8 +375,11 @@ def fetch_and_store_completion_records():
                     logger.warning(f"Skipping invalid record (not a dictionary): {record}")
                     continue
 
-                # Strip any whitespace around the EmployeeID
+                # Strip any whitespace around the EmployeeID and remove 'WB' prefix if present
                 employee_id = record.get("EmployeeID", "").strip()
+                if employee_id.startswith("WB"):
+                    employee_id = employee_id[2:]  # Remove the 'WB' prefix
+
                 course_code = record.get("CourseCode")
                 completion_date = record.get("CompletionDate")
 
@@ -475,6 +479,7 @@ def upload_cpat_to_aims_server(local_file_path):
                     time.sleep(delay)
     except Exception as e:
         logger.error(f"Error during JOB8.txt upload: {e}", exc_info=True)
+
 
 
 
