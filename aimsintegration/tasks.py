@@ -324,22 +324,27 @@ def calculate_expiry_date(completion_date_str, course_code):
     return expiry_date.strftime("%d%m%Y")
 
 def format_date(date_str):
-    """Return the date as-is, assuming it's already in DDMMYYYY format, or return an empty string."""
+    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
     if date_str:
-        return date_str  # Return the date string as it is in the response
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
     return ""
 
+def remove_wb_prefix(employee_id):
+    """Remove 'WB' prefix from the employee ID."""
+    return employee_id.replace("WB", "") if employee_id else ""
 
 def generate_job8_file(records):
-    """Generate the JOB8.txt file without adding padding to fields."""
+    """Generate the JOB8.txt file."""
     file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
     with open(file_path, "w", newline="") as file:
         for record in records:
-            staff_number = str(record["StaffNumber"])  # Write as-is
-            expiry_code = str(record["ExpiryCode"])    # Write as-is
+            # Extract fields
+            staff_number = remove_wb_prefix(record["StaffNumber"])  # Strip 'WB' prefix
+            expiry_code = record["ExpiryCode"]  # Write as-is
             last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
-            expiry_date = record["ExpiryDate"] or ""       # Leave blank if missing
+            expiry_date = record["ExpiryDate"] or ""  # Leave blank if missing
 
+            # Write the row to the file
             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
 
     logger.info(f"JOB8.txt file created at: {file_path}")
@@ -349,101 +354,52 @@ def generate_job8_file(records):
 def fetch_and_store_completion_records():
     """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
     url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
-    headers = {
-        "apitoken": API_TOKEN,
-        "Content-Type": "application/json",
-    }
+    headers = {"apitoken": API_TOKEN, "Content-Type": "application/json"}
 
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
         data = response.json()
-
-        # Debugging: Log the raw API response for inspection
-        logger.debug(f"API Response: {data}")
-
         records_for_file = []
 
         # Process each record
         for record in data:
-            try:
-                # Ensure the record is a valid dictionary and contains the required fields
-                if not isinstance(record, dict):
-                    logger.warning(f"Skipping invalid record (not a dictionary): {record}")
-                    continue
+            employee_id = record.get("employeeID")
+            course_code = record.get("courseCode")
+            completion_date = record.get("completionDate")
 
-                # Strip any whitespace around the EmployeeID and remove 'WB' prefix if present
-                employee_id = record.get("employeeID", "").strip()
-                # Remove 'WB' prefix, case-insensitively
-                if employee_id.upper().startswith("WB"):
-                    employee_id = employee_id[2:]  # Remove the 'WB' prefix
+            # Skip records with missing EmployeeID or CourseCode
+            if not employee_id or not completion_date:
+                logger.warning(f"Skipping record due to missing data: {record}")
+                continue
 
-                course_code = record.get("courseCode")
-                completion_date = record.get("completionDate")
+            # Check for existing record
+            existing_record, created = CompletionRecord.objects.update_or_create(
+                employee_id=employee_id,
+                course_code=course_code,
+                completion_date=datetime.strptime(completion_date, "%d%m%Y").date(),
+                defaults={
+                    "employee_email": record.get("employeeEmail"),
+                    "score": record.get("score"),
+                    "time_in_seconds": record.get("timeInSecond"),
+                    "start_date": datetime.strptime(record.get("startDate"), "%d%m%Y").date(),
+                    "end_date": datetime.strptime(record.get("endDate"), "%d%m%Y").date(),
+                },
+            )
 
-                # Validate critical fields
-                if not employee_id:
-                    logger.warning(f"Skipping record due to missing or invalid EmployeeID: {record.get('employeeID')}")
-                    continue
-
-                if not course_code and not completion_date:
-                    logger.warning(f"Skipping record due to missing CourseCode and CompletionDate: {record}")
-                    continue
-
-                # Format dates
-                formatted_date = format_date(completion_date)
-
-                # Check for existing record
-                existing_record = CompletionRecord.objects.filter(
-                    employee_id=employee_id,
-                    course_code=course_code,
-                    completion_date=completion_date,
-                ).first()
-
-                if existing_record:
-                    logger.info(f"Skipping identical record: {employee_id} - {course_code}")
-                    continue
-
-                # Insert or update record
-                CompletionRecord.objects.update_or_create(
-                    employee_id=employee_id,
-                    course_code=course_code,
-                    completion_date=completion_date,
-                    defaults={
-                        "employee_email": record.get("employeeEmail"),
-                        "score": record.get("score"),
-                        "time_in_seconds": record.get("timeInSecond"),
-                        "start_date": record.get("startDate"),
-                        "end_date": record.get("endDate"),
-                    },
-                )
-
-                # Prepare data for file generation
-                expiry_date = calculate_expiry_date(completion_date, course_code)
-                records_for_file.append({
-                    "StaffNumber": employee_id,
-                    "ExpiryCode": course_code,
-                    "LastDoneDate": formatted_date,
-                    "ExpiryDate": expiry_date,
-                })
-
-                # Log the successfully processed records
-                logger.info(f"Processed record: {employee_id} - {course_code}")
-
-            except Exception as e:
-                logger.error(f"Error processing record: {record} - {e}", exc_info=True)
+            # Prepare record for JOB8.txt
+            records_for_file.append({
+                "StaffNumber": employee_id,
+                "ExpiryCode": course_code,
+                "LastDoneDate": format_date(completion_date),
+                "ExpiryDate": calculate_expiry_date(completion_date, course_code),
+            })
 
         if not records_for_file:
-            logger.info("No new records to process for JOB8.txt.")
+            logger.info("No new data to process.")
             return
 
-        # Generate JOB8.txt
         file_path = generate_job8_file(records_for_file)
-        if not os.path.exists(file_path) or os.stat(file_path).st_size == 0:
-            logger.error("Generated JOB8.txt is empty. Aborting upload.")
-            return
-
-        # Upload file
         upload_cpat_to_aims_server(file_path)
 
         logger.info("CPAT completion records processed successfully.")
@@ -481,6 +437,7 @@ def upload_cpat_to_aims_server(local_file_path):
                     time.sleep(delay)
     except Exception as e:
         logger.error(f"Error during JOB8.txt upload: {e}", exc_info=True)
+
 
 
 

@@ -101,11 +101,11 @@ class CompletionRecord(models.Model):
     employee_id = models.CharField(max_length=100, null=True, blank=True)  # ID of the user
     employee_email = models.EmailField(max_length=255, null=True, blank=True)  # Email of the user
     course_code = models.CharField(max_length=50, null=True, blank=True)  # Code of the course
-    completion_date = models.DateTimeField(null=True, blank=True)  # Date of course completion
+    completion_date = models.DateField(null=True, blank=True)  # Date of course completion
     score = models.FloatField(null=True, blank=True)  # Score achieved in the course
     time_in_seconds = models.PositiveIntegerField(null=True, blank=True)  # Time spent on the course
-    start_date = models.DateTimeField(null=True, blank=True)  # Start date of the course
-    end_date = models.DateTimeField(null=True, blank=True)  # End date of the course
+    start_date = models.DateField(null=True, blank=True)  # Start date of the course
+    end_date = models.DateField(null=True, blank=True)  # End date of the course
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
     updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
 
