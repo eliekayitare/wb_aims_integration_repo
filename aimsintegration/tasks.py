@@ -350,7 +350,7 @@ def generate_job8_file(records):
     return file_path
 
 
-def upload_to_aims_server(local_file_path):
+def upload_cpat_to_aims_server(local_file_path):
     """Upload file to AIMS server with retries."""
     attempts = 3
     delay = 5
@@ -375,7 +375,7 @@ def upload_to_aims_server(local_file_path):
 
 @shared_task
 def fetch_and_store_completion_records():
-    """Fetch records, update database, generate JOB8.txt, and upload."""
+    """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
     url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
     headers = {"apitoken": API_TOKEN, "Content-Type": "application/json"}
 
@@ -388,55 +388,81 @@ def fetch_and_store_completion_records():
 
     data = response.json()
     records_for_file = []
+    skipped_records = []
 
     for record in data:
         try:
             employee_id = record.get("EmployeeID")
             course_code = record.get("CourseCode")
             completion_date = record.get("CompletionDate")
+            start_date = record.get("StartDate")
+            end_date = record.get("EndDate")
 
-            # Validation
+            # Validate critical fields
             if not employee_id or not course_code or not completion_date:
                 logger.warning(f"Skipping record due to missing data: {record}")
+                skipped_records.append(record)
                 continue
 
-            # Parse and format dates
-            parsed_completion_date = parse_date(completion_date)
-            formatted_date = format_date(completion_date)
+            # Format and validate completion date
+            try:
+                completion_date_formatted = datetime.strptime(completion_date, "%d%m%Y").date()
+            except ValueError:
+                logger.warning(f"Skipping record due to invalid completionDate: {record}")
+                skipped_records.append(record)
+                continue
 
-            # Update or insert record
+            # Check for existing record
+            existing_record = CompletionRecord.objects.filter(
+                employee_id=employee_id,
+                course_code=course_code,
+                completion_date=completion_date_formatted,
+            ).first()
+
+            if existing_record:
+                logger.info(f"Skipping identical record: {employee_id} - {course_code}")
+                continue
+
+            # Insert or update record
             CompletionRecord.objects.update_or_create(
                 employee_id=employee_id,
                 course_code=course_code,
-                completion_date=parsed_completion_date,
+                completion_date=completion_date_formatted,
                 defaults={
                     "employee_email": record.get("EmployeeEmail"),
                     "score": record.get("Score", 0.0),
                     "time_in_seconds": record.get("TimeInSecond", 0),
-                    "start_date": parse_date(record.get("StartDate")),
-                    "end_date": parse_date(record.get("EndDate")),
+                    "start_date": datetime.strptime(start_date, "%d%m%Y").date() if start_date else None,
+                    "end_date": datetime.strptime(end_date, "%d%m%Y").date() if end_date else None,
                 },
             )
 
-            # Prepare data for file generation
-            expiry_date = calculate_expiry_date(parsed_completion_date, course_code)
+            # Prepare record for JOB8.txt
+            expiry_date = calculate_expiry_date(completion_date_formatted.strftime("%Y-%m-%d"), course_code)
             records_for_file.append({
                 "StaffNumber": employee_id,
                 "ExpiryCode": course_code,
-                "LastDoneDate": formatted_date,
+                "LastDoneDate": completion_date_formatted.strftime("%d%m%Y"),
                 "ExpiryDate": expiry_date,
             })
 
         except Exception as e:
-            logger.error(f"Error processing record {record}: {e}", exc_info=True)
+            logger.error(f"Error processing record: {record} - {e}", exc_info=True)
 
-    if records_for_file:
-        file_path = generate_job8_file(records_for_file)
-        upload_to_aims_server(file_path)
-    else:
+    if not records_for_file:
         logger.info("No new records to process for JOB8.txt.")
+        return
 
+    # Generate JOB8.txt
+    file_path = generate_job8_file(records_for_file)
+    if not os.path.exists(file_path) or os.stat(file_path).st_size == 0:
+        logger.error("Generated JOB8.txt is empty. Aborting upload.")
+        return
 
+    # Upload file
+    upload_cpat_to_aims_server(file_path)
+
+    logger.info("CPAT completion records processed successfully.")
 
 
 
