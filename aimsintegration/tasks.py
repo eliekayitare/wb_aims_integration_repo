@@ -339,7 +339,6 @@ def generate_job8_file(records):
             last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
             expiry_date = record["ExpiryDate"] or ""       # Leave blank if missing
 
-            # Format and write the record
             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
 
     logger.info(f"JOB8.txt file created at: {file_path}")
@@ -383,11 +382,11 @@ def fetch_and_store_completion_records():
 
                 # Validate critical fields
                 if not employee_id:
-                    logger.warning(f"Skipping record due to missing or invalid EmployeeID.")
+                    logger.warning(f"Skipping record due to missing or invalid EmployeeID: {record.get('EmployeeID')}")
                     continue
 
                 if not course_code and not completion_date:
-                    logger.warning(f"Skipping record due to missing CourseCode and CompletionDate.")
+                    logger.warning(f"Skipping record due to missing CourseCode and CompletionDate: {record}")
                     continue
 
                 # Format dates
