@@ -324,10 +324,11 @@ def calculate_expiry_date(completion_date_str, course_code):
     return expiry_date.strftime("%d%m%Y")
 
 def format_date(date_str):
-    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
+    """Return the date as-is, assuming it's already in DDMMYYYY format, or return an empty string."""
     if date_str:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
+        return date_str  # Return the date string as it is in the response
     return ""
+
 
 def generate_job8_file(records):
     """Generate the JOB8.txt file without adding padding to fields."""
