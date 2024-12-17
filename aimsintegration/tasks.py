@@ -368,7 +368,10 @@ def generate_job8_file(records):
 def fetch_and_store_completion_records():
     """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
     url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
-    headers = {"apitoken": API_TOKEN, "Content-Type": "application/json"}
+    headers = {
+        "apitoken": API_TOKEN,
+        "Content-Type": "application/json",
+    }
 
     response = requests.get(url, headers=headers)
 
@@ -378,39 +381,73 @@ def fetch_and_store_completion_records():
 
         # Process each record
         for record in data:
-            employee_id = record.get("employeeID")
-            course_code = record.get("courseCode")
-            completion_date = record.get("completionDate")
+            try:
+                employee_id = record.get("employeeID")
+                course_code = record.get("courseCode")
+                completion_date = record.get("completionDate")
+                start_date = record.get("startDate")
+                end_date = record.get("endDate")
 
-            # Skip records with missing EmployeeID or CourseCode
-            if not employee_id or not completion_date:
-                logger.warning(f"Skipping record due to missing data: {record}")
+                # Skip records with missing employeeID or courseCode
+                if not employee_id or not course_code:
+                    logger.warning(f"Skipping record due to missing EmployeeID or CourseCode: {record}")
+                    continue
+
+                # Parse dates in DDMMYYYY format
+                parsed_completion_date = datetime.strptime(completion_date, "%d%m%Y").date() if completion_date else None
+                parsed_start_date = datetime.strptime(start_date, "%d%m%Y").date() if start_date else None
+                parsed_end_date = datetime.strptime(end_date, "%d%m%Y").date() if end_date else None
+
+                # Check for existing record
+                existing_record = CompletionRecord.objects.filter(
+                    employee_id=employee_id,
+                    course_code=course_code,
+                    completion_date=parsed_completion_date,
+                ).first()
+
+                if existing_record:
+                    is_identical = (
+                        existing_record.employee_email == record.get("employeeEmail") and
+                        existing_record.score == record.get("score") and
+                        existing_record.time_in_seconds == record.get("timeInSecond") and
+                        existing_record.start_date == parsed_start_date and
+                        existing_record.end_date == parsed_end_date
+                    )
+                    if is_identical:
+                        logger.info(f"Skipping identical record: {employee_id} - {course_code}")
+                        continue
+
+                # Update or create the record in the database
+                CompletionRecord.objects.update_or_create(
+                    employee_id=employee_id,
+                    course_code=course_code,
+                    completion_date=parsed_completion_date,
+                    defaults={
+                        "employee_email": record.get("employeeEmail"),
+                        "score": record.get("score"),
+                        "time_in_seconds": record.get("timeInSecond"),
+                        "start_date": parsed_start_date,
+                        "end_date": parsed_end_date,
+                    },
+                )
+
+                # Prepare record for JOB8.txt
+                records_for_file.append({
+                    "StaffNumber": employee_id.replace("WB", ""),  # Strip "WB" prefix
+                    "ExpiryCode": course_code,
+                    "LastDoneDate": format_date(completion_date),
+                    "ExpiryDate": calculate_expiry_date(completion_date, course_code),
+                })
+            except ValueError as e:
+                logger.error(f"Date parsing error for record: {record} - {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error processing record: {record} - {e}", exc_info=True)
                 continue
 
-            # Check for existing record
-            existing_record, created = CompletionRecord.objects.update_or_create(
-                employee_id=employee_id,
-                course_code=course_code,
-                completion_date=datetime.strptime(completion_date, "%d%m%Y").date(),
-                defaults={
-                    "employee_email": record.get("employeeEmail"),
-                    "score": record.get("score"),
-                    "time_in_seconds": record.get("timeInSecond"),
-                    "start_date": datetime.strptime(record.get("startDate"), "%d%m%Y").date(),
-                    "end_date": datetime.strptime(record.get("endDate"), "%d%m%Y").date(),
-                },
-            )
-
-            # Prepare record for JOB8.txt
-            records_for_file.append({
-                "StaffNumber": employee_id,
-                "ExpiryCode": course_code,
-                "LastDoneDate": format_date(completion_date),
-                "ExpiryDate": calculate_expiry_date(completion_date, course_code),
-            })
-
+        # Generate JOB8.txt only if records exist
         if not records_for_file:
-            logger.info("No new data to process.")
+            logger.info("No valid records to process for JOB8.txt.")
             return
 
         file_path = generate_job8_file(records_for_file)
@@ -419,6 +456,7 @@ def fetch_and_store_completion_records():
         logger.info("CPAT completion records processed successfully.")
     else:
         logger.error(f"Failed to fetch data: {response.status_code} - {response.text}")
+
 
 def upload_cpat_to_aims_server(local_file_path):
     """Upload JOB8.txt to the AIMS server."""
