@@ -388,10 +388,10 @@ def fetch_and_store_completion_records():
 
     data = response.json()
     records_for_file = []
-    skipped_records = []
 
     for record in data:
         try:
+            # Extract required fields
             employee_id = record.get("EmployeeID")
             course_code = record.get("CourseCode")
             completion_date = record.get("CompletionDate")
@@ -401,22 +401,24 @@ def fetch_and_store_completion_records():
             # Validate critical fields
             if not employee_id or not course_code or not completion_date:
                 logger.warning(f"Skipping record due to missing data: {record}")
-                skipped_records.append(record)
                 continue
 
-            # Format and validate completion date
+            # Parse completion date
             try:
-                completion_date_formatted = datetime.strptime(completion_date, "%d%m%Y").date()
+                completion_date_parsed = datetime.strptime(completion_date, "%d%m%Y").date()
             except ValueError:
-                logger.warning(f"Skipping record due to invalid completionDate: {record}")
-                skipped_records.append(record)
+                logger.warning(f"Skipping record due to invalid completionDate format: {record}")
                 continue
+
+            # Parse start and end dates safely
+            start_date_parsed = datetime.strptime(start_date, "%d%m%Y").date() if start_date else None
+            end_date_parsed = datetime.strptime(end_date, "%d%m%Y").date() if end_date else None
 
             # Check for existing record
             existing_record = CompletionRecord.objects.filter(
                 employee_id=employee_id,
                 course_code=course_code,
-                completion_date=completion_date_formatted,
+                completion_date=completion_date_parsed,
             ).first()
 
             if existing_record:
@@ -427,22 +429,22 @@ def fetch_and_store_completion_records():
             CompletionRecord.objects.update_or_create(
                 employee_id=employee_id,
                 course_code=course_code,
-                completion_date=completion_date_formatted,
+                completion_date=completion_date_parsed,
                 defaults={
                     "employee_email": record.get("EmployeeEmail"),
                     "score": record.get("Score", 0.0),
                     "time_in_seconds": record.get("TimeInSecond", 0),
-                    "start_date": datetime.strptime(start_date, "%d%m%Y").date() if start_date else None,
-                    "end_date": datetime.strptime(end_date, "%d%m%Y").date() if end_date else None,
+                    "start_date": start_date_parsed,
+                    "end_date": end_date_parsed,
                 },
             )
 
             # Prepare record for JOB8.txt
-            expiry_date = calculate_expiry_date(completion_date_formatted.strftime("%Y-%m-%d"), course_code)
+            expiry_date = calculate_expiry_date(completion_date_parsed.strftime("%Y-%m-%d"), course_code)
             records_for_file.append({
                 "StaffNumber": employee_id,
                 "ExpiryCode": course_code,
-                "LastDoneDate": completion_date_formatted.strftime("%d%m%Y"),
+                "LastDoneDate": completion_date_parsed.strftime("%d%m%Y"),
                 "ExpiryDate": expiry_date,
             })
 
