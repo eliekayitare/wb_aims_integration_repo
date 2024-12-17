@@ -279,6 +279,7 @@ def upload_acars_to_aims_server(local_file_path):
 
 import os
 import requests
+import time
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
@@ -302,162 +303,139 @@ CPAT_AIMS_PATH = settings.CPAT_AIMS_PATH
 
 # Validity periods for courses
 VALIDITY_PERIODS = {
-    "FRMS": 12,     # Fatigue Education & Awareness Training
-    "ETPG": 36,     # ETOPS Ground
-    "LVO-G": 36,    # LVO Ground
-    "PBNGRN": 12,   # PBN Ground
-    "RVSMGS": 0,    # RVSM Ground (never expires)
+    "FRMS": 12,
+    "ETPG": 36,
+    "LVO-G": 36,
+    "PBNGRN": 12,
+    "RVSMGS": 0,
 }
 
-def calculate_expiry_date(completion_date_str, course_code):
-    """Calculate expiry date based on completion date and course validity."""
-    if not completion_date_str:
-        return ""  # No completion date available
-    
-    completion_date = datetime.strptime(completion_date_str, "%Y-%m-%d")
+
+def parse_date(date_str):
+    """Safely parse date from 'YYYY-MM-DD' format."""
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+
+
+def calculate_expiry_date(completion_date, course_code):
+    """Calculate expiry date based on course validity."""
+    if not completion_date:
+        return ""
     validity_period = VALIDITY_PERIODS.get(course_code, 0)
-    
     if validity_period == 0:
-        return ""  # No expiry date (never expires)
-    
+        return ""
     expiry_date = completion_date + relativedelta(months=validity_period)
     return expiry_date.strftime("%d%m%Y")
 
+
 def format_date(date_str):
-    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
-    if date_str:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
-    return ""
+    """Convert date from 'YYYY-MM-DD' to 'DDMMYYYY' format."""
+    date = parse_date(date_str)
+    return date.strftime("%d%m%Y") if date else ""
+
 
 def generate_job8_file(records):
-    """Generate the JOB8.txt file without adding padding to fields."""
+    """Generate the JOB8.txt file."""
     file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
     with open(file_path, "w", newline="") as file:
         for record in records:
-            # Extract fields without padding
-            staff_number = str(record["StaffNumber"])  # Write as-is
-            expiry_code = str(record["ExpiryCode"])  # Write as-is
-            last_done_date = record["LastDoneDate"] or ""  # Leave blank if missing
-            expiry_date = record["ExpiryDate"] or ""  # Leave blank if missing
-
-            # Write the row to the file
+            staff_number = record.get("StaffNumber", "")
+            expiry_code = record.get("ExpiryCode", "")
+            last_done_date = record.get("LastDoneDate", "")
+            expiry_date = record.get("ExpiryDate", "")
             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
-
-    logger.info(f"JOB8.txt file created at: {file_path}")
+    logger.info(f"JOB8.txt file created: {file_path}")
     return file_path
+
+
+def upload_to_aims_server(local_file_path):
+    """Upload file to AIMS server with retries."""
+    attempts = 3
+    delay = 5
+    if not os.path.exists(local_file_path):
+        logger.error(f"File {local_file_path} does not exist.")
+        return
+
+    remote_path = os.path.join(CPAT_AIMS_PATH, os.path.basename(local_file_path))
+    for attempt in range(1, attempts + 1):
+        try:
+            with paramiko.Transport((AIMS_HOST, AIMS_PORT)) as transport:
+                transport.connect(username=AIMS_USERNAME, password=AIMS_PASSWORD)
+                with paramiko.SFTPClient.from_transport(transport) as sftp:
+                    sftp.put(local_file_path, remote_path)
+            logger.info(f"File successfully uploaded to {remote_path}")
+            return
+        except Exception as e:
+            logger.error(f"Upload attempt {attempt} failed: {e}")
+            time.sleep(delay)
+    logger.error("All upload attempts failed.")
+
 
 @shared_task
 def fetch_and_store_completion_records():
-    """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
+    """Fetch records, update database, generate JOB8.txt, and upload."""
     url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
-    headers = {
-        "apitoken": API_TOKEN,
-        "Content-Type": "application/json",
-    }
+    headers = {"apitoken": API_TOKEN, "Content-Type": "application/json"}
 
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch data: {e}")
+        return
 
-    if response.status_code == 200:
-        data = response.json()
-        records_for_file = []
+    data = response.json()
+    records_for_file = []
 
-        # Process each record
-        for record in data:
+    for record in data:
+        try:
             employee_id = record.get("EmployeeID")
             course_code = record.get("CourseCode")
+            completion_date = record.get("CompletionDate")
 
-            # Skip records with missing EmployeeID or CourseCode
-            if not employee_id:
-                logger.warning(f"Skipping record with missing EmployeeID: {record}")
+            # Validation
+            if not employee_id or not course_code or not completion_date:
+                logger.warning(f"Skipping record due to missing data: {record}")
                 continue
 
-            if not course_code:
-                logger.warning(f"Skipping record with missing CourseCode: {record}")
-                continue
+            # Parse and format dates
+            parsed_completion_date = parse_date(completion_date)
+            formatted_date = format_date(completion_date)
 
-            # Check for existing record
-            existing_record = CompletionRecord.objects.filter(
-                employee_id=employee_id,
-                course_code=course_code,
-                completion_date=record.get("CompletionDate"),
-            ).first()
-
-            if existing_record:
-                is_identical = (
-                    existing_record.employee_email == record.get("EmployeeEmail") and
-                    existing_record.score == record.get("Score") and
-                    existing_record.time_in_seconds == record.get("TimeInSecond") and
-                    existing_record.start_date == record.get("StartDate") and
-                    existing_record.end_date == record.get("EndDate")
-                )
-                if is_identical:
-                    logger.info(f"Skipping identical record: {employee_id} - {course_code}")
-                    continue
-
-            # Update or create the record in the database
+            # Update or insert record
             CompletionRecord.objects.update_or_create(
                 employee_id=employee_id,
                 course_code=course_code,
-                completion_date=record.get("CompletionDate"),
+                completion_date=parsed_completion_date,
                 defaults={
                     "employee_email": record.get("EmployeeEmail"),
-                    "score": record.get("Score"),
-                    "time_in_seconds": record.get("TimeInSecond"),
-                    "start_date": record.get("StartDate"),
-                    "end_date": record.get("EndDate"),
+                    "score": record.get("Score", 0.0),
+                    "time_in_seconds": record.get("TimeInSecond", 0),
+                    "start_date": parse_date(record.get("StartDate")),
+                    "end_date": parse_date(record.get("EndDate")),
                 },
             )
 
-            # Prepare record for JOB8.txt
+            # Prepare data for file generation
+            expiry_date = calculate_expiry_date(parsed_completion_date, course_code)
             records_for_file.append({
                 "StaffNumber": employee_id,
                 "ExpiryCode": course_code,
-                "LastDoneDate": format_date(record.get("CompletionDate")),
-                "ExpiryDate": calculate_expiry_date(record.get("CompletionDate"), course_code),
+                "LastDoneDate": formatted_date,
+                "ExpiryDate": expiry_date,
             })
 
-        if not records_for_file:
-            logger.info("No new data to process.")
-            return
+        except Exception as e:
+            logger.error(f"Error processing record {record}: {e}", exc_info=True)
 
+    if records_for_file:
         file_path = generate_job8_file(records_for_file)
-        upload_cpat_to_aims_server(file_path)
-
-        logger.info("CPAT completion records processed successfully.")
+        upload_to_aims_server(file_path)
     else:
-        logger.error(f"Failed to fetch data: {response.status_code} - {response.text}")
+        logger.info("No new records to process for JOB8.txt.")
 
-def upload_cpat_to_aims_server(local_file_path):
-    """Upload JOB8.txt to the AIMS server."""
-    attempts = 3
-    delay = 5
-
-    try:
-        if not os.path.exists(local_file_path):
-            logger.error(f"File {local_file_path} does not exist.")
-            return
-
-        cpat_remote_path = os.path.join(CPAT_AIMS_PATH, os.path.basename(local_file_path))
-        logger.info(f"Uploading JOB8.txt to: {cpat_remote_path}")
-
-        for attempt in range(attempts):
-            try:
-                transport = paramiko.Transport((AIMS_HOST, AIMS_PORT))
-                transport.connect(username=AIMS_USERNAME, password=AIMS_PASSWORD)
-                sftp = paramiko.SFTPClient.from_transport(transport)
-
-                sftp.put(local_file_path, cpat_remote_path)
-                logger.info(f"JOB8.txt uploaded successfully to {cpat_remote_path}.")
-                
-                sftp.close()
-                transport.close()
-                break
-            except Exception as e:
-                logger.error(f"Upload attempt {attempt + 1} failed: {e}", exc_info=True)
-                if attempt < attempts - 1:
-                    time.sleep(delay)
-    except Exception as e:
-        logger.error(f"Error during JOB8.txt upload: {e}", exc_info=True)
 
 
 
