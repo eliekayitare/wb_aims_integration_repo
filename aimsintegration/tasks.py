@@ -331,7 +331,7 @@ def format_date(date_str):
 
 def generate_job8_file(records):
     """Generate the JOB8.txt file without adding padding to fields."""
-    file_path = os.path.join(settings.MEDIA_ROOT, "CPAT.txt")
+    file_path = os.path.join(settings.MEDIA_ROOT, "JOB8.txt")
     with open(file_path, "w", newline="") as file:
         for record in records:
             staff_number = str(record["StaffNumber"])  # Write as-is
@@ -341,12 +341,12 @@ def generate_job8_file(records):
 
             file.write(f"{staff_number},{expiry_code},{last_done_date},{expiry_date}\n")
 
-    logger.info(f"CPAT.txt file created at: {file_path}")
+    logger.info(f"JOB8.txt file created at: {file_path}")
     return file_path
 
 @shared_task
 def fetch_and_store_completion_records():
-    """Fetch CPAT completion records, update database, generate CPAT.txt, and send it."""
+    """Fetch CPAT completion records, update database, generate JOB8.txt, and send it."""
     url = f"{LMS_BASE_URL}/lms/api/IntegrationAPI/comp/v2/{LMS_KEY}/{DAYS}"
     headers = {
         "apitoken": API_TOKEN,
@@ -357,18 +357,31 @@ def fetch_and_store_completion_records():
 
     if response.status_code == 200:
         data = response.json()
+
+        # Debugging: Log the raw API response for inspection
+        logger.debug(f"API Response: {data}")
+
         records_for_file = []
 
         # Process each record
         for record in data:
             try:
-                employee_id = record.get("EmployeeID")
+                # Debugging: Log the incoming record for inspection
+                logger.debug(f"Processing record: {record}")
+
+                # Ensure the record is a valid dictionary and contains the required fields
+                if not isinstance(record, dict):
+                    logger.warning(f"Skipping invalid record (not a dictionary): {record}")
+                    continue
+
+                # Strip any whitespace around the EmployeeID
+                employee_id = record.get("EmployeeID", "").strip()
                 course_code = record.get("CourseCode")
                 completion_date = record.get("CompletionDate")
 
                 # Validate critical fields
                 if not employee_id:
-                    logger.warning(f"Skipping record due to missing EmployeeID: {record}")
+                    logger.warning(f"Skipping record due to missing or invalid EmployeeID: {record}")
                     continue
 
                 if not course_code and not completion_date:
@@ -415,13 +428,13 @@ def fetch_and_store_completion_records():
                 logger.error(f"Error processing record: {record} - {e}", exc_info=True)
 
         if not records_for_file:
-            logger.info("No new records to process for CPAT.txt.")
+            logger.info("No new records to process for JOB8.txt.")
             return
 
-        # Generate CPAT.txt
+        # Generate JOB8.txt
         file_path = generate_job8_file(records_for_file)
         if not os.path.exists(file_path) or os.stat(file_path).st_size == 0:
-            logger.error("Generated CPAT.txt is empty. Aborting upload.")
+            logger.error("Generated JOB8.txt is empty. Aborting upload.")
             return
 
         # Upload file
@@ -432,7 +445,7 @@ def fetch_and_store_completion_records():
         logger.error(f"Failed to fetch data: {response.status_code} - {response.text}")
 
 def upload_cpat_to_aims_server(local_file_path):
-    """Upload CPAT.txt to the AIMS server."""
+    """Upload JOB8.txt to the AIMS server."""
     attempts = 3
     delay = 5
 
@@ -442,7 +455,7 @@ def upload_cpat_to_aims_server(local_file_path):
             return
 
         cpat_remote_path = os.path.join(CPAT_AIMS_PATH, os.path.basename(local_file_path))
-        logger.info(f"Uploading CPAT.txt to: {cpat_remote_path}")
+        logger.info(f"Uploading JOB8.txt to: {cpat_remote_path}")
 
         for attempt in range(attempts):
             try:
@@ -451,7 +464,7 @@ def upload_cpat_to_aims_server(local_file_path):
                 sftp = paramiko.SFTPClient.from_transport(transport)
 
                 sftp.put(local_file_path, cpat_remote_path)
-                logger.info(f"CPAT.txt uploaded successfully to {cpat_remote_path}.")
+                logger.info(f"JOB8.txt uploaded successfully to {cpat_remote_path}.")
                 
                 sftp.close()
                 transport.close()
@@ -461,7 +474,8 @@ def upload_cpat_to_aims_server(local_file_path):
                 if attempt < attempts - 1:
                     time.sleep(delay)
     except Exception as e:
-        logger.error(f"Error during CPAT.txt upload: {e}", exc_info=True)
+        logger.error(f"Error during JOB8.txt upload: {e}", exc_info=True)
+
 
 
 
