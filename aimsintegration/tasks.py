@@ -547,7 +547,7 @@ def generate_csv_for_fdm(flight_data):
     # Header row
     header = [
         "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
-        "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA"
+        "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA","ATD","OFF","ON","ATA"
     ]
 
     # Create the CSV file
@@ -576,6 +576,10 @@ def generate_csv_for_fdm(flight_data):
                 format_time(flight.ata_utc),  # BLON
                 format_time(flight.etd_utc),  # ETD
                 format_time(flight.eta_utc),  # ETA
+                format_time(flight.atd_utc),  # ATD
+                format_time(flight.takeoff_utc),  # OFF
+                format_time(flight.touchdown_utc),  # ON
+                format_time(flight.ata_utc),  # ATA
             ]
             writer.writerow(flight_row)
 
@@ -586,6 +590,80 @@ def generate_csv_for_fdm(flight_data):
 
 
 
+# import os
+# import paramiko
+# import logging
+# from django.utils.timezone import now, timedelta
+# from django.conf import settings
+# from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+# from celery import shared_task
+
+# # Initialize logger
+# logger = logging.getLogger(__name__)
+
+# @shared_task
+# def hourly_upload_csv_to_fdm():
+#     """
+#     Celery task to generate, upload CSV to FDM server, and clean up old files except the current one.
+#     """
+#     # Calculate the time range
+#     one_hour_ago = now() - timedelta(hours=1)
+
+#     # Fetch flight data
+#     flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+
+#     # Generate CSV file (new version: without crew data)
+#     local_file_path = generate_csv_for_fdm(flight_data)
+
+#     # Fetch server details from settings
+#     fdm_host = settings.FDM_HOST
+#     fdm_port = int(settings.FDM_PORT)
+#     fdm_username = settings.FDM_USERNAME
+#     fdm_password = settings.FDM_PASSWORD
+#     fdm_destination_dir = settings.FDM_DESTINATION_DIR
+
+#     # Ensure the file exists
+#     if not os.path.exists(local_file_path):
+#         logger.error(f"File {local_file_path} does not exist. Skipping upload.")
+#         return
+
+#     try:
+#         # SFTP Upload Logic
+#         transport = paramiko.Transport((fdm_host, fdm_port))
+#         transport.connect(username=fdm_username, password=fdm_password)
+#         sftp = paramiko.SFTPClient.from_transport(transport)
+
+#         # Define remote path
+#         remote_path = os.path.join(fdm_destination_dir, os.path.basename(local_file_path))
+#         logger.info(f"Uploading file to {remote_path}...")
+
+#         # Upload file
+#         sftp.put(local_file_path, remote_path)
+#         logger.info(f"File successfully uploaded to {remote_path}.")
+
+#         # Close connections
+#         sftp.close()
+#         transport.close()
+
+#         # Clean up local files, excluding the current file
+#         local_dir = os.path.dirname(local_file_path)
+#         for file in os.listdir(local_dir):
+#             file_path = os.path.join(local_dir, file)
+#             # Skip the currently uploaded file
+#             if file_path != local_file_path and file.startswith("aims_") and file.endswith(".csv"):
+#                 try:
+#                     os.remove(file_path)
+#                     logger.info(f"Deleted old local file: {file_path}")
+#                 except Exception as e:
+#                     logger.error(f"Failed to delete old file {file_path}: {e}")
+
+#     except (SSHException, NoValidConnectionsError) as e:
+#         logger.error(f"SFTP upload failed: {e}", exc_info=True)
+#     except Exception as e:
+#         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
+
+
+
 import os
 import paramiko
 import logging
@@ -593,6 +671,7 @@ from django.utils.timezone import now, timedelta
 from django.conf import settings
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 from celery import shared_task
+from .models import FdmFlightData
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -600,13 +679,25 @@ logger = logging.getLogger(__name__)
 @shared_task
 def hourly_upload_csv_to_fdm():
     """
-    Celery task to generate, upload CSV to FDM server, and clean up old files except the current one.
+    Celery task to generate and upload CSV to FDM server, 
+    focusing only on records with complete actual timings,
+    and clean up old files except the current one.
     """
     # Calculate the time range
     one_hour_ago = now() - timedelta(hours=1)
 
-    # Fetch flight data
-    flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+    # Fetch only flight data with complete actual timings
+    flight_data = FdmFlightData.objects.filter(
+        updated_at__gte=one_hour_ago,
+        atd_utc__isnull=False,
+        takeoff_utc__isnull=False,
+        touchdown_utc__isnull=False,
+        ata_utc__isnull=False
+    )
+
+    if not flight_data.exists():
+        logger.info("No flight records with complete actual timings to process. Skipping upload.")
+        return
 
     # Generate CSV file (new version: without crew data)
     local_file_path = generate_csv_for_fdm(flight_data)
