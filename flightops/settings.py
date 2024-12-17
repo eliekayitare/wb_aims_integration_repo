@@ -267,10 +267,10 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/85'),  # Every 1 hour 25 minutes
     },
 
-    # CPAT Project -Runs every 1 hour
+    # CPAT Project -Runs every 1 hour 40 minutes
     'fetch-cpat-data-every-hour': {
         'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
-        'schedule': crontab(minute='*/3'),  # Every 1 hour 40 minutes
+        'schedule': crontab(minute='*/100'),  # Every 1 hour 40 minutes
     },
 
     #FDM Project - Runs every 1 hour
