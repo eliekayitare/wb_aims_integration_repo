@@ -377,7 +377,8 @@ def fetch_and_store_completion_records():
 
                 # Strip any whitespace around the EmployeeID and remove 'WB' prefix if present
                 employee_id = record.get("EmployeeID", "").strip()
-                if employee_id.startswith("WB"):
+                # Remove 'WB' prefix, case-insensitively
+                if employee_id.upper().startswith("WB"):
                     employee_id = employee_id[2:]  # Remove the 'WB' prefix
 
                 course_code = record.get("CourseCode")
