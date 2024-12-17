@@ -367,9 +367,6 @@ def fetch_and_store_completion_records():
         # Process each record
         for record in data:
             try:
-                # Debugging: Log the incoming record for inspection
-                logger.debug(f"Processing record: {record}")
-
                 # Ensure the record is a valid dictionary and contains the required fields
                 if not isinstance(record, dict):
                     logger.warning(f"Skipping invalid record (not a dictionary): {record}")
@@ -386,11 +383,11 @@ def fetch_and_store_completion_records():
 
                 # Validate critical fields
                 if not employee_id:
-                    logger.warning(f"Skipping record due to missing or invalid EmployeeID: {record}")
+                    logger.warning(f"Skipping record due to missing or invalid EmployeeID.")
                     continue
 
                 if not course_code and not completion_date:
-                    logger.warning(f"Skipping record due to missing CourseCode and CompletionDate: {record}")
+                    logger.warning(f"Skipping record due to missing CourseCode and CompletionDate.")
                     continue
 
                 # Format dates
@@ -429,6 +426,10 @@ def fetch_and_store_completion_records():
                     "LastDoneDate": formatted_date,
                     "ExpiryDate": expiry_date,
                 })
+
+                # Log the successfully processed records
+                logger.info(f"Processed record: {employee_id} - {course_code}")
+
             except Exception as e:
                 logger.error(f"Error processing record: {record} - {e}", exc_info=True)
 
