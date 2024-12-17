@@ -324,10 +324,17 @@ def calculate_expiry_date(completion_date_str, course_code):
     return expiry_date.strftime("%d%m%Y")
 
 def format_date(date_str):
-    """Convert date from YYYY-MM-DD to DDMMYYYY format or return an empty string."""
+    """Convert date from DDMMYYYY to DDMMYYYY format or return an empty string."""
     if date_str:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d%m%Y")
+        try:
+            # Parse DDMMYYYY format and return it as is (since no transformation is needed)
+            datetime.strptime(date_str, "%d%m%Y")
+            return date_str  # Already in DDMMYYYY format
+        except ValueError:
+            logger.error(f"Invalid date format: {date_str}")
+            return ""
     return ""
+
 
 def remove_wb_prefix(employee_id):
     """Remove 'WB' prefix from the employee ID."""
