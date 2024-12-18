@@ -70,8 +70,6 @@
             <th>Completion Date</th>
             <th>Validity Period(Months)</th>
             <th>Expiry Date</th>
-            
-            
           </tr>
         </thead>
         <tbody id="completion-data">
@@ -81,14 +79,14 @@
             <td>{{ record.employee_email }}</td>
             <td>{{ record.course_code }}</td>
             <td>{{ record.score|default:"--" }}</td>
-            {% comment %} <td>{{ record.time_in_seconds|default:"--" }}</td> {% endcomment %}
+            {% comment %}
+            <td>{{ record.time_in_seconds|default:"--" }}</td>
+            {% endcomment %}
             <td>{{ record.start_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.end_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.completion_date|date:"Y-m-d" }}</td>
-            <td>{{record.validity_period | default:"No expires"}}</td>
-            <td>{{record.expiry_date | default:"--"}}</td>
-            
-
+            <td>{{record.validity_period | default:"0"}}</td>
+            <td>{{record.expiry_date | default:"No expires"}}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -155,9 +153,9 @@
         <td>${record.start_date || "--"}</td>
         <td>${record.end_date || "--"}</td>
         <td>${record.completion_date}</td>
-        <td>${record.validity_period || "--"}</td>
-        <td>${record.expiry_date || "--"}</td>
-      
+        <td>${record.validity_period || "0"}</td>
+        <td>${record.expiry_date || "No expires"}</td>
+
       `;
       tableBody.appendChild(row);
     });
