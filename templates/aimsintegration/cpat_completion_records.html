@@ -80,8 +80,9 @@
             <td>{{ record.course_code }}</td>
             <td>{{ record.score|default:"--" }}</td>
             <td>{{ record.time_in_seconds|default:"--" }}</td>
-            <td>{{ record.start_date|date:"Y-m-d H:i"|default:"--" }}</td>
-            <td>{{ record.end_date|date:"Y-m-d H:i"|default:"--" }}</td>
+            <td>{{ record.start_date|date:"Y-m-d"|default:"--" }}</td>
+            <td>{{ record.end_date|date:"Y-m-d"|default:"--" }}</td>
+
 
           </tr>
           {% endfor %}
