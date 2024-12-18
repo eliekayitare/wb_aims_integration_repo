@@ -106,7 +106,7 @@ def todays_completion_records_view(request):
     query = request.GET.get('query', '').strip()
 
     # Base query to filter records for today
-    records_query = CompletionRecord.objects.filter(completion_date__date=today)
+    records_query = CompletionRecord.objects.filter(completion_date=today)
 
     # Apply search filter if a query is provided
     if query:
