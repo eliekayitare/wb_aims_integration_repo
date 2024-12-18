@@ -121,7 +121,7 @@
     const query = document.getElementById("search-input").value;
     const selectedDate = document.getElementById("date-picker").value;
 
-    fetch(`/aims/completion-records/?query=${query}&date=${selectedDate}`, {
+    fetch(`/aims/cpat_completion_records/?query=${query}&date=${selectedDate}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
       },
