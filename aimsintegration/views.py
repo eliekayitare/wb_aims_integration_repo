@@ -144,11 +144,12 @@ class FlightDataListView(APIView):
 #     })
 
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.utils.timezone import now
 from .models import CompletionRecord
 from datetime import datetime
-import calendar
 from dateutil.relativedelta import relativedelta
+import calendar
 
 # Validity periods for courses
 VALIDITY_PERIODS = {
@@ -165,23 +166,24 @@ def calculate_expiry_date(completion_date_str, course_code):
     and adjust to the last day of the expiry month.
     """
     if not completion_date_str:
-        return ""  # No completion date available
+        return "--"  # No completion date available
 
     try:
-        # Parse the input date in DDMMYYYY format
+        # Parse the input date in YYYY-MM-DD format
         completion_date = datetime.strptime(completion_date_str, "%Y-%m-%d")
         validity_period = VALIDITY_PERIODS.get(course_code, 0)
 
         if validity_period == 0:
-            return ""  # Never expires
+            return "--"  # No expiry date (never expires)
 
-        # Add validity period and adjust to the last day of the month
+        # Calculate the tentative expiry date
         expiry_date = completion_date + relativedelta(months=validity_period)
+        # Adjust to the last day of the expiry month
         last_day = calendar.monthrange(expiry_date.year, expiry_date.month)[1]
         expiry_date = expiry_date.replace(day=last_day)
-        return expiry_date.strftime("%d-%m-%Y")  # Format as DD-MM-YYYY
+        return expiry_date.strftime("%Y-%m-%d")  # Return as YYYY-MM-DD
     except ValueError:
-        return ""  # Handle invalid date format gracefully
+        return "--"
 
 def todays_completion_records_view(request):
     today = now().date()
@@ -218,7 +220,7 @@ def todays_completion_records_view(request):
         for record in records:
             completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
             expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
-            validity_period = VALIDITY_PERIODS.get(record.course_code, 0)
+            validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
 
             data.append({
                 'id': record.id,
@@ -228,19 +230,27 @@ def todays_completion_records_view(request):
                 'completion_date': completion_date_str,
                 'expiry_date': expiry_date,
                 'validity_period': validity_period,
-                'score': record.score,
-                'time_in_seconds': record.time_in_seconds,
+                'score': record.score or "--",
+                'time_in_seconds': record.time_in_seconds or "--",
                 'start_date': record.start_date.strftime("%Y-%m-%d") if record.start_date else "--",
                 'end_date': record.end_date.strftime("%Y-%m-%d") if record.end_date else "--",
             })
         return JsonResponse(data, safe=False)
 
-    # Otherwise, render the template
+    # Otherwise, render the template with expiry date and validity period
+    enriched_records = []
+    for record in records:
+        completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
+        record.expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
+        record.validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
+        enriched_records.append(record)
+
     return render(request, 'aimsintegration/cpat_completion_records.html', {
-        'records': records,
+        'records': enriched_records,
         'today': today,
         'query': query,
     })
+
 
 
 
