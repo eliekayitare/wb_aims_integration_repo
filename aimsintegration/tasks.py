@@ -309,11 +309,39 @@ VALIDITY_PERIODS = {
     "RVSMGS": 0,    # RVSM Ground (never expires)
 }
 
+# def calculate_expiry_date(completion_date_str, course_code):
+#     """Calculate expiry date based on completion date in DDMMYYYY format and course validity."""
+#     if not completion_date_str:
+#         return ""  # No completion date available
+    
+#     try:
+#         # Parse the input date in DDMMYYYY format
+#         completion_date = datetime.strptime(completion_date_str, "%d%m%Y")
+#         validity_period = VALIDITY_PERIODS.get(course_code, 0)
+        
+#         if validity_period == 0:
+#             return ""  # No expiry date (never expires)
+        
+#         # Add the validity period in months
+#         expiry_date = completion_date + relativedelta(months=validity_period)
+#         return expiry_date.strftime("%d%m%Y")  # Return as DDMMYYYY
+#     except ValueError:
+#         logger.error(f"Invalid completion date format: {completion_date_str}")
+#         return ""
+
+
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+import calendar
+
 def calculate_expiry_date(completion_date_str, course_code):
-    """Calculate expiry date based on completion date in DDMMYYYY format and course validity."""
+    """
+    Calculate expiry date based on completion date in DDMMYYYY format
+    and adjust to the last day of the expiry month.
+    """
     if not completion_date_str:
         return ""  # No completion date available
-    
+
     try:
         # Parse the input date in DDMMYYYY format
         completion_date = datetime.strptime(completion_date_str, "%d%m%Y")
@@ -321,13 +349,17 @@ def calculate_expiry_date(completion_date_str, course_code):
         
         if validity_period == 0:
             return ""  # No expiry date (never expires)
-        
-        # Add the validity period in months
+
+        # Calculate the tentative expiry date
         expiry_date = completion_date + relativedelta(months=validity_period)
+        # Adjust to the last day of the expiry month
+        last_day = calendar.monthrange(expiry_date.year, expiry_date.month)[1]
+        expiry_date = expiry_date.replace(day=last_day)
         return expiry_date.strftime("%d%m%Y")  # Return as DDMMYYYY
     except ValueError:
         logger.error(f"Invalid completion date format: {completion_date_str}")
         return ""
+
 
 
 def format_date(date_str):
