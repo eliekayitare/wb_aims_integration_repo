@@ -121,13 +121,11 @@
     const query = document.getElementById("search-input").value;
     const selectedDate = document.getElementById("date-picker").value;
 
-    fetch(`/cpat/completion-records/?query=${query}&date=${selectedDate}`)
-  .then(response => response.json())
-  .then(data => {
-      console.log("Received data:", data); // Debugging
-      updateCompletionTable(data);
-  });
-
+    fetch(`/cpat/completion-records/?query=${query}&date=${selectedDate}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    })
       .then((response) => response.json())
       .then((data) => {
         updateCompletionTable(data); // Update the completion records table with the filtered results
