@@ -94,39 +94,55 @@ class FlightDataListView(APIView):
 
 #CPAT Project API
 
-from django.shortcuts import render
+from django.http import JsonResponse
 from django.utils.timezone import now
 from .models import CompletionRecord
+from datetime import datetime
 
 def todays_completion_records_view(request):
-    # Get today's date in the server's timezone
     today = now().date()
-
-    # Fetch the search query from the request, if provided
     query = request.GET.get('query', '').strip()
+    selected_date = request.GET.get('date', '').strip()
 
-    # Base query to filter records for today
-    records_query = CompletionRecord.objects.filter(completion_date=today)
+    # Base query to filter records
+    records_query = CompletionRecord.objects.all()
 
-    # Apply search filter if a query is provided
+    # Apply date filter if selected_date is provided
+    if selected_date:
+        try:
+            date_object = datetime.strptime(selected_date, "%Y-%m-%d").date()
+            records_query = records_query.filter(completion_date=date_object)
+        except ValueError:
+            records_query = records_query.none()
+
+    # Apply search query
     if query:
         records_query = records_query.filter(
             employee_id__icontains=query
-        ) | CompletionRecord.objects.filter(
+        ) | records_query.filter(
             employee_email__icontains=query
-        ) | CompletionRecord.objects.filter(
+        ) | records_query.filter(
             course_code__icontains=query
         )
 
-    # Order the records by completion_date
+    # Order records
     records = records_query.order_by('completion_date')
 
-    # Render the template with the filtered records
+    # If it's an AJAX request, return JSON response
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        data = list(records.values(
+            'id', 'employee_id', 'employee_email', 'course_code', 'completion_date',
+            'score', 'time_in_seconds', 'start_date', 'end_date'
+        ))
+        return JsonResponse(data, safe=False)
+
+    # Otherwise, render the template
     return render(request, 'aimsintegration/cpat_completion_records.html', {
         'records': records,
         'today': today,
         'query': query,
     })
+
 
 
 
