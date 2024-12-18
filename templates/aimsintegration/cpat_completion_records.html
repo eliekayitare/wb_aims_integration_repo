@@ -61,28 +61,33 @@
       <table id="completion-table">
         <thead>
           <tr>
-            <th>Date</th>
             <th>Employee ID</th>
             <th>Email</th>
             <th>Course Code</th>
             <th>Score</th>
-            <th>Time (Seconds)</th>
             <th>Start Date</th>
             <th>End Date</th>
+            <th>Completion Date</th>
+            <th>Validity Period(Months)</th>
+            <th>Expiry Date</th>
+            
+            
           </tr>
         </thead>
         <tbody id="completion-data">
           {% for record in records %}
           <tr>
-            <td>{{ record.completion_date|date:"Y-m-d" }}</td>
             <td>{{ record.employee_id }}</td>
             <td>{{ record.employee_email }}</td>
             <td>{{ record.course_code }}</td>
             <td>{{ record.score|default:"--" }}</td>
-            <td>{{ record.time_in_seconds|default:"--" }}</td>
+            {% comment %} <td>{{ record.time_in_seconds|default:"--" }}</td> {% endcomment %}
             <td>{{ record.start_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.end_date|date:"Y-m-d"|default:"--" }}</td>
-
+            <td>{{ record.completion_date|date:"Y-m-d" }}</td>
+            <td>{{record.validity_period | default:"--"}}</td>
+            <td>{{record.expiry_date | default:"--"}}</td>
+            
 
           </tr>
           {% endfor %}
@@ -142,7 +147,6 @@
     completionData.forEach((record) => {
       const row = document.createElement("tr");
       row.innerHTML = `
-        <td>${record.completion_date}</td>
         <td>${record.employee_id}</td>
         <td>${record.employee_email}</td>
         <td>${record.course_code}</td>
@@ -150,6 +154,10 @@
         <td>${record.time_in_seconds || "--"}</td>
         <td>${record.start_date || "--"}</td>
         <td>${record.end_date || "--"}</td>
+        <td>${record.completion_date}</td>
+        <td>${record.validity_period || "--"}</td>
+        <td>${record.expiry_date || "--"}</td>
+      
       `;
       tableBody.appendChild(row);
     });

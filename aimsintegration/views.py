@@ -94,10 +94,94 @@ class FlightDataListView(APIView):
 
 #CPAT Project API
 
+# from django.http import JsonResponse
+# from django.utils.timezone import now
+# from .models import CompletionRecord
+# from datetime import datetime
+
+# def todays_completion_records_view(request):
+#     today = now().date()
+#     query = request.GET.get('query', '').strip()
+#     selected_date = request.GET.get('date', '').strip()
+
+#     # Base query to filter records
+#     records_query = CompletionRecord.objects.all()
+
+#     # Apply date filter if selected_date is provided
+#     if selected_date:
+#         try:
+#             date_object = datetime.strptime(selected_date, "%Y-%m-%d").date()
+#             records_query = records_query.filter(completion_date=date_object)
+#         except ValueError:
+#             records_query = records_query.none()
+
+#     # Apply search query
+#     if query:
+#         records_query = records_query.filter(
+#             employee_id__icontains=query
+#         ) | records_query.filter(
+#             employee_email__icontains=query
+#         ) | records_query.filter(
+#             course_code__icontains=query
+#         )
+
+#     # Order records
+#     records = records_query.order_by('completion_date')
+
+#     # If it's an AJAX request, return JSON response
+#     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#         data = list(records.values(
+#             'id', 'employee_id', 'employee_email', 'course_code', 'completion_date',
+#             'score', 'time_in_seconds', 'start_date', 'end_date'
+#         ))
+#         return JsonResponse(data, safe=False)
+
+#     # Otherwise, render the template
+#     return render(request, 'aimsintegration/cpat_completion_records.html', {
+#         'records': records,
+#         'today': today,
+#         'query': query,
+#     })
+
 from django.http import JsonResponse
 from django.utils.timezone import now
 from .models import CompletionRecord
 from datetime import datetime
+import calendar
+from dateutil.relativedelta import relativedelta
+
+# Validity periods for courses
+VALIDITY_PERIODS = {
+    "FRMS": 12,     # Fatigue Education & Awareness Training
+    "ETPG": 36,     # ETOPS Ground
+    "LVO-G": 36,    # LVO Ground
+    "PBNGRN": 12,   # PBN Ground
+    "RVSMGS": 0,    # RVSM Ground (never expires)
+}
+
+def calculate_expiry_date(completion_date_str, course_code):
+    """
+    Calculate expiry date based on completion date in DDMMYYYY format
+    and adjust to the last day of the expiry month.
+    """
+    if not completion_date_str:
+        return ""  # No completion date available
+
+    try:
+        # Parse the input date in DDMMYYYY format
+        completion_date = datetime.strptime(completion_date_str, "%Y-%m-%d")
+        validity_period = VALIDITY_PERIODS.get(course_code, 0)
+
+        if validity_period == 0:
+            return ""  # Never expires
+
+        # Add validity period and adjust to the last day of the month
+        expiry_date = completion_date + relativedelta(months=validity_period)
+        last_day = calendar.monthrange(expiry_date.year, expiry_date.month)[1]
+        expiry_date = expiry_date.replace(day=last_day)
+        return expiry_date.strftime("%d-%m-%Y")  # Format as DD-MM-YYYY
+    except ValueError:
+        return ""  # Handle invalid date format gracefully
 
 def todays_completion_records_view(request):
     today = now().date()
@@ -128,12 +212,27 @@ def todays_completion_records_view(request):
     # Order records
     records = records_query.order_by('completion_date')
 
-    # If it's an AJAX request, return JSON response
+    # If it's an AJAX request, return JSON response with expiry date and validity period
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        data = list(records.values(
-            'id', 'employee_id', 'employee_email', 'course_code', 'completion_date',
-            'score', 'time_in_seconds', 'start_date', 'end_date'
-        ))
+        data = []
+        for record in records:
+            completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
+            expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
+            validity_period = VALIDITY_PERIODS.get(record.course_code, 0)
+
+            data.append({
+                'id': record.id,
+                'employee_id': record.employee_id,
+                'employee_email': record.employee_email,
+                'course_code': record.course_code,
+                'completion_date': completion_date_str,
+                'expiry_date': expiry_date,
+                'validity_period': validity_period,
+                'score': record.score,
+                'time_in_seconds': record.time_in_seconds,
+                'start_date': record.start_date.strftime("%Y-%m-%d") if record.start_date else "--",
+                'end_date': record.end_date.strftime("%Y-%m-%d") if record.end_date else "--",
+            })
         return JsonResponse(data, safe=False)
 
     # Otherwise, render the template
@@ -142,7 +241,6 @@ def todays_completion_records_view(request):
         'today': today,
         'query': query,
     })
-
 
 
 
