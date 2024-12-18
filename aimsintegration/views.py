@@ -94,39 +94,50 @@ class FlightDataListView(APIView):
 
 #CPAT Project API
 
-from django.shortcuts import render
+from django.http import JsonResponse
 from django.utils.timezone import now
 from .models import CompletionRecord
+import logging
+
+logger = logging.getLogger(__name__)
 
 def todays_completion_records_view(request):
-    # Get today's date in the server's timezone
-    today = now().date()
-
-    # Fetch the search query from the request, if provided
+    # Fetch the search query and date filter from the request
     query = request.GET.get('query', '').strip()
+    date_input = request.GET.get('date', '').strip()
 
-    # Base query to filter records for today
-    records_query = CompletionRecord.objects.filter(completion_date=today)
+    logger.info(f"Received date input: {date_input}")  # Log the date for debugging
 
-    # Apply search filter if a query is provided
+    # If no date is provided, use today's date
+    if date_input:
+        try:
+            selected_date = datetime.strptime(date_input, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"error": "Invalid date format"}, status=400)
+    else:
+        selected_date = now().date()
+
+    # Base query to filter by completion_date
+    records_query = CompletionRecord.objects.filter(completion_date=selected_date)
+    
+    # Apply search query if provided
     if query:
         records_query = records_query.filter(
             employee_id__icontains=query
-        ) | CompletionRecord.objects.filter(
+        ) | records_query.filter(
             employee_email__icontains=query
-        ) | CompletionRecord.objects.filter(
+        ) | records_query.filter(
             course_code__icontains=query
         )
 
-    # Order the records by completion_date
-    records = records_query.order_by('completion_date')
+    # Fetch and format data
+    records = records_query.order_by('completion_date').values(
+        'completion_date', 'employee_id', 'employee_email',
+        'course_code', 'score', 'time_in_seconds',
+        'start_date', 'end_date'
+    )
 
-    # Render the template with the filtered records
-    return render(request, 'aimsintegration/cpat_completion_records.html', {
-        'records': records,
-        'today': today,
-        'query': query,
-    })
+    return JsonResponse(list(records), safe=False)
 
 
 
