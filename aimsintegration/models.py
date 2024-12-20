@@ -218,3 +218,7 @@ class TableauData(models.Model):
     ata = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
     updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
+
+
+    class Meta:
+        db_table = 'tableau_data'

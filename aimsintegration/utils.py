@@ -1330,45 +1330,55 @@ def process_tableau_data_file(attachment):
 
                 # Extract all fields
                 operation_day = fields[0].strip()
-                departure_station = fields[1].strip()
+                departure_station = fields[1].strip().strip('"')
                 flight_no = fields[2].strip()
-                flight_leg_code = fields[3].strip()
+                flight_leg_code = fields[3].strip().strip('"')
                 cancelled_deleted = fields[4].strip()
-                arrival_station = fields[5].strip()
-                aircraft_reg_id = fields[6].strip()
+                arrival_station = fields[5].strip().strip('"')
+                aircraft_reg_id = fields[6].strip().strip('"')
                 aircraft_type_index = fields[7].strip()
                 aircraft_category = fields[8].strip()
-                flight_service_type = fields[9].strip()
+                flight_service_type = fields[9].strip().strip('"')
                 std = fields[10].strip()
                 sta = fields[11].strip()
-                original_operation_day = fields[12].strip()
+                original_operation_day = fields[12].strip().strip('"')
                 original_std = fields[13].strip()
                 original_sta = fields[14].strip()
                 departure_delay_time = fields[15].strip()
-                delay_code_kind = fields[16].strip()
-                delay_number = fields[17].strip()
-                aircraft_config = fields[18].strip()
-                seat_type_config = fields[19].strip()
+                delay_code_kind = fields[16].strip().strip('"')
+                delay_number = fields[17].strip().strip('"')
+                aircraft_config = fields[18].strip().strip('"')
+                seat_type_config = fields[19].strip().strip('"')
                 atd = fields[20].strip()
                 takeoff = fields[21].strip()
                 touchdown = fields[22].strip()
                 ata = fields[23].strip()
 
-                # Validate and convert fields
-                try:
-                    operation_day = datetime.strptime(operation_day, "%d%m%Y").date()
-                except ValueError:
-                    logger.warning(f"Invalid operation_day format on line {line_num}: {operation_day}")
-                    continue
-
-                cancelled_deleted = bool(int(cancelled_deleted)) if cancelled_deleted.isdigit() else False
+                # Validate and parse fields
+                def parse_date(value, field_name):
+                    """
+                    Validate and parse date fields.
+                    """
+                    try:
+                        return datetime.strptime(value, "%Y-%m-%d").date()
+                    except ValueError:
+                        if value.strip() == "":
+                            logger.warning(f"{field_name} is empty or contains spaces on line {line_num}.")
+                            return None
+                        logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
+                        return None
 
                 def parse_time(value):
+                    """
+                    Validate and parse time fields.
+                    """
                     try:
                         return datetime.strptime(value, "%H%M").time()
                     except ValueError:
                         return None
 
+                operation_day = parse_date(operation_day, "operation_day")
+                original_operation_day = parse_date(original_operation_day, "original_operation_day")
                 std = parse_time(std)
                 sta = parse_time(sta)
                 original_std = parse_time(original_std)
@@ -1378,6 +1388,8 @@ def process_tableau_data_file(attachment):
                 takeoff = parse_time(takeoff)
                 touchdown = parse_time(touchdown)
                 ata = parse_time(ata)
+
+                cancelled_deleted = bool(int(cancelled_deleted)) if cancelled_deleted.isdigit() else False
 
                 # Define unique criteria
                 unique_criteria = {
