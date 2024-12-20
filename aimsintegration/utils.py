@@ -1313,7 +1313,7 @@ from datetime import datetime
 def process_tableau_data_file(attachment):
     """
     Process the tableau file using a comma delimiter.
-    Insert into TableauData and update all relevant fields dynamically.
+    Insert into TableauData and leave empty fields as None.
     """
     try:
         # Read file content
@@ -1328,50 +1328,48 @@ def process_tableau_data_file(attachment):
                 # Split the line by commas
                 fields = line.split(",")
 
-                # Extract all fields
-                operation_day = fields[0].strip()
-                departure_station = fields[1].strip().strip('"')
-                flight_no = fields[2].strip()
-                flight_leg_code = fields[3].strip().strip('"')
-                cancelled_deleted = fields[4].strip()
-                arrival_station = fields[5].strip().strip('"')
-                aircraft_reg_id = fields[6].strip().strip('"')
-                aircraft_type_index = fields[7].strip()
-                aircraft_category = fields[8].strip()
-                flight_service_type = fields[9].strip().strip('"')
-                std = fields[10].strip()
-                sta = fields[11].strip()
-                original_operation_day = fields[12].strip().strip('"')
-                original_std = fields[13].strip()
-                original_sta = fields[14].strip()
-                departure_delay_time = fields[15].strip()
-                delay_code_kind = fields[16].strip().strip('"')
-                delay_number = fields[17].strip().strip('"')
-                aircraft_config = fields[18].strip().strip('"')
-                seat_type_config = fields[19].strip().strip('"')
-                atd = fields[20].strip()
-                takeoff = fields[21].strip()
-                touchdown = fields[22].strip()
-                ata = fields[23].strip()
+                # Extract fields, handle missing data, and strip extra spaces/quotes
+                operation_day = fields[0].strip() or None
+                departure_station = fields[1].strip().strip('"') or None
+                flight_no = fields[2].strip() or None
+                flight_leg_code = fields[3].strip().strip('"') or None
+                cancelled_deleted = fields[4].strip() or None
+                arrival_station = fields[5].strip().strip('"') or None
+                aircraft_reg_id = fields[6].strip().strip('"') or None
+                aircraft_type_index = fields[7].strip() or None
+                aircraft_category = fields[8].strip() or None
+                flight_service_type = fields[9].strip().strip('"') or None
+                std = fields[10].strip() or None
+                sta = fields[11].strip() or None
+                original_operation_day = fields[12].strip().strip('"') or None
+                original_std = fields[13].strip() or None
+                original_sta = fields[14].strip() or None
+                departure_delay_time = fields[15].strip() or None
+                delay_code_kind = fields[16].strip().strip('"') or None
+                delay_number = fields[17].strip() or None
+                aircraft_config = fields[18].strip().strip('"') or None
+                seat_type_config = fields[19].strip().strip('"') or None
+                atd = fields[20].strip() or None
+                takeoff = fields[21].strip() or None
+                touchdown = fields[22].strip() or None
+                ata = fields[23].strip() or None
 
-                # Validate and parse fields
+                print("\n=======================================================")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
+                print("\n=======================================================\n")
+                # Validate and convert fields
                 def parse_date(value, field_name):
-                    """
-                    Validate and parse date fields.
-                    """
+                    if not value:
+                        return None
                     try:
-                        return datetime.strptime(value, "%Y-%m-%d").date()
+                        return datetime.strptime(value, "%d%m%Y").date()
                     except ValueError:
-                        if value.strip() == "":
-                            logger.warning(f"{field_name} is empty or contains spaces on line {line_num}.")
-                            return None
                         logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
                         return None
 
                 def parse_time(value):
-                    """
-                    Validate and parse time fields.
-                    """
+                    if not value:
+                        return None
                     try:
                         return datetime.strptime(value, "%H%M").time()
                     except ValueError:
@@ -1389,7 +1387,9 @@ def process_tableau_data_file(attachment):
                 touchdown = parse_time(touchdown)
                 ata = parse_time(ata)
 
-                cancelled_deleted = bool(int(cancelled_deleted)) if cancelled_deleted.isdigit() else False
+                # Convert integers
+                cancelled_deleted = bool(int(cancelled_deleted)) if cancelled_deleted and cancelled_deleted.isdigit() else False
+                delay_number = int(delay_number) if delay_number and delay_number.isdigit() else None
 
                 # Define unique criteria
                 unique_criteria = {
@@ -1399,7 +1399,7 @@ def process_tableau_data_file(attachment):
                     'arrival_station': arrival_station,
                     'flight_leg_code': flight_leg_code,
                 }
-
+                
                 # Insert or update TableauData
                 existing_record = TableauData.objects.filter(**unique_criteria).first()
 
