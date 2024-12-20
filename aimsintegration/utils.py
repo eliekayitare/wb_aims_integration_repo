@@ -1327,7 +1327,7 @@ def process_tableau_data_file(attachment):
                 departure_station = line[9:12].strip()
                 flight_no = line[13:16].strip()
                 flight_leg_code = line[17:20].strip()
-                cancelled_deleted = bool(int(line[21:22].strip()))
+                cancelled_deleted = line[21:22].strip()
                 arrival_station = line[23:26].strip()
                 aircraft_reg_id = line[27:35].strip()
                 aircraft_type_index = line[36:37].strip()
@@ -1348,22 +1348,46 @@ def process_tableau_data_file(attachment):
                 touchdown = line[106:110].strip()
                 ata = line[111:115].strip()
 
-                print("\n=======================================================\n")
-                print(f"Operation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
-                print("\n=======================================================\n")
-                    
-                # Parse dates and times
-                operation_day = datetime.strptime(operation_day, "%d%m%Y").date() if operation_day else None
-                original_operation_day = datetime.strptime(original_operation_day, "%d%m%Y").date() if original_operation_day else None
-                std = datetime.strptime(std, "%H%M").time() if std else None
-                sta = datetime.strptime(sta, "%H%M").time() if sta else None
-                original_std = datetime.strptime(original_std, "%H%M").time() if original_std else None
-                original_sta = datetime.strptime(original_sta, "%H%M").time() if original_sta else None
-                departure_delay_time = datetime.strptime(departure_delay_time, "%H%M").time() if departure_delay_time else None
-                atd = datetime.strptime(atd, "%H%M").time() if atd else None
-                takeoff = datetime.strptime(takeoff, "%H%M").time() if takeoff else None
-                touchdown = datetime.strptime(touchdown, "%H%M").time() if touchdown else None
-                ata = datetime.strptime(ata, "%H%M").time() if ata else None
+                # Validate and convert data
+                try:
+                    operation_day = datetime.strptime(operation_day, "%d%m%Y").date()
+                except ValueError:
+                    operation_day = None
+
+                try:
+                    cancelled_deleted = bool(int(cancelled_deleted))
+                except ValueError:
+                    cancelled_deleted = False
+
+                try:
+                    std = datetime.strptime(std, "%H%M").time()
+                except ValueError:
+                    std = None
+
+                try:
+                    sta = datetime.strptime(sta, "%H%M").time()
+                except ValueError:
+                    sta = None
+
+                try:
+                    atd = datetime.strptime(atd, "%H%M").time()
+                except ValueError:
+                    atd = None
+
+                try:
+                    takeoff = datetime.strptime(takeoff, "%H%M").time()
+                except ValueError:
+                    takeoff = None
+
+                try:
+                    touchdown = datetime.strptime(touchdown, "%H%M").time()
+                except ValueError:
+                    touchdown = None
+
+                try:
+                    ata = datetime.strptime(ata, "%H%M").time()
+                except ValueError:
+                    ata = None
 
                 # Define unique criteria
                 unique_criteria = {
@@ -1388,14 +1412,7 @@ def process_tableau_data_file(attachment):
                         ('flight_service_type', flight_service_type),
                         ('std', std),
                         ('sta', sta),
-                        ('original_operation_day', original_operation_day),
-                        ('original_std', original_std),
-                        ('original_sta', original_sta),
                         ('departure_delay_time', departure_delay_time),
-                        ('delay_code_kind', delay_code_kind),
-                        ('delay_number', delay_number),
-                        ('aircraft_config', aircraft_config),
-                        ('seat_type_config', seat_type_config),
                         ('atd', atd),
                         ('takeoff', takeoff),
                         ('touchdown', touchdown),
@@ -1428,14 +1445,7 @@ def process_tableau_data_file(attachment):
                         flight_service_type=flight_service_type,
                         std=std,
                         sta=sta,
-                        original_operation_day=original_operation_day,
-                        original_std=original_std,
-                        original_sta=original_sta,
                         departure_delay_time=departure_delay_time,
-                        delay_code_kind=delay_code_kind,
-                        delay_number=delay_number,
-                        aircraft_config=aircraft_config,
-                        seat_type_config=seat_type_config,
                         atd=atd,
                         takeoff=takeoff,
                         touchdown=touchdown,
@@ -1451,6 +1461,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
