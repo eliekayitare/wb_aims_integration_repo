@@ -1310,10 +1310,13 @@ from .models import TableauData
 from .models import TableauData
 from datetime import datetime
 
+from .models import TableauData
+from datetime import datetime
+
 def process_tableau_data_file(attachment):
     """
     Process the tableau file using a comma delimiter.
-    Insert into TableauData and leave empty fields as None.
+    Insert into TableauData and handle NOT NULL constraints by providing default values.
     """
     try:
         # Read file content
@@ -1332,7 +1335,7 @@ def process_tableau_data_file(attachment):
                 operation_day = fields[0].strip() or None
                 departure_station = fields[1].strip().strip('"') or None
                 flight_no = fields[2].strip() or None
-                flight_leg_code = fields[3].strip().strip('"') or None
+                flight_leg_code = fields[3].strip().strip('"') or "UNKNOWN"  # Default for NOT NULL
                 cancelled_deleted = fields[4].strip() or None
                 arrival_station = fields[5].strip().strip('"') or None
                 aircraft_reg_id = fields[6].strip().strip('"') or None
@@ -1354,9 +1357,6 @@ def process_tableau_data_file(attachment):
                 touchdown = fields[22].strip() or None
                 ata = fields[23].strip() or None
 
-                print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
-                print("\n=======================================================\n")
                 # Validate and convert fields
                 def parse_date(value, field_name):
                     if not value:
@@ -1387,7 +1387,6 @@ def process_tableau_data_file(attachment):
                 touchdown = parse_time(touchdown)
                 ata = parse_time(ata)
 
-                # Convert integers
                 cancelled_deleted = bool(int(cancelled_deleted)) if cancelled_deleted and cancelled_deleted.isdigit() else False
                 delay_number = int(delay_number) if delay_number and delay_number.isdigit() else None
 
@@ -1399,7 +1398,7 @@ def process_tableau_data_file(attachment):
                     'arrival_station': arrival_station,
                     'flight_leg_code': flight_leg_code,
                 }
-                
+
                 # Insert or update TableauData
                 existing_record = TableauData.objects.filter(**unique_criteria).first()
 
@@ -1477,6 +1476,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
