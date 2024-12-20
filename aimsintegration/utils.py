@@ -1307,9 +1307,12 @@ def process_fdm_crew_email_attachment(item, process_function):
 
 from .models import TableauData
 
+from .models import TableauData
+from datetime import datetime
+
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file using fixed positions in the dataset.
+    Process the tableau file using a comma delimiter.
     Insert into TableauData and update all relevant fields dynamically.
     """
     try:
@@ -1322,72 +1325,59 @@ def process_tableau_data_file(attachment):
                 continue  # Skip empty lines
 
             try:
-                # Extract fields based on their positions
-                operation_day = line[0:8].strip()
-                departure_station = line[9:12].strip()
-                flight_no = line[13:16].strip()
-                flight_leg_code = line[17:20].strip()
-                cancelled_deleted = line[21:22].strip()
-                arrival_station = line[23:26].strip()
-                aircraft_reg_id = line[27:35].strip()
-                aircraft_type_index = line[36:37].strip()
-                aircraft_category = line[38:39].strip()
-                flight_service_type = line[40:41].strip()
-                std = line[42:46].strip()
-                sta = line[47:51].strip()
-                original_operation_day = line[52:60].strip()
-                original_std = line[61:65].strip()
-                original_sta = line[66:70].strip()
-                departure_delay_time = line[71:75].strip()
-                delay_code_kind = line[76:80].strip()
-                delay_number = line[81:85].strip()
-                aircraft_config = line[86:90].strip()
-                seat_type_config = line[91:95].strip()
-                atd = line[96:100].strip()
-                takeoff = line[101:105].strip()
-                touchdown = line[106:110].strip()
-                ata = line[111:115].strip()
+                # Split the line by commas
+                fields = line.split(",")
 
-                # Validate and convert data
+                # Extract all fields
+                operation_day = fields[0].strip()
+                departure_station = fields[1].strip()
+                flight_no = fields[2].strip()
+                flight_leg_code = fields[3].strip()
+                cancelled_deleted = fields[4].strip()
+                arrival_station = fields[5].strip()
+                aircraft_reg_id = fields[6].strip()
+                aircraft_type_index = fields[7].strip()
+                aircraft_category = fields[8].strip()
+                flight_service_type = fields[9].strip()
+                std = fields[10].strip()
+                sta = fields[11].strip()
+                original_operation_day = fields[12].strip()
+                original_std = fields[13].strip()
+                original_sta = fields[14].strip()
+                departure_delay_time = fields[15].strip()
+                delay_code_kind = fields[16].strip()
+                delay_number = fields[17].strip()
+                aircraft_config = fields[18].strip()
+                seat_type_config = fields[19].strip()
+                atd = fields[20].strip()
+                takeoff = fields[21].strip()
+                touchdown = fields[22].strip()
+                ata = fields[23].strip()
+
+                # Validate and convert fields
                 try:
                     operation_day = datetime.strptime(operation_day, "%d%m%Y").date()
                 except ValueError:
-                    operation_day = None
+                    logger.warning(f"Invalid operation_day format on line {line_num}: {operation_day}")
+                    continue
 
-                try:
-                    cancelled_deleted = bool(int(cancelled_deleted))
-                except ValueError:
-                    cancelled_deleted = False
+                cancelled_deleted = bool(int(cancelled_deleted)) if cancelled_deleted.isdigit() else False
 
-                try:
-                    std = datetime.strptime(std, "%H%M").time()
-                except ValueError:
-                    std = None
+                def parse_time(value):
+                    try:
+                        return datetime.strptime(value, "%H%M").time()
+                    except ValueError:
+                        return None
 
-                try:
-                    sta = datetime.strptime(sta, "%H%M").time()
-                except ValueError:
-                    sta = None
-
-                try:
-                    atd = datetime.strptime(atd, "%H%M").time()
-                except ValueError:
-                    atd = None
-
-                try:
-                    takeoff = datetime.strptime(takeoff, "%H%M").time()
-                except ValueError:
-                    takeoff = None
-
-                try:
-                    touchdown = datetime.strptime(touchdown, "%H%M").time()
-                except ValueError:
-                    touchdown = None
-
-                try:
-                    ata = datetime.strptime(ata, "%H%M").time()
-                except ValueError:
-                    ata = None
+                std = parse_time(std)
+                sta = parse_time(sta)
+                original_std = parse_time(original_std)
+                original_sta = parse_time(original_sta)
+                departure_delay_time = parse_time(departure_delay_time)
+                atd = parse_time(atd)
+                takeoff = parse_time(takeoff)
+                touchdown = parse_time(touchdown)
+                ata = parse_time(ata)
 
                 # Define unique criteria
                 unique_criteria = {
@@ -1400,7 +1390,7 @@ def process_tableau_data_file(attachment):
 
                 # Insert or update TableauData
                 existing_record = TableauData.objects.filter(**unique_criteria).first()
-                
+
                 if existing_record:
                     # Update only if any field has changed
                     updated = False
@@ -1412,7 +1402,14 @@ def process_tableau_data_file(attachment):
                         ('flight_service_type', flight_service_type),
                         ('std', std),
                         ('sta', sta),
+                        ('original_operation_day', original_operation_day),
+                        ('original_std', original_std),
+                        ('original_sta', original_sta),
                         ('departure_delay_time', departure_delay_time),
+                        ('delay_code_kind', delay_code_kind),
+                        ('delay_number', delay_number),
+                        ('aircraft_config', aircraft_config),
+                        ('seat_type_config', seat_type_config),
                         ('atd', atd),
                         ('takeoff', takeoff),
                         ('touchdown', touchdown),
@@ -1420,7 +1417,7 @@ def process_tableau_data_file(attachment):
                     ]
 
                     for field, new_value in fields_to_check:
-                        existing_value = getattr(existing_record, field)
+                        existing_value = getattr(existing_record, field, None)
                         if new_value is not None and existing_value != new_value:
                             setattr(existing_record, field, new_value)
                             updated = True
@@ -1431,7 +1428,7 @@ def process_tableau_data_file(attachment):
                     else:
                         logger.info(f"No changes detected for flight {flight_no} on {operation_day}.")
                 else:
-                    # Create a new record
+                    # Create a new record with all fields
                     TableauData.objects.create(
                         operation_day=operation_day,
                         departure_station=departure_station,
@@ -1445,14 +1442,21 @@ def process_tableau_data_file(attachment):
                         flight_service_type=flight_service_type,
                         std=std,
                         sta=sta,
+                        original_operation_day=original_operation_day,
+                        original_std=original_std,
+                        original_sta=original_sta,
                         departure_delay_time=departure_delay_time,
+                        delay_code_kind=delay_code_kind,
+                        delay_number=delay_number,
+                        aircraft_config=aircraft_config,
+                        seat_type_config=seat_type_config,
                         atd=atd,
                         takeoff=takeoff,
                         touchdown=touchdown,
                         ata=ata
                     )
                     logger.info(f"Created new TableauData record for flight {flight_no} on {operation_day}.")
-            
+
             except Exception as e:
                 logger.error(f"Error processing line {line_num}: {line}\n{e}")
                 continue
@@ -1461,6 +1465,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 

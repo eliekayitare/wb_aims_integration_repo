@@ -216,3 +216,5 @@ class TableauData(models.Model):
     takeoff = models.TimeField(null=True, blank=True)
     touchdown = models.TimeField(null=True, blank=True)
     ata = models.TimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
+    updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
