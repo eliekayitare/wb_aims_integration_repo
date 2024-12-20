@@ -1357,6 +1357,9 @@ def process_tableau_data_file(attachment):
                 touchdown = fields[22].strip() or None
                 ata = fields[23].strip() or None
 
+                print("\n=======================================================")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight Number: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
+                print("\n=======================================================\n")
                 # Validate and convert fields
                 def parse_date(value, field_name):
                     if not value:
