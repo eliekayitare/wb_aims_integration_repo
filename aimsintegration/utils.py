@@ -981,7 +981,7 @@ def process_fdm_flight_schedule_file(attachment):
             try:
                 # Extract fields
                 flight_date = line[0:10].strip()
-                tail_no = line[10:27].strip()[:10]
+                tail_no = line[10:26].strip()[:10]
                 flight_no = line[26:33].strip() if line[26] != " " else line[27:33].strip()[:6]
                 dep_code_icao = line[33:38].strip()[:4]
                 arr_code_icao = line[38:43].strip()[:4]
@@ -1289,6 +1289,178 @@ def process_fdm_crew_email_attachment(item, process_function):
     """
     Generalized function to handle processing of email attachments.
     `process_function` is the specific function that processes the attachment (e.g., process_crew_details_file).
+    """
+    try:
+        if item.attachments:
+            for attachment in item.attachments:
+                if isinstance(attachment, FileAttachment):
+                    logger.info(f"Processing attachment: {attachment.name}")
+                    process_function(attachment)  # Call the relevant function for each attachment
+    except Exception as e:
+        logger.error(f"Error processing fdm email attachment: {e}")
+
+
+
+
+
+# Tableau Project
+
+from .models import TableauData
+
+def process_tableau_data_file(attachment):
+    """
+    Process the tableau file using fixed positions in the dataset.
+    Insert into TableauData and update all relevant fields dynamically.
+    """
+    try:
+        # Read file content
+        content = attachment.content.decode('utf-8').splitlines()
+        logger.info("Starting to process the Tableau file...")
+
+        for line_num, line in enumerate(content, start=1):
+            if len(line.strip()) == 0:
+                continue  # Skip empty lines
+
+            try:
+                # Extract fields based on their positions
+                operation_day = line[0:8].strip()
+                departure_station = line[9:12].strip()
+                flight_no = line[13:16].strip()
+                flight_leg_code = line[17:20].strip()
+                cancelled_deleted = bool(int(line[21:22].strip()))
+                arrival_station = line[23:26].strip()
+                aircraft_reg_id = line[27:35].strip()
+                aircraft_type_index = line[36:37].strip()
+                aircraft_category = line[38:39].strip()
+                flight_service_type = line[40:41].strip()
+                std = line[42:46].strip()
+                sta = line[47:51].strip()
+                original_operation_day = line[52:60].strip()
+                original_std = line[61:65].strip()
+                original_sta = line[66:70].strip()
+                departure_delay_time = line[71:75].strip()
+                delay_code_kind = line[76:80].strip()
+                delay_number = line[81:85].strip()
+                aircraft_config = line[86:90].strip()
+                seat_type_config = line[91:95].strip()
+                atd = line[96:100].strip()
+                takeoff = line[101:105].strip()
+                touchdown = line[106:110].strip()
+                ata = line[111:115].strip()
+
+                print("\n=======================================================\n")
+                print(f"Operation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
+                print("\n=======================================================\n")
+                    
+                # Parse dates and times
+                operation_day = datetime.strptime(operation_day, "%d%m%Y").date() if operation_day else None
+                original_operation_day = datetime.strptime(original_operation_day, "%d%m%Y").date() if original_operation_day else None
+                std = datetime.strptime(std, "%H%M").time() if std else None
+                sta = datetime.strptime(sta, "%H%M").time() if sta else None
+                original_std = datetime.strptime(original_std, "%H%M").time() if original_std else None
+                original_sta = datetime.strptime(original_sta, "%H%M").time() if original_sta else None
+                departure_delay_time = datetime.strptime(departure_delay_time, "%H%M").time() if departure_delay_time else None
+                atd = datetime.strptime(atd, "%H%M").time() if atd else None
+                takeoff = datetime.strptime(takeoff, "%H%M").time() if takeoff else None
+                touchdown = datetime.strptime(touchdown, "%H%M").time() if touchdown else None
+                ata = datetime.strptime(ata, "%H%M").time() if ata else None
+
+                # Define unique criteria
+                unique_criteria = {
+                    'operation_day': operation_day,
+                    'departure_station': departure_station,
+                    'flight_no': flight_no,
+                    'arrival_station': arrival_station,
+                    'flight_leg_code': flight_leg_code,
+                }
+
+                # Insert or update TableauData
+                existing_record = TableauData.objects.filter(**unique_criteria).first()
+                
+                if existing_record:
+                    # Update only if any field has changed
+                    updated = False
+                    fields_to_check = [
+                        ('cancelled_deleted', cancelled_deleted),
+                        ('aircraft_reg_id', aircraft_reg_id),
+                        ('aircraft_type_index', aircraft_type_index),
+                        ('aircraft_category', aircraft_category),
+                        ('flight_service_type', flight_service_type),
+                        ('std', std),
+                        ('sta', sta),
+                        ('original_operation_day', original_operation_day),
+                        ('original_std', original_std),
+                        ('original_sta', original_sta),
+                        ('departure_delay_time', departure_delay_time),
+                        ('delay_code_kind', delay_code_kind),
+                        ('delay_number', delay_number),
+                        ('aircraft_config', aircraft_config),
+                        ('seat_type_config', seat_type_config),
+                        ('atd', atd),
+                        ('takeoff', takeoff),
+                        ('touchdown', touchdown),
+                        ('ata', ata),
+                    ]
+
+                    for field, new_value in fields_to_check:
+                        existing_value = getattr(existing_record, field)
+                        if new_value is not None and existing_value != new_value:
+                            setattr(existing_record, field, new_value)
+                            updated = True
+
+                    if updated:
+                        existing_record.save()
+                        logger.info(f"Updated TableauData record for flight {flight_no} on {operation_day}.")
+                    else:
+                        logger.info(f"No changes detected for flight {flight_no} on {operation_day}.")
+                else:
+                    # Create a new record
+                    TableauData.objects.create(
+                        operation_day=operation_day,
+                        departure_station=departure_station,
+                        flight_no=flight_no,
+                        flight_leg_code=flight_leg_code,
+                        cancelled_deleted=cancelled_deleted,
+                        arrival_station=arrival_station,
+                        aircraft_reg_id=aircraft_reg_id,
+                        aircraft_type_index=aircraft_type_index,
+                        aircraft_category=aircraft_category,
+                        flight_service_type=flight_service_type,
+                        std=std,
+                        sta=sta,
+                        original_operation_day=original_operation_day,
+                        original_std=original_std,
+                        original_sta=original_sta,
+                        departure_delay_time=departure_delay_time,
+                        delay_code_kind=delay_code_kind,
+                        delay_number=delay_number,
+                        aircraft_config=aircraft_config,
+                        seat_type_config=seat_type_config,
+                        atd=atd,
+                        takeoff=takeoff,
+                        touchdown=touchdown,
+                        ata=ata
+                    )
+                    logger.info(f"Created new TableauData record for flight {flight_no} on {operation_day}.")
+            
+            except Exception as e:
+                logger.error(f"Error processing line {line_num}: {line}\n{e}")
+                continue
+
+        logger.info("Tableau data file processed successfully.")
+
+    except Exception as e:
+        logger.error(f"Error processing tableau data file: {e}")
+
+
+
+
+
+
+def process_tableau_data_email_attachment(item, process_function):
+    """
+    Generalized function to handle processing of email attachments.
+    `process_function` is the specific function that processes the attachment (e.g., process_tableau_data_file).
     """
     try:
         if item.attachments:

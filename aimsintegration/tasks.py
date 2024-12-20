@@ -3,7 +3,7 @@
 
 from celery import shared_task, chain
 from exchangelib import Credentials, Account, Configuration, EWSDateTime
-from .utils import process_email_attachment, process_airport_file, process_flight_schedule_file, process_acars_message, process_cargo_email_attachment, process_cargo_flight_schedule_file,process_fdm_email_attachment,process_fdm_flight_schedule_file,process_fdm_crew_email_attachment,process_crew_details_file
+from .utils import process_email_attachment, process_airport_file, process_flight_schedule_file, process_acars_message, process_cargo_email_attachment, process_cargo_flight_schedule_file,process_fdm_email_attachment,process_fdm_flight_schedule_file,process_fdm_crew_email_attachment,process_crew_details_file,process_tableau_data_email_attachment,process_tableau_data_file
 import logging
 from django.conf import settings
 from datetime import datetime
@@ -794,3 +794,26 @@ def hourly_upload_csv_to_fdm():
         logger.error(f"SFTP upload failed: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
+
+
+
+
+
+#Tableau Project
+
+@shared_task
+def fetch_tableau():
+    account = get_exchange_account()
+    logger.info("Fetching the most recent tableau email...")
+
+    emails = account.inbox.filter(
+        subject__contains='AIMS JOB : #1011 Flight OPS stat dashboard file attached'
+    ).order_by('-datetime_received')
+    
+    email = emails[0] if emails else None
+
+    if email:
+        logger.info(f"Processing the most recent tableau data email with subject: {email.subject}")
+        process_tableau_data_email_attachment(email, process_tableau_data_file)
+    else:
+        logger.info("No new tableau email found.")

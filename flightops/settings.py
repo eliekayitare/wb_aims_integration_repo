@@ -296,6 +296,12 @@ CELERY_BEAT_SCHEDULE = {
         'options': {'run_immediately': False}
         
     },
+
+    # Feed Tableau - Runs every 5 minutes
+    'feed-tableau-every-5-minutes': {
+        'task': 'aimsintegration.tasks.fetch_tableau',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    },
     
 }
 
