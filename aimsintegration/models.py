@@ -222,3 +222,7 @@ class TableauData(models.Model):
 
     class Meta:
         db_table = 'tableau_data'
+
+        indexes = [
+            models.Index(fields=['updated_at']),  # Optimize queries based on this field
+        ]

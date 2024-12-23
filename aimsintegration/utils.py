@@ -1485,9 +1485,6 @@ def process_tableau_data_file(attachment):
 
 
 
-
-
-
 def process_tableau_data_email_attachment(item, process_function):
     """
     Generalized function to handle processing of email attachments.
