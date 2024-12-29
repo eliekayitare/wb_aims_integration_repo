@@ -1570,23 +1570,46 @@ def process_tableau_data_file(attachment):
                 original_sta = None
                 departure_delay_time = None
 
-                # Check for original operation day pattern
-                if fields[12] and fields[12] != "0000":
-                    original_operation_day = parse_date(fields[12], "Original Operation Day")
-                if fields[13] and fields[13] != "0000":
-                    original_std = parse_time(fields[13], "Original STD")
-                if fields[14] and fields[14] != "0000":
-                    original_sta = parse_time(fields[14], "Original STA")
-                if fields[15]:
+                if fields[12].strip() and fields[12] != "0000":
+                    original_operation_day = parse_date(fields[12].strip(), "Original Operation Day")
+
+                if fields[13].strip() and fields[13] != "0000":
+                    original_std = parse_time(fields[13].strip(), "Original STD")
+
+                if fields[14].strip() and fields[14] != "0000":
+                    original_sta = parse_time(fields[14].strip(), "Original STA")
+
+                if fields[15].strip():
                     try:
-                        departure_delay_time = int(fields[15])
+                        departure_delay_time = int(fields[15].strip())
                     except ValueError:
                         logger.warning(f"Invalid Departure Delay Time on line {line_num}: {fields[15]}")
                         departure_delay_time = None
 
-                print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
-                print("\n=======================================================\n")
+                # Log parsed fields
+                logger.warning(f"\n=======================================================")
+                logger.warning(f"Operation Day: {operation_day}")
+                logger.warning(f"Departure Station: {departure_station}")
+                logger.warning(f"Flight No: {flight_no}")
+                logger.warning(f"Flight Leg Code: {flight_leg_code}")
+                logger.warning(f"Cancelled/Deleted: {cancelled_deleted}")
+                logger.warning(f"Arrival Station: {arrival_station}")
+                logger.warning(f"Aircraft Reg ID: {aircraft_reg_id}")
+                logger.warning(f"Aircraft Type Index: {aircraft_type_index}")
+                logger.warning(f"Aircraft Category: {aircraft_category}")
+                logger.warning(f"Flight Service Type: {flight_service_type}")
+                logger.warning(f"STD: {format_time(std)}")
+                logger.warning(f"STA: {format_time(sta)}")
+                logger.warning(f"Original Operation Day: {original_operation_day}")
+                logger.warning(f"Original STD: {format_time(original_std)}")
+                logger.warning(f"Original STA: {format_time(original_sta)}")
+                logger.warning(f"Departure Delay Time: {departure_delay_time}")
+                logger.warning(f"ATD: {format_time(atd)}")
+                logger.warning(f"Takeoff: {format_time(takeoff)}")
+                logger.warning(f"Touchdown: {format_time(touchdown)}")
+                logger.warning(f"ATA: {format_time(ata)}")
+                logger.warning(f"\n=======================================================")
+
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
@@ -1663,6 +1686,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
