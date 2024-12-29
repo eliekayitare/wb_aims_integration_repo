@@ -1483,16 +1483,16 @@ logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file, focusing on identifying the last four timing fields (ATD, Takeoff, Touchdown, ATA)
-    by searching for valid HHMM format and handling empty fields gracefully.
+    Process the tableau file, ensuring proper parsing of all fields
+    and handling timing fields as 'hh:mm'.
     """
     try:
         # Read file content
         content = attachment.content.decode('utf-8').splitlines()
         logger.info("Starting to process the Tableau file...")
 
-        # Define a regex to match HHMM format
-        time_pattern = re.compile(r"^\d{4}$")
+        # Define regex patterns for time and date
+        time_pattern = re.compile(r"^\d{4}$")  # Match HHMM format
 
         def parse_date(value, field_name):
             """
@@ -1509,13 +1509,15 @@ def process_tableau_data_file(attachment):
 
         def parse_time(value, field_name):
             """
-            Parse a time value in HHMM format. Return None for invalid or empty values.
+            Parse a time value in HHMM format and return 'hh:mm'.
+            Return None for invalid or empty values.
             """
             if not value or value.isspace():
                 logger.warning(f"Missing {field_name}. Defaulting to None.")
                 return None
             try:
-                return datetime.strptime(value.strip(), "%H%M").time()
+                parsed_time = datetime.strptime(value.strip(), "%H%M").time()
+                return parsed_time  # Return as TimeField-compatible time object
             except ValueError:
                 logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
                 return None
@@ -1531,11 +1533,9 @@ def process_tableau_data_file(attachment):
 
                 # Extract the last four fields with HHMM format
                 timing_fields = [field for field in fields if time_pattern.match(field)]
+                atd, takeoff, touchdown, ata = (None, None, None, None)
                 if len(timing_fields) >= 4:
                     atd, takeoff, touchdown, ata = timing_fields[-4:]
-                else:
-                    logger.warning(f"Line {line_num} does not contain four valid HHMM timing fields.")
-                    atd, takeoff, touchdown, ata = None, None, None, None
 
                 # Parse timing fields
                 atd = parse_time(atd, "ATD")
@@ -1543,7 +1543,7 @@ def process_tableau_data_file(attachment):
                 touchdown = parse_time(touchdown, "Touchdown")
                 ata = parse_time(ata, "ATA")
 
-                # Extract mandatory fields and handle empty values
+                # Parse other fields
                 operation_day = parse_date(fields[0], "Operation Day")
                 departure_station = fields[1]
                 flight_no = fields[2]
@@ -1551,19 +1551,48 @@ def process_tableau_data_file(attachment):
                 cancelled_deleted = bool(int(fields[4])) if fields[4].isdigit() else False
                 arrival_station = fields[5]
                 aircraft_reg_id = fields[6]
-                aircraft_type_index = fields[7] or "0"
-                aircraft_category = fields[8] or "0"
+                aircraft_type_index = fields[7] or None
+                aircraft_category = fields[8] or None
                 flight_service_type = fields[9]
                 std = parse_time(fields[10], "STD")
                 sta = parse_time(fields[11], "STA")
                 original_operation_day = parse_date(fields[12], "Original Operation Day") if fields[12] != "0000" else None
                 original_std = parse_time(fields[13], "Original STD") if fields[13] != "0000" else None
                 original_sta = parse_time(fields[14], "Original STA") if fields[14] != "0000" else None
+                departure_delay_time = parse_time(fields[15], "Departure Delay Time")
+                delay_code_kind = fields[16]
+                delay_number = int(fields[17]) if fields[17].isdigit() else None
+                aircraft_config = fields[18] or None
+                seat_type_config = fields[19] or None
 
-                
-                print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
-                print("\n=======================================================\n")
+                # Log parsed fields
+                logger.warning(f"\n=======================================================")
+                logger.warning(f"Operation Day: {operation_day}")
+                logger.warning(f"Departure Station: {departure_station}")
+                logger.warning(f"Flight No: {flight_no}")
+                logger.warning(f"Flight Leg Code: {flight_leg_code}")
+                logger.warning(f"Cancelled/Deleted: {cancelled_deleted}")
+                logger.warning(f"Arrival Station: {arrival_station}")
+                logger.warning(f"Aircraft Reg ID: {aircraft_reg_id}")
+                logger.warning(f"Aircraft Type Index: {aircraft_type_index}")
+                logger.warning(f"Aircraft Category: {aircraft_category}")
+                logger.warning(f"Flight Service Type: {flight_service_type}")
+                logger.warning(f"STD: {std}")
+                logger.warning(f"STA: {sta}")
+                logger.warning(f"Original Operation Day: {original_operation_day}")
+                logger.warning(f"Original STD: {original_std}")
+                logger.warning(f"Original STA: {original_sta}")
+                logger.warning(f"Departure Delay Time: {departure_delay_time}")
+                logger.warning(f"Delay Code Kind: {delay_code_kind}")
+                logger.warning(f"Delay Number: {delay_number}")
+                logger.warning(f"Aircraft Config: {aircraft_config}")
+                logger.warning(f"Seat Type Config: {seat_type_config}")
+                logger.warning(f"ATD: {atd}")
+                logger.warning(f"Takeoff: {takeoff}")
+                logger.warning(f"Touchdown: {touchdown}")
+                logger.warning(f"ATA: {ata}")
+                logger.warning(f"\n=======================================================")
+
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
@@ -1590,6 +1619,11 @@ def process_tableau_data_file(attachment):
                         'original_operation_day': original_operation_day,
                         'original_std': original_std,
                         'original_sta': original_sta,
+                        'departure_delay_time': departure_delay_time,
+                        'delay_code_kind': delay_code_kind,
+                        'delay_number': delay_number,
+                        'aircraft_config': aircraft_config,
+                        'seat_type_config': seat_type_config,
                         'atd': atd,
                         'takeoff': takeoff,
                         'touchdown': touchdown,
@@ -1624,6 +1658,11 @@ def process_tableau_data_file(attachment):
                         original_operation_day=original_operation_day,
                         original_std=original_std,
                         original_sta=original_sta,
+                        departure_delay_time=departure_delay_time,
+                        delay_code_kind=delay_code_kind,
+                        delay_number=delay_number,
+                        aircraft_config=aircraft_config,
+                        seat_type_config=seat_type_config,
                         atd=atd,
                         takeoff=takeoff,
                         touchdown=touchdown,
@@ -1638,6 +1677,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
