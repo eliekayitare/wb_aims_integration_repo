@@ -1474,7 +1474,6 @@ def process_fdm_crew_email_attachment(item, process_function):
 #     except Exception as e:
 #         logger.error(f"Error processing tableau data file: {e}")
 
-
 from .models import TableauData
 from datetime import datetime
 import logging
@@ -1504,6 +1503,34 @@ def process_tableau_data_file(attachment):
                 logger.debug(f"Line {line_num} raw data: {line}")
                 logger.debug(f"Line {line_num} fields: {fields}")
 
+                # Define parsing functions
+                def parse_date(value, field_name):
+                    """
+                    Parse a date value in DDMMYYYY format. Return None for invalid or empty values.
+                    """
+                    if not value or value.isspace():
+                        logger.warning(f"Missing {field_name} on line {line_num}.")
+                        return None
+                    try:
+                        return datetime.strptime(value.strip(), "%d%m%Y").date()
+                    except ValueError:
+                        logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
+                        return None
+
+                def parse_time(value, field_name):
+                    """
+                    Parse a time value in HHMM format. Return None for invalid or empty values.
+                    """
+                    if not value or value.isspace():
+                        logger.warning(f"Missing {field_name} on line {line_num}.")
+                        return None
+                    value = value.strip()  # Remove extra whitespace
+                    try:
+                        return datetime.strptime(value, "%H%M").time()
+                    except ValueError:
+                        logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
+                        return None
+
                 # Extract the last four fields dynamically after `,,`
                 double_comma_index = line.find(",,")
                 if double_comma_index != -1:
@@ -1519,17 +1546,6 @@ def process_tableau_data_file(attachment):
                     atd, takeoff, touchdown, ata = None, None, None, None
 
                 # Parse and validate the last four timing fields
-                def parse_time(value, field_name):
-                    if not value or value.isspace():
-                        logger.warning(f"Missing {field_name} on line {line_num}.")
-                        return None
-                    value = value.strip()  # Remove extra whitespace
-                    try:
-                        return datetime.strptime(value, "%H%M").time()
-                    except ValueError:
-                        logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
-                        return None
-
                 atd = parse_time(atd, "ATD")
                 takeoff = parse_time(takeoff, "Takeoff")
                 touchdown = parse_time(touchdown, "Touchdown")
@@ -1538,8 +1554,8 @@ def process_tableau_data_file(attachment):
                 # Log the parsed times
                 logger.debug(f"Parsed times for line {line_num} - ATD: {atd}, Takeoff: {takeoff}, Touchdown: {touchdown}, ATA: {ata}")
 
-                # Define other fields (similar to before)
-                operation_day = datetime.strptime(fields[0], "%d%m%Y").date()
+                # Extract mandatory fields
+                operation_day = parse_date(fields[0], "Operation Day")
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
@@ -1629,8 +1645,6 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
-
-
 
 
 
