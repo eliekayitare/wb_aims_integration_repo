@@ -1548,7 +1548,7 @@ def process_tableau_data_file(attachment):
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
-                cancelled_deleted = bool(int(fields[4])) if fields[4].isdigit() else False
+                cancelled_deleted = bool(int(fields[4]))
                 arrival_station = fields[5]
                 aircraft_reg_id = fields[6]
                 aircraft_type_index = fields[7] or None
@@ -1564,35 +1564,10 @@ def process_tableau_data_file(attachment):
                 delay_number = int(fields[17]) if fields[17].isdigit() else None
                 aircraft_config = fields[18] or None
                 seat_type_config = fields[19] or None
-
-                # Log parsed fields
-                logger.warning(f"\n=======================================================")
-                logger.warning(f"Operation Day: {operation_day}")
-                logger.warning(f"Departure Station: {departure_station}")
-                logger.warning(f"Flight No: {flight_no}")
-                logger.warning(f"Flight Leg Code: {flight_leg_code}")
-                logger.warning(f"Cancelled/Deleted: {cancelled_deleted}")
-                logger.warning(f"Arrival Station: {arrival_station}")
-                logger.warning(f"Aircraft Reg ID: {aircraft_reg_id}")
-                logger.warning(f"Aircraft Type Index: {aircraft_type_index}")
-                logger.warning(f"Aircraft Category: {aircraft_category}")
-                logger.warning(f"Flight Service Type: {flight_service_type}")
-                logger.warning(f"STD: {std}")
-                logger.warning(f"STA: {sta}")
-                logger.warning(f"Original Operation Day: {original_operation_day}")
-                logger.warning(f"Original STD: {original_std}")
-                logger.warning(f"Original STA: {original_sta}")
-                logger.warning(f"Departure Delay Time: {departure_delay_time}")
-                logger.warning(f"Delay Code Kind: {delay_code_kind}")
-                logger.warning(f"Delay Number: {delay_number}")
-                logger.warning(f"Aircraft Config: {aircraft_config}")
-                logger.warning(f"Seat Type Config: {seat_type_config}")
-                logger.warning(f"ATD: {atd}")
-                logger.warning(f"Takeoff: {takeoff}")
-                logger.warning(f"Touchdown: {touchdown}")
-                logger.warning(f"ATA: {ata}")
-                logger.warning(f"\n=======================================================")
-
+                
+                print("\n=======================================================")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
+                print("\n=======================================================\n")
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
