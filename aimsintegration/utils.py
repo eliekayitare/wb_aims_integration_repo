@@ -1548,7 +1548,7 @@ def process_tableau_data_file(attachment):
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
-                cancelled_deleted = bool(int(fields[4]))
+                cancelled_deleted = fields[4] or None
                 arrival_station = fields[5]
                 aircraft_reg_id = fields[6]
                 aircraft_type_index = fields[7] or None
