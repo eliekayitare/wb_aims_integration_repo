@@ -1522,6 +1522,12 @@ def process_tableau_data_file(attachment):
                 logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
                 return None
 
+        def format_time(time_obj):
+            """
+            Format a time object to 'hh:mm' or return None if the time object is None.
+            """
+            return time_obj.strftime("%H:%M") if time_obj else None
+
         for line_num, line in enumerate(content, start=1):
             if not line.strip():
                 continue  # Skip empty lines
@@ -1548,7 +1554,7 @@ def process_tableau_data_file(attachment):
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
-                cancelled_deleted = fields[4] or None
+                cancelled_deleted = fields[4]
                 arrival_station = fields[5]
                 aircraft_reg_id = fields[6]
                 aircraft_type_index = fields[7] or None
@@ -1564,10 +1570,11 @@ def process_tableau_data_file(attachment):
                 delay_number = int(fields[17]) if fields[17].isdigit() else None
                 aircraft_config = fields[18] or None
                 seat_type_config = fields[19] or None
-                
+
                 print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {format_time(departure_delay_time)}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
                 print("\n=======================================================\n")
+
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
@@ -1628,20 +1635,20 @@ def process_tableau_data_file(attachment):
                         aircraft_type_index=aircraft_type_index,
                         aircraft_category=aircraft_category,
                         flight_service_type=flight_service_type,
-                        std=std,
-                        sta=sta,
+                        std=format_time(std),
+                        sta=format_time(sta),
                         original_operation_day=original_operation_day,
-                        original_std=original_std,
-                        original_sta=original_sta,
-                        departure_delay_time=departure_delay_time,
+                        original_std=format_time(original_std),
+                        original_sta=format_time(original_sta),
+                        departure_delay_time=format_time(departure_delay_time),
                         delay_code_kind=delay_code_kind,
                         delay_number=delay_number,
                         aircraft_config=aircraft_config,
                         seat_type_config=seat_type_config,
-                        atd=atd,
-                        takeoff=takeoff,
-                        touchdown=touchdown,
-                        ata=ata
+                        atd=format_time(atd),
+                        takeoff=format_time(takeoff),
+                        touchdown=format_time(touchdown),
+                        ata=format_time(ata)
                     )
                     logger.info(f"Created new record for flight {flight_no} on {operation_day}.")
             except Exception as e:
@@ -1652,6 +1659,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
