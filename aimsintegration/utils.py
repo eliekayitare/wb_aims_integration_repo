@@ -1476,7 +1476,6 @@ def process_fdm_crew_email_attachment(item, process_function):
 
 
 
-
 from .models import TableauData
 from datetime import datetime
 import logging
@@ -1486,9 +1485,8 @@ logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file, ensuring proper parsing of all fields,
-    including original operation day, original STD, original STA,
-    and departure delay time, while handling missing or invalid data.
+    Process the tableau file, ensuring robust parsing of all fields,
+    including handling missing or invalid data gracefully.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -1498,7 +1496,7 @@ def process_tableau_data_file(attachment):
 
         def parse_date(value, field_name):
             if not isinstance(value, str) or not value.strip():
-                logger.warning(f"Invalid or missing {field_name}. Defaulting to None.")
+                logger.warning(f"Missing or invalid {field_name}. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%d%m%Y").date()
@@ -1508,7 +1506,7 @@ def process_tableau_data_file(attachment):
 
         def parse_time(value, field_name):
             if not isinstance(value, str) or not value.strip():
-                logger.warning(f"Invalid or missing {field_name}. Defaulting to None.")
+                logger.warning(f"Missing or invalid {field_name}. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%H%M").time()
@@ -1542,7 +1540,7 @@ def process_tableau_data_file(attachment):
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
-                cancelled_deleted = fields[4]
+                cancelled_deleted = bool(int(fields[4])) if fields[4].isdigit() else False
                 arrival_station = fields[5]
                 aircraft_reg_id = fields[6]
                 aircraft_type_index = fields[7] or None
@@ -1557,16 +1555,16 @@ def process_tableau_data_file(attachment):
                 original_sta = None
                 departure_delay_time = None
 
-                if fields[12].strip() and fields[12] != "0000":
+                if len(fields) > 12 and fields[12].strip() and fields[12] != "0000":
                     original_operation_day = parse_date(fields[12].strip(), "Original Operation Day")
 
-                if fields[13].strip() and fields[13] != "0000":
+                if len(fields) > 13 and fields[13].strip() and fields[13] != "0000":
                     original_std = parse_time(fields[13].strip(), "Original STD")
 
-                if fields[14].strip() and fields[14] != "0000":
+                if len(fields) > 14 and fields[14].strip() and fields[14] != "0000":
                     original_sta = parse_time(fields[14].strip(), "Original STA")
 
-                if fields[15].strip():
+                if len(fields) > 15 and fields[15].strip():
                     try:
                         departure_delay_time = int(fields[15].strip())
                     except ValueError:
@@ -1650,6 +1648,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
