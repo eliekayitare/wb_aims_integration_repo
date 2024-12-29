@@ -1474,6 +1474,9 @@ def process_fdm_crew_email_attachment(item, process_function):
 #     except Exception as e:
 #         logger.error(f"Error processing tableau data file: {e}")
 
+
+
+
 from .models import TableauData
 from datetime import datetime
 import logging
@@ -1485,22 +1488,17 @@ def process_tableau_data_file(attachment):
     """
     Process the tableau file, ensuring proper parsing of all fields,
     including original operation day, original STD, original STA,
-    and departure delay time.
+    and departure delay time, while handling missing or invalid data.
     """
     try:
-        # Read file content
         content = attachment.content.decode('utf-8').splitlines()
         logger.info("Starting to process the Tableau file...")
 
-        # Define regex patterns for time and date
         time_pattern = re.compile(r"^\d{4}$")  # Match HHMM format
 
         def parse_date(value, field_name):
-            """
-            Parse a date value in DDMMYYYY format. Return None for invalid or empty values.
-            """
-            if not value or value.isspace():
-                logger.warning(f"Missing {field_name}. Defaulting to None.")
+            if not isinstance(value, str) or not value.strip():
+                logger.warning(f"Invalid or missing {field_name}. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%d%m%Y").date()
@@ -1509,48 +1507,37 @@ def process_tableau_data_file(attachment):
                 return None
 
         def parse_time(value, field_name):
-            """
-            Parse a time value in HHMM format and return as a TimeField-compatible object.
-            Return None for invalid or empty values.
-            """
-            if not value or value.isspace():
-                logger.warning(f"Missing {field_name}. Defaulting to None.")
+            if not isinstance(value, str) or not value.strip():
+                logger.warning(f"Invalid or missing {field_name}. Defaulting to None.")
                 return None
             try:
-                parsed_time = datetime.strptime(value.strip(), "%H%M").time()
-                return parsed_time
+                return datetime.strptime(value.strip(), "%H%M").time()
             except ValueError:
                 logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
                 return None
 
         def format_time(time_obj):
-            """
-            Format a time object to 'hh:mm' or return None if the time object is None.
-            """
             return time_obj.strftime("%H:%M") if time_obj else None
 
         for line_num, line in enumerate(content, start=1):
             if not line.strip():
-                continue  # Skip empty lines
+                continue
 
             try:
-                # Split the line into fields
                 fields = line.split(",")
                 fields = [field.strip() for field in fields]
 
-                # Extract timing fields (last four values in HHMM format)
+                # Extract timing fields
                 timing_fields = [field for field in fields if time_pattern.match(field)]
                 atd, takeoff, touchdown, ata = (None, None, None, None)
                 if len(timing_fields) >= 4:
                     atd, takeoff, touchdown, ata = timing_fields[-4:]
 
-                # Parse timing fields
                 atd = parse_time(atd, "ATD")
                 takeoff = parse_time(takeoff, "Takeoff")
                 touchdown = parse_time(touchdown, "Touchdown")
                 ata = parse_time(ata, "ATA")
 
-                # Parse other fields
                 operation_day = parse_date(fields[0], "Operation Day")
                 departure_station = fields[1]
                 flight_no = fields[2]
@@ -1586,30 +1573,9 @@ def process_tableau_data_file(attachment):
                         logger.warning(f"Invalid Departure Delay Time on line {line_num}: {fields[15]}")
                         departure_delay_time = None
 
-                # Log parsed fields
-                logger.warning(f"\n=======================================================")
-                logger.warning(f"Operation Day: {operation_day}")
-                logger.warning(f"Departure Station: {departure_station}")
-                logger.warning(f"Flight No: {flight_no}")
-                logger.warning(f"Flight Leg Code: {flight_leg_code}")
-                logger.warning(f"Cancelled/Deleted: {cancelled_deleted}")
-                logger.warning(f"Arrival Station: {arrival_station}")
-                logger.warning(f"Aircraft Reg ID: {aircraft_reg_id}")
-                logger.warning(f"Aircraft Type Index: {aircraft_type_index}")
-                logger.warning(f"Aircraft Category: {aircraft_category}")
-                logger.warning(f"Flight Service Type: {flight_service_type}")
-                logger.warning(f"STD: {format_time(std)}")
-                logger.warning(f"STA: {format_time(sta)}")
-                logger.warning(f"Original Operation Day: {original_operation_day}")
-                logger.warning(f"Original STD: {format_time(original_std)}")
-                logger.warning(f"Original STA: {format_time(original_sta)}")
-                logger.warning(f"Departure Delay Time: {departure_delay_time}")
-                logger.warning(f"ATD: {format_time(atd)}")
-                logger.warning(f"Takeoff: {format_time(takeoff)}")
-                logger.warning(f"Touchdown: {format_time(touchdown)}")
-                logger.warning(f"ATA: {format_time(ata)}")
-                logger.warning(f"\n=======================================================")
-
+                print("\n=======================================================")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
+                print("\n=======================================================\n")
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
@@ -1623,7 +1589,6 @@ def process_tableau_data_file(attachment):
                 existing_record = TableauData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
-                    # Update if changes are detected
                     updated = False
                     fields_to_update = {
                         'cancelled_deleted': cancelled_deleted,
@@ -1654,7 +1619,6 @@ def process_tableau_data_file(attachment):
                     else:
                         logger.info(f"No changes detected for flight {flight_no} on {operation_day}.")
                 else:
-                    # Create a new record
                     TableauData.objects.create(
                         operation_day=operation_day,
                         departure_station=departure_station,
@@ -1686,6 +1650,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
