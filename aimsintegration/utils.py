@@ -1483,8 +1483,8 @@ logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file with robust validation for date and time fields
-    and handle inconsistencies gracefully, including proper handling of the last fields.
+    Process the tableau file, focusing on dynamically identifying the last four fields
+    (ATD, Takeoff, Touchdown, ATA) after encountering the double commas `,,`.
     """
     try:
         # Read file content
@@ -1504,35 +1504,42 @@ def process_tableau_data_file(attachment):
                 logger.debug(f"Line {line_num} raw data: {line}")
                 logger.debug(f"Line {line_num} fields: {fields}")
 
-                # Ensure at least 24 fields are present
-                while len(fields) < 24:
-                    fields.append("")
+                # Extract the last four fields dynamically after `,,`
+                double_comma_index = line.find(",,")
+                if double_comma_index != -1:
+                    # Extract timing fields after `,,`
+                    timing_fields = line[double_comma_index + 2:].split(",")
+                    atd = timing_fields[0].strip() if len(timing_fields) > 0 else None
+                    takeoff = timing_fields[1].strip() if len(timing_fields) > 1 else None
+                    touchdown = timing_fields[2].strip() if len(timing_fields) > 2 else None
+                    ata = timing_fields[3].strip() if len(timing_fields) > 3 else None
+                else:
+                    # Default values if `,,` not found
+                    logger.warning(f"Line {line_num} does not contain `,,` for ATD, Takeoff, Touchdown, ATA.")
+                    atd, takeoff, touchdown, ata = None, None, None, None
 
-                # Parse date and time fields
-                def parse_date(value, field_name):
-                    if not value or value.isspace():
-                        logger.warning(f"Missing {field_name} on line {line_num}.")
-                        return None
-                    try:
-                        return datetime.strptime(value.strip(), "%d%m%Y").date()
-                    except ValueError:
-                        logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
-                        return None
-
+                # Parse and validate the last four timing fields
                 def parse_time(value, field_name):
                     if not value or value.isspace():
                         logger.warning(f"Missing {field_name} on line {line_num}.")
                         return None
                     value = value.strip()  # Remove extra whitespace
                     try:
-                        # Ensure the value is valid for HHMM format
                         return datetime.strptime(value, "%H%M").time()
                     except ValueError:
                         logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
                         return None
 
-                # Extract mandatory fields
-                operation_day = parse_date(fields[0], "Operation Day")
+                atd = parse_time(atd, "ATD")
+                takeoff = parse_time(takeoff, "Takeoff")
+                touchdown = parse_time(touchdown, "Touchdown")
+                ata = parse_time(ata, "ATA")
+
+                # Log the parsed times
+                logger.debug(f"Parsed times for line {line_num} - ATD: {atd}, Takeoff: {takeoff}, Touchdown: {touchdown}, ATA: {ata}")
+
+                # Define other fields (similar to before)
+                operation_day = datetime.strptime(fields[0], "%d%m%Y").date()
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
@@ -1544,26 +1551,9 @@ def process_tableau_data_file(attachment):
                 flight_service_type = fields[9]
                 std = parse_time(fields[10], "STD")
                 sta = parse_time(fields[11], "STA")
-                original_operation_day = parse_date(fields[12], "Original Operation Day")
+                original_operation_day = parse_date(fields[12], "Original Operation Day") if fields[12] != "0000" else None
                 original_std = parse_time(fields[13], "Original STD") if fields[13] != "0000" else None
                 original_sta = parse_time(fields[14], "Original STA") if fields[14] != "0000" else None
-                departure_delay_time = int(fields[15]) if fields[15].lstrip('-').isdigit() else 0
-                delay_code_kind = fields[16]
-                delay_number = int(fields[17]) if fields[17].isdigit() else 0
-                aircraft_config = fields[18] or "0"
-                seat_type_config = fields[19] or "0"
-
-                # Use negative indexing for the last four fields
-                atd = parse_time(fields[-4], "ATD")
-                takeoff = parse_time(fields[-3], "Takeoff")
-                touchdown = parse_time(fields[-2], "Touchdown")
-                ata = parse_time(fields[-1], "ATA")
-
-                print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
-                print("\n=======================================================\n")
-                # Log the parsed values for debugging
-                logger.debug(f"Parsed times for line {line_num} - ATD: {atd}, Takeoff: {takeoff}, Touchdown: {touchdown}, ATA: {ata}")
 
                 # Define unique criteria for the database
                 unique_criteria = {
@@ -1578,7 +1568,7 @@ def process_tableau_data_file(attachment):
                 existing_record = TableauData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
-                    # Update only if there are changes
+                    # Update if changes are detected
                     updated = False
                     fields_to_update = {
                         'cancelled_deleted': cancelled_deleted,
@@ -1591,11 +1581,6 @@ def process_tableau_data_file(attachment):
                         'original_operation_day': original_operation_day,
                         'original_std': original_std,
                         'original_sta': original_sta,
-                        'departure_delay_time': departure_delay_time,
-                        'delay_code_kind': delay_code_kind,
-                        'delay_number': delay_number,
-                        'aircraft_config': aircraft_config,
-                        'seat_type_config': seat_type_config,
                         'atd': atd,
                         'takeoff': takeoff,
                         'touchdown': touchdown,
@@ -1630,11 +1615,6 @@ def process_tableau_data_file(attachment):
                         original_operation_day=original_operation_day,
                         original_std=original_std,
                         original_sta=original_sta,
-                        departure_delay_time=departure_delay_time,
-                        delay_code_kind=delay_code_kind,
-                        delay_number=delay_number,
-                        aircraft_config=aircraft_config,
-                        seat_type_config=seat_type_config,
                         atd=atd,
                         takeoff=takeoff,
                         touchdown=touchdown,
@@ -1649,6 +1629,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
