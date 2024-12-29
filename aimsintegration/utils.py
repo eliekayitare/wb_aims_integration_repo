@@ -1484,7 +1484,7 @@ logger = logging.getLogger(__name__)
 def process_tableau_data_file(attachment):
     """
     Process the tableau file, focusing on identifying the last four timing fields (ATD, Takeoff, Touchdown, ATA)
-    by searching for valid HHMM format.
+    by searching for valid HHMM format and handling empty fields gracefully.
     """
     try:
         # Read file content
@@ -1493,6 +1493,32 @@ def process_tableau_data_file(attachment):
 
         # Define a regex to match HHMM format
         time_pattern = re.compile(r"^\d{4}$")
+
+        def parse_date(value, field_name):
+            """
+            Parse a date value in DDMMYYYY format. Return None for invalid or empty values.
+            """
+            if not value or value.isspace():
+                logger.warning(f"Missing {field_name}. Defaulting to None.")
+                return None
+            try:
+                return datetime.strptime(value.strip(), "%d%m%Y").date()
+            except ValueError:
+                logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
+                return None
+
+        def parse_time(value, field_name):
+            """
+            Parse a time value in HHMM format. Return None for invalid or empty values.
+            """
+            if not value or value.isspace():
+                logger.warning(f"Missing {field_name}. Defaulting to None.")
+                return None
+            try:
+                return datetime.strptime(value.strip(), "%H%M").time()
+            except ValueError:
+                logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
+                return None
 
         for line_num, line in enumerate(content, start=1):
             if not line.strip():
@@ -1512,26 +1538,13 @@ def process_tableau_data_file(attachment):
                     atd, takeoff, touchdown, ata = None, None, None, None
 
                 # Parse timing fields
-                def parse_time(value, field_name):
-                    if not value or value.isspace():
-                        logger.warning(f"Missing {field_name} on line {line_num}.")
-                        return None
-                    try:
-                        return datetime.strptime(value, "%H%M").time()
-                    except ValueError:
-                        logger.warning(f"Invalid {field_name} format on line {line_num}: {value}")
-                        return None
-
                 atd = parse_time(atd, "ATD")
                 takeoff = parse_time(takeoff, "Takeoff")
                 touchdown = parse_time(touchdown, "Touchdown")
                 ata = parse_time(ata, "ATA")
 
-                # Log the parsed timing fields
-                logger.debug(f"Parsed times for line {line_num} - ATD: {atd}, Takeoff: {takeoff}, Touchdown: {touchdown}, ATA: {ata}")
-
-                # Extract mandatory fields
-                operation_day = datetime.strptime(fields[0], "%d%m%Y").date()
+                # Extract mandatory fields and handle empty values
+                operation_day = parse_date(fields[0], "Operation Day")
                 departure_station = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] or " "
@@ -1543,7 +1556,7 @@ def process_tableau_data_file(attachment):
                 flight_service_type = fields[9]
                 std = parse_time(fields[10], "STD")
                 sta = parse_time(fields[11], "STA")
-                original_operation_day = datetime.strptime(fields[12], "%d%m%Y").date() if fields[12] != "0000" else None
+                original_operation_day = parse_date(fields[12], "Original Operation Day") if fields[12] != "0000" else None
                 original_std = parse_time(fields[13], "Original STD") if fields[13] != "0000" else None
                 original_sta = parse_time(fields[14], "Original STA") if fields[14] != "0000" else None
 
