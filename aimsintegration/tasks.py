@@ -304,7 +304,7 @@ CPAT_AIMS_PATH = settings.CPAT_AIMS_PATH
 VALIDITY_PERIODS = {
     "FRMS": 12,     # Fatigue Education & Awareness Training
     "ETPG": 36,     # ETOPS Ground
-    "LVO-G": 36,    # LVO Ground
+    "LVO-G": 36,    # LVO Ground    
     "PBNGRN": 12,   # PBN Ground
     "RVSMGS": 0,    # RVSM Ground (never expires)
 }
