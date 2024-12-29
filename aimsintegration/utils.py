@@ -1560,6 +1560,10 @@ def process_tableau_data_file(attachment):
                 original_std = parse_time(fields[13], "Original STD") if fields[13] != "0000" else None
                 original_sta = parse_time(fields[14], "Original STA") if fields[14] != "0000" else None
 
+                
+                print("\n=======================================================")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
+                print("\n=======================================================\n")
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
