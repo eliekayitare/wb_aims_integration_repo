@@ -1323,39 +1323,39 @@ def process_tableau_data_file(attachment):
             Parse a date value in DDMMYYYY format. Return None for invalid or empty values.
             """
             if not value.strip():
-                logger.warning(f"{field_name} is empty. Defaulting to None.")
-                return None
+                logger.warning(f"{field_name} is empty. Defaulting to empty.")
+                return ""
             try:
                 return datetime.strptime(value.strip(), "%d%m%Y").date()
             except ValueError:
-                logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
-                return None
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to empty.")
+                return ""
 
         def parse_time(value, field_name):
             """
-            Parse a time value in HHMM format. Return None for invalid or empty values.
+            Parse a time value in HHMM format. Return empty for invalid or empty values.
             """
             if not value.strip() or value == "0000":
-                logger.warning(f"{field_name} is empty. Defaulting to None.")
-                return None
+                logger.warning(f"{field_name} is empty. Defaulting to empty.")
+                return ""
             try:
                 return datetime.strptime(value.strip(), "%H%M").time()
             except ValueError:
-                logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
-                return None
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to empty.")
+                return ""
 
         def parse_int(value, field_name):
             """
-            Parse an integer value. Return None for invalid or empty values.
+            Parse an integer value. Return empty for invalid or empty values.
             """
             if not value.strip():
-                logger.warning(f"{field_name} is empty. Defaulting to None.")
-                return None
+                logger.warning(f"{field_name} is empty. Defaulting to empty.")
+                return ""
             try:
                 return int(value.strip())
             except ValueError:
-                logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
-                return None
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to empty.")
+                return ""
 
         def format_time(time_obj):
             """
@@ -1390,7 +1390,7 @@ def process_tableau_data_file(attachment):
                 sta = parse_time(fields[15], "STA")
 
                 # Original fields and delay time
-                original_operation_day = parse_date(fields[16], "Original Operation Day") if fields[16] != "0000" else None
+                original_operation_day = parse_date(fields[16], "Original Operation Day") if fields[16] != "0000" else ""
                 original_std = parse_time(fields[17], "Original STD")
                 original_sta = parse_time(fields[18], "Original STA")
                 departure_delay_time = parse_int(fields[19], "Departure Delay Time")
@@ -1405,18 +1405,29 @@ def process_tableau_data_file(attachment):
                 delay_code_kind = fields[24] if len(fields) > 24 else ""
                 delay_number = fields[25] if len(fields) > 25 else ""
 
+                # Other fields (use index positions based on the dataset structure)
+                seat_type_config = fields[26] if len(fields) > 26 else ""
+                block_off_time = parse_time(fields[27], "Block Off Time") if len(fields) > 27 else ""
+                takeoff_time = parse_time(fields[28], "Takeoff Time") if len(fields) > 28 else ""
+                touchdown_time = parse_time(fields[29], "Touchdown Time") if len(fields) > 29 else ""
+                block_on_time = parse_time(fields[30], "Block On Time") if len(fields) > 30 else ""
+
                 # Log parsed fields for debugging
                 logger.warning("\n=======================================================")
                 logger.warning(f"Aircraft Config: {aircraft_config}")
                 logger.warning(f"Operation Day: {operation_day}")
                 logger.warning(f"Departure Station: {departure_station}")
                 logger.warning(f"Flight No: {flight_no}")
+                logger.warning(f"Flight Leg Code: {flight_leg_code}")
                 logger.warning(f"Cancelled/Deleted: {cancelled_deleted}")
                 logger.warning(f"Arrival Station: {arrival_station}")
                 logger.warning(f"Aircraft Reg ID: {aircraft_reg_id}")
+                logger.warning(f"Aircraft Type Index: {aircraft_type_index}")
+                logger.warning(f"Aircraft Category: {aircraft_category}")
+                logger.warning(f"Flight Service Type: {flight_service_type}")
                 logger.warning(f"STD: {format_time(std)}")
                 logger.warning(f"STA: {format_time(sta)}")
-                logger.warning(f"Original Operation Day: {original_operation_day or ''}")
+                logger.warning(f"Original Operation Day: {original_operation_day}")
                 logger.warning(f"Original STD: {format_time(original_std)}")
                 logger.warning(f"Original STA: {format_time(original_sta)}")
                 logger.warning(f"Departure Delay Time: {departure_delay_time}")
@@ -1426,6 +1437,11 @@ def process_tableau_data_file(attachment):
                 logger.warning(f"ATA: {format_time(ata)}")
                 logger.warning(f"Delay Code Kind: {delay_code_kind}")
                 logger.warning(f"Delay Number: {delay_number}")
+                logger.warning(f"Seat Type Configuration: {seat_type_config}")
+                logger.warning(f"Block Off Time: {format_time(block_off_time)}")
+                logger.warning(f"Takeoff Time: {format_time(takeoff_time)}")
+                logger.warning(f"Touchdown Time: {format_time(touchdown_time)}")
+                logger.warning(f"Block On Time: {format_time(block_on_time)}")
                 logger.warning("\n=======================================================\n")
 
                 # Define unique criteria for the database
@@ -1456,6 +1472,7 @@ def process_tableau_data_file(attachment):
                         'ata': ata,
                         'delay_code_kind': delay_code_kind,
                         'delay_number': delay_number,
+                        'seat_type_config': seat_type_config,
                     }
 
                     for field, new_value in fields_to_update.items():
@@ -1470,6 +1487,7 @@ def process_tableau_data_file(attachment):
                         logger.info(f"No changes detected for flight {flight_no} on {operation_day}.")
                 else:
                     TableauData.objects.create(
+                        aircraft_config=aircraft_config,
                         operation_day=operation_day,
                         departure_station=departure_station,
                         flight_no=flight_no,
@@ -1492,7 +1510,11 @@ def process_tableau_data_file(attachment):
                         ata=ata,
                         delay_code_kind=delay_code_kind,
                         delay_number=delay_number,
-                        aircraft_config=aircraft_config,
+                        seat_type_config=seat_type_config,
+                        block_off_time=block_off_time,
+                        takeoff_time=takeoff_time,
+                        touchdown_time=touchdown_time,
+                        block_on_time=block_on_time,
                     )
                     logger.info(f"Created new record for flight {flight_no} on {operation_day}.")
             except Exception as e:
@@ -1503,6 +1525,18 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
