@@ -1306,19 +1306,16 @@ def process_fdm_crew_email_attachment(item, process_function):
 from .models import TableauData
 from datetime import datetime, time
 import logging
-import re
 
 logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file, ensuring proper parsing of all fields.
+    Process the tableau file, ensuring proper parsing of all fields based on the dataset structure.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
         logger.info("Starting to process the Tableau file...")
-
-        time_pattern = re.compile(r"^\d{4}$")  # Match HHMM format
 
         def parse_date(value, field_name):
             if not value.strip():
@@ -1358,82 +1355,72 @@ def process_tableau_data_file(attachment):
                 continue
 
             try:
-                # Split the line into fields
-                fields = line.split(",")
-                fields = [field.strip() for field in fields]
+                # Extract the first field (aircraft_config) before the 4th comma
+                first_field_end = line.find(',', line.find(',', line.find(',', line.find(',') + 1) + 1) + 1)
+                aircraft_config = line[:first_field_end].strip()
 
-                # Parse timing fields (last four values in HHMM format)
-                timing_fields = [field for field in fields if time_pattern.match(field)]
-                atd, takeoff, touchdown, ata = (None, None, None, None)
-                if len(timing_fields) >= 4:
-                    atd, takeoff, touchdown, ata = timing_fields[-4:]
+                # Extract the second field (operation_day) right after the 4th comma
+                remaining_line = line[first_field_end + 1:].strip()
+                operation_day_field_end = remaining_line.find(',')
+                operation_day = parse_date(remaining_line[:operation_day_field_end].strip(), "Operation Day")
 
-                atd = parse_time(atd, "ATD")
-                takeoff = parse_time(takeoff, "Takeoff")
-                touchdown = parse_time(touchdown, "Touchdown")
-                ata = parse_time(ata, "ATA")
+                # Extract the remaining fields
+                remaining_fields = remaining_line[operation_day_field_end + 1:].split(",")
+                remaining_fields = [field.strip() for field in remaining_fields]
 
-                # Parse standard fields
-                operation_day = parse_date(fields[0], "Operation Day")
-                departure_station = fields[1]
-                flight_no = fields[2]
-                flight_leg_code = fields[3] or " "
-                cancelled_deleted = fields[4]
-                arrival_station = fields[5]
-                aircraft_reg_id = fields[6]
-                aircraft_type_index = fields[7] or None
-                aircraft_category = fields[8] or None
-                flight_service_type = fields[9]
-                std = parse_time(fields[10], "STD")
-                sta = parse_time(fields[11], "STA")
+                # Parse the fields
+                departure_station = remaining_fields[0]
+                flight_no = remaining_fields[1]
+                flight_leg_code = remaining_fields[2] if len(remaining_fields) > 2 else " "
+                cancelled_deleted = bool(int(remaining_fields[3])) if remaining_fields[3].isdigit() else False
+                arrival_station = remaining_fields[4]
+                aircraft_reg_id = remaining_fields[5]
+                aircraft_type_index = remaining_fields[6] or None
+                aircraft_category = remaining_fields[7] or None
+                flight_service_type = remaining_fields[8]
+                std = parse_time(remaining_fields[9], "STD")
+                sta = parse_time(remaining_fields[10], "STA")
+                original_operation_day = parse_date(remaining_fields[11], "Original Operation Day") if remaining_fields[11] != "0000" else None
+                original_std = parse_time(remaining_fields[12], "Original STD") if remaining_fields[12] != "0000" else time(0, 0)
+                original_sta = parse_time(remaining_fields[13], "Original STA") if remaining_fields[13] != "0000" else time(0, 0)
+                departure_delay_time = parse_int(remaining_fields[14], "Departure Delay Time")
+                delay_code_kind = remaining_fields[15] if len(remaining_fields) > 15 else None
+                delay_number = parse_int(remaining_fields[16], "Delay Number") if len(remaining_fields) > 16 else None
+                seat_type_config = remaining_fields[17] if len(remaining_fields) > 17 else None
+                atd = parse_time(remaining_fields[18], "ATD") if len(remaining_fields) > 18 else None
+                takeoff = parse_time(remaining_fields[19], "Takeoff") if len(remaining_fields) > 19 else None
+                touchdown = parse_time(remaining_fields[20], "Touchdown") if len(remaining_fields) > 20 else None
+                ata = parse_time(remaining_fields[21], "ATA") if len(remaining_fields) > 21 else None
 
-                # Determine original operation day, original STD, original STA, and departure delay time
-                original_operation_day = " "
-                original_std = " "
-                original_sta = " "
-                departure_delay_time = " "
+                # Log parsed values for debugging
+                logger.warning("\n=======================================================")
+                logger.warning(f"Aircraft Configuration: {aircraft_config}")
+                logger.warning(f"Operation Day: {operation_day}")
+                logger.warning(f"Departure Station: {departure_station}")
+                logger.warning(f"Flight No: {flight_no}")
+                logger.warning(f"Flight Leg Code: {flight_leg_code}")
+                logger.warning(f"Cancelled/Deleted: {cancelled_deleted}")
+                logger.warning(f"Arrival Station: {arrival_station}")
+                logger.warning(f"Aircraft Reg ID: {aircraft_reg_id}")
+                logger.warning(f"Aircraft Type Index: {aircraft_type_index}")
+                logger.warning(f"Aircraft Category: {aircraft_category}")
+                logger.warning(f"Flight Service Type: {flight_service_type}")
+                logger.warning(f"STD: {format_time(std)}")
+                logger.warning(f"STA: {format_time(sta)}")
+                logger.warning(f"Original Operation Day: {original_operation_day}")
+                logger.warning(f"Original STD: {format_time(original_std)}")
+                logger.warning(f"Original STA: {format_time(original_sta)}")
+                logger.warning(f"Departure Delay Time: {departure_delay_time}")
+                logger.warning(f"Delay Code/Kind: {delay_code_kind}")
+                logger.warning(f"Delay Number: {delay_number}")
+                logger.warning(f"Seat Type Configuration: {seat_type_config}")
+                logger.warning(f"ATD: {format_time(atd)}")
+                logger.warning(f"Takeoff: {format_time(takeoff)}")
+                logger.warning(f"Touchdown: {format_time(touchdown)}")
+                logger.warning(f"ATA: {format_time(ata)}")
+                logger.warning("\n=======================================================")
 
-                # Start parsing from the correct index
-                original_start_index = 12
-
-                # Parse Original Operation Day
-                if len(fields) > original_start_index:
-                    original_op_day_field = fields[original_start_index].strip()
-                    if original_op_day_field and original_op_day_field != " ":
-                        original_operation_day = parse_date(original_op_day_field, "Original Operation Day")
-
-                # Parse Original STD
-                if len(fields) > original_start_index + 1:
-                    original_std_field = fields[original_start_index + 1].strip()
-                    if original_std_field == "0000":
-                        original_std = time(0, 0)  # Default to 00:00
-                    else:
-                        original_std = parse_time(original_std_field, "Original STD")
-
-                # Parse Original STA
-                if len(fields) > original_start_index + 2:
-                    original_sta_field = fields[original_start_index + 2].strip()
-                    if original_sta_field == "0000":
-                        original_sta = time(0, 0)  # Default to 00:00
-                    else:
-                        original_sta = parse_time(original_sta_field, "Original STA")
-
-                # Parse Departure Delay Time
-                if len(fields) > original_start_index + 3:
-                    departure_delay_time_field = fields[original_start_index + 3].strip()
-                    if departure_delay_time_field:
-                        departure_delay_time = parse_int(departure_delay_time_field, "Departure Delay Time")
-
-                # Parse delay-related fields
-                delay_code_kind = fields[16] if len(fields) > 16 else None
-                delay_number = parse_int(fields[17], "Delay Number") if len(fields) > 17 else None
-                aircraft_config = fields[18] if len(fields) > 18 else None
-                seat_type_config = fields[19] if len(fields) > 19 else None
-
-                print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}\nDelay Code Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Config: {aircraft_config}\nSeat Type Config: {seat_type_config}")
-                print("\n=======================================================\n")
-                # Define unique criteria for the database
+                # Database operations
                 unique_criteria = {
                     'operation_day': operation_day,
                     'departure_station': departure_station,
@@ -1442,7 +1429,6 @@ def process_tableau_data_file(attachment):
                     'flight_leg_code': flight_leg_code,
                 }
 
-                # Insert or update TableauData
                 existing_record = TableauData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
@@ -1491,16 +1477,16 @@ def process_tableau_data_file(attachment):
                         aircraft_type_index=aircraft_type_index,
                         aircraft_category=aircraft_category,
                         flight_service_type=flight_service_type,
-                        std=std,
-                        sta=sta,
+                        std=format_time(std),
+                        sta=format_time(sta),
                         original_operation_day=original_operation_day,
-                        original_std=original_std,
-                        original_sta=original_sta,
+                        original_std=format_time(original_std),
+                        original_sta=format_time(original_sta),
                         departure_delay_time=departure_delay_time,
-                        atd=atd,
-                        takeoff=takeoff,
-                        touchdown=touchdown,
-                        ata=ata,
+                        atd=format_time(atd),
+                        takeoff=format_time(takeoff),
+                        touchdown=format_time(touchdown),
+                        ata=format_time(ata),
                         delay_code_kind=delay_code_kind,
                         delay_number=delay_number,
                         aircraft_config=aircraft_config,
@@ -1515,6 +1501,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
