@@ -207,18 +207,17 @@ class TableauData(models.Model):
     original_operation_day = models.DateField(null=True, blank=True)
     original_std = models.TimeField(null=True, blank=True)
     original_sta = models.TimeField(null=True, blank=True)
-    departure_delay_time = models.CharField(max_length=25, null=True, blank=True)
+    departure_delay_time = models.IntegerField(null=True, blank=True)  # Removed max_length
     delay_code_kind = models.CharField(max_length=25, null=True, blank=True)
     delay_number = models.CharField(max_length=25, null=True, blank=True)
     aircraft_config = models.CharField(max_length=25, null=True, blank=True)
     seat_type_config = models.CharField(max_length=25, null=True, blank=True)
-    atd= models.TimeField(null=True, blank=True)
+    atd = models.TimeField(null=True, blank=True)
     takeoff = models.TimeField(null=True, blank=True)
     touchdown = models.TimeField(null=True, blank=True)
     ata = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
     updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
-
 
     class Meta:
         db_table = 'tableau_data'
@@ -226,3 +225,4 @@ class TableauData(models.Model):
         indexes = [
             models.Index(fields=['updated_at']),  # Optimize queries based on this field
         ]
+
