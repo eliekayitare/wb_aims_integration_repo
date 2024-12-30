@@ -1474,8 +1474,6 @@ def process_fdm_crew_email_attachment(item, process_function):
 #     except Exception as e:
 #         logger.error(f"Error processing tableau data file: {e}")
 
-
-
 from .models import TableauData
 from datetime import datetime
 import logging
@@ -1485,8 +1483,7 @@ logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file, ensuring robust parsing of all fields,
-    including handling missing or invalid data gracefully.
+    Process the tableau file with special handling for empty and invalid values.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -1495,27 +1492,29 @@ def process_tableau_data_file(attachment):
         time_pattern = re.compile(r"^\d{4}$")  # Match HHMM format
 
         def parse_date(value, field_name):
-            if not isinstance(value, str) or not value.strip():
-                logger.warning(f"Missing or invalid {field_name}. Defaulting to None.")
+            if not value.strip():
+                logger.warning(f"{field_name} is empty. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%d%m%Y").date()
             except ValueError:
-                logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
-                return None
+                logger.warning(f"Invalid {field_name}: {value}. Retaining the invalid value.")
+                return value
 
         def parse_time(value, field_name):
-            if not isinstance(value, str) or not value.strip():
-                logger.warning(f"Missing or invalid {field_name}. Defaulting to None.")
+            if not value.strip():
+                logger.warning(f"{field_name} is empty. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%H%M").time()
             except ValueError:
-                logger.warning(f"Invalid {field_name} format: {value}. Defaulting to None.")
-                return None
+                logger.warning(f"Invalid {field_name}: {value}. Retaining the invalid value.")
+                return value
 
         def format_time(time_obj):
-            return time_obj.strftime("%H:%M") if time_obj else None
+            if isinstance(time_obj, datetime.time):
+                return time_obj.strftime("%H:%M")
+            return time_obj  # Retain invalid or original value
 
         for line_num, line in enumerate(content, start=1):
             if not line.strip():
@@ -1549,30 +1548,29 @@ def process_tableau_data_file(attachment):
                 std = parse_time(fields[10], "STD")
                 sta = parse_time(fields[11], "STA")
 
-                # Extract original operation day, original STD, original STA, and departure delay time
                 original_operation_day = None
                 original_std = None
                 original_sta = None
                 departure_delay_time = None
 
-                if len(fields) > 12 and fields[12].strip() and fields[12] != "0000":
-                    original_operation_day = parse_date(fields[12].strip(), "Original Operation Day")
+                if len(fields) > 12:
+                    original_operation_day = parse_date(fields[12], "Original Operation Day") if fields[12] != "0000" else None
 
-                if len(fields) > 13 and fields[13].strip() and fields[13] != "0000":
-                    original_std = parse_time(fields[13].strip(), "Original STD")
+                if len(fields) > 13:
+                    original_std = parse_time(fields[13], "Original STD") if fields[13] != "0000" else fields[13]
 
-                if len(fields) > 14 and fields[14].strip() and fields[14] != "0000":
-                    original_sta = parse_time(fields[14].strip(), "Original STA")
+                if len(fields) > 14:
+                    original_sta = parse_time(fields[14], "Original STA") if fields[14] != "0000" else fields[14]
 
                 if len(fields) > 15 and fields[15].strip():
                     try:
                         departure_delay_time = int(fields[15].strip())
                     except ValueError:
-                        logger.warning(f"Invalid Departure Delay Time on line {line_num}: {fields[15]}")
-                        departure_delay_time = None
+                        departure_delay_time = fields[15]  # Retain invalid value
 
+          
                 print("\n=======================================================")
-                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
+                print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {std}\nSTA: {sta}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {original_std}\nOriginal STA: {original_sta}\nDeparture Delay Time: {departure_delay_time}\nATD: {atd}\nTakeoff: {takeoff}\nTouchdown: {touchdown}\nATA: {ata}")
                 print("\n=======================================================\n")
                 # Define unique criteria for the database
                 unique_criteria = {
