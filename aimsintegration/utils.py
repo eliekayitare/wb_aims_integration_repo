@@ -1319,36 +1319,40 @@ def process_tableau_data_file(attachment):
 
         def parse_date(value, field_name):
             value = value.strip()
-            if not value or value in ["0000", "00000000"]:
-                logger.warning(f"{field_name} is empty. Defaulting to blank.")
-                return None  # Default to None (blank in the database)
+            if not value or value in ["0000", "00000000", None]:
+                logger.warning(f"{field_name} is empty or invalid. Defaulting to None.")
+                return None  # Default to None
             try:
                 return datetime.strptime(value, "%d%m%Y").date()
-            except ValueError:
-                logger.warning(f"Invalid {field_name}: {value}. Defaulting to blank.")
-                return None
-
-
-        def parse_time(value, field_name):
-            if not value.strip():
-                logger.warning(f"{field_name} is empty. Defaulting to None.")
-                return None
-            try:
-                return datetime.strptime(value.strip(), "%H%M").time()
-            except ValueError:
+            except (ValueError, TypeError):
                 logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
                 return None
 
+
+
+        def parse_time(value, field_name):
+            value = value.strip()
+            if not value or value == "0000":
+                logger.warning(f"{field_name} is empty or invalid. Defaulting to None.")
+                return None
+            try:
+                return datetime.strptime(value, "%H%M").time()
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
+                return None
+
+
         def parse_int(value, field_name):
             value = value.strip()
-            if not value:
-                logger.warning(f"{field_name} is empty. Defaulting to 0.")
-                return 0  # Default to 0
+            if not value or not value.isdigit():
+                logger.warning(f"{field_name} contains invalid value '{value}'. Defaulting to 0.")
+                return 0  # Default to 0 for invalid values
             try:
                 return int(value)
             except ValueError:
-                logger.warning(f"{field_name}: {value} is not a valid integer. Storing as-is.")
-                return value  # Return the raw value as-is
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to 0.")
+                return 0
+
 
 
         def format_time(time_obj):
