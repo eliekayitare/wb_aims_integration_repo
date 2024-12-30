@@ -1312,7 +1312,8 @@ logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file, ensuring proper parsing of all fields.
+    Process the tableau file, ensuring proper parsing of all fields,
+    including the original operation day, STD, STA, and departure delay time.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -1331,8 +1332,8 @@ def process_tableau_data_file(attachment):
                 return None
 
         def parse_time(value, field_name):
-            if not value.strip() or value.strip() == "0000":
-                logger.warning(f"{field_name} is empty or '0000'. Defaulting to None.")
+            if not value.strip():
+                logger.warning(f"{field_name} is empty. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%H%M").time()
@@ -1387,12 +1388,13 @@ def process_tableau_data_file(attachment):
                 std = parse_time(fields[10], "STD")
                 sta = parse_time(fields[11], "STA")
 
-                # Parse original fields
+                # Determine original operation day, original STD, original STA, and departure delay time
                 original_operation_day = None
                 original_std = None
                 original_sta = None
                 departure_delay_time = None
 
+                # Original fields come right after STA
                 original_start_index = 12
                 if len(fields) > original_start_index:
                     original_op_day_field = fields[original_start_index]
@@ -1401,11 +1403,13 @@ def process_tableau_data_file(attachment):
 
                 if len(fields) > original_start_index + 1:
                     original_std_field = fields[original_start_index + 1]
-                    original_std = parse_time(original_std_field, "Original STD")
+                    if original_std_field != "0000":
+                        original_std = parse_time(original_std_field, "Original STD")
 
                 if len(fields) > original_start_index + 2:
                     original_sta_field = fields[original_start_index + 2]
-                    original_sta = parse_time(original_sta_field, "Original STA")
+                    if original_sta_field != "0000":
+                        original_sta = parse_time(original_sta_field, "Original STA")
 
                 if len(fields) > original_start_index + 3:
                     departure_delay_time_field = fields[original_start_index + 3]
@@ -1503,19 +1507,6 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
