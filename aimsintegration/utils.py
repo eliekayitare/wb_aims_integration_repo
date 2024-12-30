@@ -1302,8 +1302,7 @@ def process_fdm_crew_email_attachment(item, process_function):
 
 
 
-# Tableau project 
-
+# Tableau project
 from .models import TableauData
 from datetime import datetime
 import logging
@@ -1313,7 +1312,7 @@ logger = logging.getLogger(__name__)
 
 def process_tableau_data_file(attachment):
     """
-    Process the tableau file, ensuring all fields in the model are properly parsed.
+    Process the tableau file, ensuring all fields are parsed correctly, including `original_std`, `original_sta`, and `departure_delay_time`.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -1328,8 +1327,8 @@ def process_tableau_data_file(attachment):
             try:
                 return datetime.strptime(value.strip(), "%d%m%Y").date()
             except ValueError:
-                logger.warning(f"Invalid {field_name}: {value}. Retaining the invalid value.")
-                return value
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
+                return None
 
         def parse_time(value, field_name):
             if not value.strip():
@@ -1338,13 +1337,11 @@ def process_tableau_data_file(attachment):
             try:
                 return datetime.strptime(value.strip(), "%H%M").time()
             except ValueError:
-                logger.warning(f"Invalid {field_name}: {value}. Retaining the invalid value.")
-                return value
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
+                return None
 
         def format_time(time_obj):
-            if isinstance(time_obj, datetime.time):
-                return time_obj.strftime("%H:%M")
-            return time_obj  # Retain invalid or original value
+            return time_obj.strftime("%H:%M") if isinstance(time_obj, datetime.time) else time_obj
 
         for line_num, line in enumerate(content, start=1):
             if not line.strip():
@@ -1384,17 +1381,14 @@ def process_tableau_data_file(attachment):
                 original_sta = None
                 departure_delay_time = None
 
-                if len(fields) > 12 and fields[12] != "0000":
-                    original_operation_day = parse_date(fields[12], "Original Operation Day")
-
-                if len(fields) > 13 and fields[13] != "0000":
-                    original_std = parse_time(fields[13], "Original STD")
-
-                if len(fields) > 14 and fields[14] != "0000":
-                    original_sta = parse_time(fields[14], "Original STA")
-
-                if len(fields) > 15 and fields[15].strip():
-                    departure_delay_time = fields[15].strip()
+                if len(fields) > 12:
+                    original_operation_day = parse_date(fields[12], "Original Operation Day") if fields[12] != "0000" else None
+                if len(fields) > 13:
+                    original_std = parse_time(fields[13], "Original STD") if fields[13] != "0000" else None
+                if len(fields) > 14:
+                    original_sta = parse_time(fields[14], "Original STA") if fields[14] != "0000" else None
+                if len(fields) > 15:
+                    departure_delay_time = parse_time(fields[15], "Departure Delay Time") if fields[15] != "0000" else None
 
                 delay_code_kind = fields[16] if len(fields) > 16 else None
                 delay_number = int(fields[17]) if len(fields) > 17 and fields[17].isdigit() else None
@@ -1467,7 +1461,7 @@ def process_tableau_data_file(attachment):
                         original_operation_day=original_operation_day,
                         original_std=format_time(original_std),
                         original_sta=format_time(original_sta),
-                        departure_delay_time=departure_delay_time,
+                        departure_delay_time=format_time(departure_delay_time),
                         delay_code_kind=delay_code_kind,
                         delay_number=delay_number,
                         aircraft_config=aircraft_config,
@@ -1486,6 +1480,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
