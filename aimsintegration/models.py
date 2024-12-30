@@ -209,7 +209,7 @@ class TableauData(models.Model):
     original_sta = models.TimeField(null=True, blank=True)
     departure_delay_time = models.TimeField(null=True, blank=True)
     delay_code_kind = models.CharField(max_length=25, null=True, blank=True)
-    delay_number = models.IntegerField(null=True, blank=True)
+    delay_number = models.CharField(max_length=25, null=True, blank=True)
     aircraft_config = models.CharField(max_length=25, null=True, blank=True)
     seat_type_config = models.CharField(max_length=25, null=True, blank=True)
     atd= models.TimeField(null=True, blank=True)
