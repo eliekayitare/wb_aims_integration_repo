@@ -1331,8 +1331,8 @@ def process_tableau_data_file(attachment):
                 return None
 
         def parse_time(value, field_name):
-            if not value.strip():
-                logger.warning(f"{field_name} is empty. Defaulting to None.")
+            if not value.strip() or value.strip() == "0000":
+                logger.warning(f"{field_name} is empty or '0000'. Defaulting to None.")
                 return None
             try:
                 return datetime.strptime(value.strip(), "%H%M").time()
@@ -1387,30 +1387,25 @@ def process_tableau_data_file(attachment):
                 std = parse_time(fields[10], "STD")
                 sta = parse_time(fields[11], "STA")
 
-                # Determine original operation day, original STD, original STA, and departure delay time
+                # Parse original fields
                 original_operation_day = None
                 original_std = None
                 original_sta = None
                 departure_delay_time = None
 
-                # Original fields come right after STA
                 original_start_index = 12
                 if len(fields) > original_start_index:
                     original_op_day_field = fields[original_start_index]
-                    if original_op_day_field.strip() and original_op_day_field != "0000":
+                    if original_op_day_field.strip():
                         original_operation_day = parse_date(original_op_day_field, "Original Operation Day")
-                    else:
-                        logger.warning("Original Operation Day is empty. Defaulting to None.")
 
                 if len(fields) > original_start_index + 1:
                     original_std_field = fields[original_start_index + 1]
-                    if original_std_field != "0000":
-                        original_std = parse_time(original_std_field, "Original STD")
+                    original_std = parse_time(original_std_field, "Original STD")
 
                 if len(fields) > original_start_index + 2:
                     original_sta_field = fields[original_start_index + 2]
-                    if original_sta_field != "0000":
-                        original_sta = parse_time(original_sta_field, "Original STA")
+                    original_sta = parse_time(original_sta_field, "Original STA")
 
                 if len(fields) > original_start_index + 3:
                     departure_delay_time_field = fields[original_start_index + 3]
@@ -1425,6 +1420,7 @@ def process_tableau_data_file(attachment):
                 print("\n=======================================================")
                 print(f"\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nDelay Code/Kind: {delay_code_kind}\nDelay Number: {delay_number}\nAircraft Configuration: {aircraft_config}\nSeat Type Configuration: {seat_type_config}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
                 print("\n=======================================================\n")
+
                 # Define unique criteria for the database
                 unique_criteria = {
                     'operation_day': operation_day,
@@ -1507,6 +1503,7 @@ def process_tableau_data_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing tableau data file: {e}")
+
 
 
 
