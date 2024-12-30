@@ -1372,7 +1372,7 @@ def process_tableau_data_file(attachment):
                 departure_station = remaining_fields[0]
                 flight_no = remaining_fields[1]
                 flight_leg_code = remaining_fields[2] if len(remaining_fields) > 2 else " "
-                cancelled_deleted = bool(int(remaining_fields[3])) if remaining_fields[3].isdigit() else False
+                cancelled_deleted = remaining_fields[3]
                 arrival_station = remaining_fields[4]
                 aircraft_reg_id = remaining_fields[5]
                 aircraft_type_index = remaining_fields[6] or None
