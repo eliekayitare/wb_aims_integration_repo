@@ -177,8 +177,7 @@ def process_airport_file(attachment):
 def process_flight_schedule_file(attachment):
     """
     Process the entire flight schedule file with a comma delimiter and update the FlightData table.
-    Update `STD` and `STA` for records without ACARS data if they have changed.
-    Avoid duplicate records by enhancing unique criteria and checking actual timings.
+    Avoid duplicate records by using enhanced unique criteria and explicit duplicate checks.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
