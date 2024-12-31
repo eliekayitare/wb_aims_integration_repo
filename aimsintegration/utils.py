@@ -230,7 +230,6 @@ def process_flight_schedule_file(attachment):
                 # Define unique criteria
                 unique_criteria = {
                     'flight_no': flight_no,
-                    'tail_no': tail_no,
                     'sd_date_utc': sd_date_utc,
                     'dep_code_icao': dep_code_icao,
                     'arr_code_icao': arr_code_icao,
