@@ -205,10 +205,6 @@ def process_flight_schedule_file(attachment):
                 ata = fields[10] if len(fields) > 10 else None
                 arrival_date = fields[11] if len(fields) > 11 else None
 
-                print("\n-------------------------------------------------")
-                print(f"Fields: {fields}")
-                print(f"Flight Date: {flight_date}")
-
                 # Parse dates and times
                 try:
                     sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
