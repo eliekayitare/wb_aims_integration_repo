@@ -16,6 +16,8 @@ class AirportData(models.Model):
         return f"{self.iata_code} - {self.icao_code}"
 
 
+from django.db import models
+
 class FlightData(models.Model):
     flight_no = models.CharField(max_length=6, null=False, blank=False)
     tail_no = models.CharField(max_length=10, null=True, blank=True)
@@ -36,9 +38,17 @@ class FlightData(models.Model):
 
     class Meta:
         db_table = 'flight_data'
+        unique_together = (
+            'flight_no', 'tail_no', 'sd_date_utc', 'dep_code_icao', 'arr_code_icao'
+        )
+        indexes = [
+            models.Index(fields=['flight_no', 'sd_date_utc']),
+            models.Index(fields=['dep_code_icao', 'arr_code_icao']),
+        ]
 
     def __str__(self):
         return f"Flight {self.flight_no} from {self.dep_code_iata} to {self.arr_code_iata}"
+
 
 
  
