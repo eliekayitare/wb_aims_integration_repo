@@ -201,6 +201,22 @@ def process_flight_schedule_file(attachment):
                 touchdown = fields[9].strip() if len(fields) > 9 else None
                 ata = fields[10].strip() if len(fields) > 10 else None
                 arrival_date = fields[11].strip() if len(fields) > 11 else None
+                
+                print("\n ----------------------------------")
+                print(f"\nflight_date: {flight_date}")
+                print(f"\ntail_no: {tail_no}")
+                print(f"\nflight_no: {flight_no}")
+                print(f"\ndep_code_icao: {dep_code_icao}")
+                print(f"\narr_code_icao: {arr_code_icao}")
+                print(f"\nstd: {std}")
+                print(f"\nsta: {sta}")
+                print(f"\natd: {atd}")
+                print(f"\ntakeoff: {takeoff}")
+                print(f"\ntouchdown: {touchdown}")
+                print(f"\nata: {ata}")
+                print(f"\narrival_date: {arrival_date}")
+                print("\n ----------------------------------")
+
 
                 # Parse dates and times
                 try:
