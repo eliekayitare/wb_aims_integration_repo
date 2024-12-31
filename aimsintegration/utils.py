@@ -52,12 +52,11 @@ def process_airport_file(attachment):
 
 
 
-from datetime import datetime
-from aimsintegration.models import FlightData, AirportData
-import logging
+# from datetime import datetime
+# from aimsintegration.models import FlightData, AirportData
+# import logging
 
-logger = logging.getLogger(__name__)
-
+# logger = logging.getLogger(__name__)
 
 
 # def process_flight_schedule_file(attachment):
@@ -177,38 +176,42 @@ logger = logging.getLogger(__name__)
 
 def process_flight_schedule_file(attachment):
     """
-    Process the entire flight schedule file and update the FlightData table.
-    Skip processing if a record with the same unique criteria already exists.
+    Process the entire flight schedule file with a comma delimiter and update the FlightData table.
+    Update `STD` and `STA` for records without ACARS data if they have changed.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
         logger.info("Starting to process the flight schedule file...")
 
         for line_num, line in enumerate(content, start=1):
-            fields = line.split()
-
-            # Skip line if insufficient fields
-            if len(fields) < 8:
-                logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
-                continue
-
             try:
+                # Split the line based on comma delimiter
+                fields = line.split(',')
+
                 # Extract fields
-                flight_date = fields[0]
-                tail_no = fields[1]
-                flight_no = fields[2]
+                flight_date = fields[0].strip()
+                tail_no = fields[1].strip()
+                flight_no = fields[2].strip()
                 dep_code_icao = fields[3].strip()
                 arr_code_icao = fields[4].strip()
-                std = fields[5]
-                sta = fields[6]
-                arrival_date = fields[-1]
+                std = fields[5].strip()
+                sta = fields[6].strip()
+                atd = fields[7].strip() if len(fields) > 7 else None
+                takeoff = fields[8].strip() if len(fields) > 8 else None
+                touchdown = fields[9].strip() if len(fields) > 9 else None
+                ata = fields[10].strip() if len(fields) > 10 else None
+                arrival_date = fields[11].strip() if len(fields) > 11 else None
 
                 # Parse dates and times
                 try:
                     sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-                    sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
+                    sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
                     std_utc = datetime.strptime(std, "%H:%M").time()
                     sta_utc = datetime.strptime(sta, "%H:%M").time()
+                    atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
+                    takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
+                    touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
+                    ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
                 except ValueError:
                     logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
                     continue
@@ -224,39 +227,66 @@ def process_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code
                 arr_code_iata = arr_airport.iata_code
 
-                # Check for an existing record with the unique criteria
-                existing_record = FlightData.objects.filter(
-                    flight_no=flight_no,
-                    tail_no=tail_no,
-                    dep_code_icao=dep_code_icao,
-                    arr_code_icao=arr_code_icao,
-                    sd_date_utc=sd_date_utc
-                ).first()
+                # Define unique criteria
+                unique_criteria = {
+                    'flight_no': flight_no,
+                    'tail_no': tail_no,
+                    'sd_date_utc': sd_date_utc,
+                    'dep_code_icao': dep_code_icao,
+                    'arr_code_icao': arr_code_icao,
+                }
 
-                # Skip processing if a record already exists
-                if existing_record:
-                    logger.info(f"Skipping line {line_num}: Existing record found for flight {flight_no}, tail {tail_no}.")
-                    continue
+                # Insert or Update FlightData
+                flight_existing_record = FlightData.objects.filter(**unique_criteria).first()
+                if flight_existing_record:
+                    # Update fields if actual timings have changed
+                    fields_to_update = {
+                        'std_utc': std_utc,
+                        'sta_utc': sta_utc,
+                        'atd_utc': atd_utc,
+                        'takeoff_utc': takeoff_utc,
+                        'touchdown_utc': touchdown_utc,
+                        'ata_utc': ata_utc,
+                    }
 
-                # Insert a new record only if no matching record exists
-                FlightData.objects.create(
-                    flight_no=flight_no,
-                    tail_no=tail_no,
-                    dep_code_iata=dep_code_iata,
-                    dep_code_icao=dep_code_icao,
-                    arr_code_iata=arr_code_iata,
-                    arr_code_icao=arr_code_icao,
-                    sd_date_utc=sd_date_utc,
-                    std_utc=std_utc,
-                    sta_utc=sta_utc,
-                    sa_date_utc=sa_date_utc,
-                    source_type="FDM",
-                    raw_content=line
-                )
-                logger.info(f"Inserted new flight record: Flight {flight_no} on {sd_date_utc}")
+                    updated = False
+                    for field, value in fields_to_update.items():
+                        if value and getattr(flight_existing_record, field) != value:
+                            setattr(flight_existing_record, field, value)
+                            updated = True
 
-            except ValueError as ve:
-                logger.error(f"Error processing line {line_num}: {ve} - {line}")
+                    if updated:
+                        flight_existing_record.save()
+                        logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
+                    else:
+                        logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
+                else:
+                    # Create a new FlightData record
+                    FlightData.objects.create(
+                        flight_no=flight_no,
+                        tail_no=tail_no,
+                        dep_code_iata=dep_code_iata,
+                        dep_code_icao=dep_code_icao,
+                        arr_code_iata=arr_code_iata,
+                        arr_code_icao=arr_code_icao,
+                        sd_date_utc=sd_date_utc,
+                        std_utc=std_utc,
+                        sta_utc=sta_utc,
+                        atd_utc=atd_utc,
+                        takeoff_utc=takeoff_utc,
+                        touchdown_utc=touchdown_utc,
+                        ata_utc=ata_utc,
+                        sa_date_utc=sa_date_utc,
+                        source_type="FDM",
+                        raw_content=line
+                    )
+                    logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}")
+
+            except IndexError:
+                logger.error(f"Skipping line {line_num} due to missing fields: {line}")
+                continue
+            except Exception as e:
+                logger.error(f"Error processing line {line_num}: {e} - {line}")
                 continue
 
         logger.info("Flight schedule file processed successfully.")
@@ -773,117 +803,7 @@ def process_cargo_email_attachment(item, process_function):
 
 #FMD Project
 
-# from datetime import datetime
-# from .models import FdmFlightData, AirportData
 
-# def process_fdm_flight_schedule_file(attachment):
-#     """
-#     Process the FDM flight schedule file using fixed column positions, accounting for spaces.
-#     """
-#     try:
-#         content = attachment.content.decode('utf-8').splitlines()
-#         logger.info("Starting to process the FDM flight schedule file...")
-
-#         for line_num, line in enumerate(content, start=1):
-#             # Ensure the line has enough columns (length)
-#             if len(line) < 112:
-#                 logger.error(f"Skipping line {line_num} due to insufficient length: {line}")
-#                 continue
-
-#             try:
-#                 # Extract fields based on fixed-width columns including spaces
-#                 # Extract fields based on fixed-width columns including spaces
-#                 flight_date = line[0:10].strip()  # Column 1-10
-#                 tail_no = line[10:27].strip()[:10]  # Column 11-26, max 10 characters
-#                 flight_no = line[26:33].strip() if line[26] != " " else line[27:33].strip()[:6]  # Ensure max length
-#                 dep_code_icao = line[33:38].strip()[:4]  # Max 4 characters for ICAO codes
-#                 arr_code_icao = line[38:43].strip()[:4]  # Max 4 characters for ICAO codes
-#                 std_utc = line[43:50].strip()  # Column 43-49
-#                 sta_utc = line[50:57].strip()  # Column 50-56
-#                 flight_type = line[57:60].strip()[:10]  # Max 10 characters
-#                 etd_utc = line[60:67].strip()  # Column 60-66
-#                 eta_utc = line[67:74].strip()  # Column 67-73
-#                 atd_utc = line[74:81].strip()  # Column 74-80
-#                 takeoff_utc = line[81:88].strip()  # Column 81-87
-#                 touchdown_utc = line[88:95].strip()  # Column 88-94
-#                 ata_utc = line[95:102].strip()  # Column 95-101
-#                 arrival_date = line[102:112].strip()  # Column 74-83
-
-
-#                 # Parse dates
-#                 sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
-#                 sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
-
-#                 # Parse times
-#                 std_utc_time = datetime.strptime(std_utc, "%H:%M").time() if std_utc else None
-#                 sta_utc_time = datetime.strptime(sta_utc, "%H:%M").time() if sta_utc else None
-#                 etd_utc_time = datetime.strptime(etd_utc, "%H:%M").time() if etd_utc else None
-#                 eta_utc_time = datetime.strptime(eta_utc, "%H:%M").time() if eta_utc else None
-#                 atd_utc_time = datetime.strptime(atd_utc, "%H:%M").time() if atd_utc else None
-#                 takeoff_utc_time = datetime.strptime(takeoff_utc, "%H:%M").time() if takeoff_utc else None
-#                 touchdown_utc_time = datetime.strptime(touchdown_utc, "%H:%M").time() if touchdown_utc else None
-#                 ata_utc_time = datetime.strptime(ata_utc, "%H:%M").time() if ata_utc else None
-#                 # Fetch airport data
-#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
-#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
-
-#                 if not dep_airport or not arr_airport:
-#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
-#                     continue
-
-#                 dep_code_iata = dep_airport.iata_code
-#                 arr_code_iata = arr_airport.iata_code
-
-#                 # Define unique criteria
-#                 unique_criteria = {
-#                     'flight_no': flight_no,
-#                     'tail_no': tail_no,
-#                     'sd_date_utc': sd_date_utc,
-#                     'dep_code_icao': dep_code_icao,
-#                     'arr_code_icao': arr_code_icao,
-#                     'sa_date_utc': sa_date_utc,
-#                     'std_utc': std_utc_time,
-#                     'sta_utc': sta_utc_time,
-#                 }
-
-#                 # Check if record exists
-#                 existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
-
-#                 if existing_record:
-#                     logger.info(f"FDM Record for flight {flight_no} on {sd_date_utc} exists; no update needed.")
-#                     continue
-
-#                 # Insert new record
-#                 FdmFlightData.objects.create(
-#                     flight_no=flight_no,
-#                     tail_no=tail_no,
-#                     dep_code_iata=dep_code_iata,
-#                     dep_code_icao=dep_code_icao,
-#                     arr_code_iata=arr_code_iata,
-#                     arr_code_icao=arr_code_icao,
-#                     sd_date_utc=sd_date_utc,
-#                     std_utc=std_utc_time,
-#                     sta_utc=sta_utc_time,
-#                     sa_date_utc=sa_date_utc,
-#                     flight_type=flight_type,
-#                     etd_utc=etd_utc_time,
-#                     eta_utc=eta_utc_time,
-#                     atd_utc=atd_utc_time,
-#                     takeoff_utc=takeoff_utc_time,
-#                     touchdown_utc=touchdown_utc_time,
-#                     ata_utc=ata_utc_time,
-#                     raw_content=line
-#                 )
-#                 logger.info(f"Created new FDM flight record: {flight_no} on {sd_date_utc}")
-
-#             except Exception as e:
-#                 logger.error(f"Error processing line {line_num}: {e} - {line}")
-#                 continue
-
-#         logger.info("FDM flight schedule file processed successfully.")
-
-#     except Exception as e:
-#         logger.error(f"Error processing FDM flight schedule file: {e}", exc_info=True)
 
 
 from datetime import datetime
