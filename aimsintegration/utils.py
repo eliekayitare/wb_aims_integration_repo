@@ -174,10 +174,17 @@ def process_airport_file(attachment):
 #         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
 
 
+from datetime import datetime
+from django.db import transaction
+from .models import AirportData, FlightData
+import logging
+
+logger = logging.getLogger(__name__)
+
 def process_flight_schedule_file(attachment):
     """
     Process the entire flight schedule file with a comma delimiter and update the FlightData table.
-    Avoid duplicate records by using enhanced unique criteria and explicit duplicate checks.
+    Avoid duplicate records by using `get_or_create` with enhanced unique criteria and transaction handling.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -230,63 +237,51 @@ def process_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code
                 arr_code_iata = arr_airport.iata_code
 
-                # Define unique criteria (enhanced to avoid duplicates)
-                unique_criteria = {
-                    'flight_no': flight_no,
-                    'tail_no': tail_no,
-                    'sd_date_utc': sd_date_utc,
-                    'dep_code_icao': dep_code_icao,
-                    'arr_code_icao': arr_code_icao,
-                    'std_utc': std_utc,
-                    'sta_utc': sta_utc,
-                }
-
-                # Insert or Update FlightData
-                flight_existing_record = FlightData.objects.filter(**unique_criteria).first()
-                if flight_existing_record:
-                    # Update fields if actual timings have changed
-                    fields_to_update = {
-                        'atd_utc': atd_utc,
-                        'takeoff_utc': takeoff_utc,
-                        'touchdown_utc': touchdown_utc,
-                        'ata_utc': ata_utc,
-                    }
-
-                    updated = False
-                    for field, value in fields_to_update.items():
-                        if value and getattr(flight_existing_record, field) != value:
-                            setattr(flight_existing_record, field, value)
-                            updated = True
-
-                    if updated:
-                        flight_existing_record.save()
-                        logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
-                    else:
-                        logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
-                else:
-                    # Create a new FlightData record
-                    FlightData.objects.create(
+                # Use a transaction to ensure atomicity
+                with transaction.atomic():
+                    flight_existing_record, created = FlightData.objects.get_or_create(
                         flight_no=flight_no,
                         tail_no=tail_no,
-                        dep_code_iata=dep_code_iata,
-                        dep_code_icao=dep_code_icao,
-                        arr_code_iata=arr_code_iata,
-                        arr_code_icao=arr_code_icao,
                         sd_date_utc=sd_date_utc,
+                        dep_code_icao=dep_code_icao,
+                        arr_code_icao=arr_code_icao,
                         std_utc=std_utc,
                         sta_utc=sta_utc,
-                        atd_utc=atd_utc,
-                        takeoff_utc=takeoff_utc,
-                        touchdown_utc=touchdown_utc,
-                        ata_utc=ata_utc,
-                        sa_date_utc=sa_date_utc,
-                        source_type="FDM",
-                        raw_content=",".join(fields)
+                        defaults={
+                            'atd_utc': atd_utc,
+                            'takeoff_utc': takeoff_utc,
+                            'touchdown_utc': touchdown_utc,
+                            'ata_utc': ata_utc,
+                            'sa_date_utc': sa_date_utc,
+                            'source_type': "FDM",
+                            'raw_content': ",".join(fields),
+                        }
                     )
-                    logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}")
 
+                    if created:
+                        logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}")
+                    else:
+                        # Update fields if actual timings have changed
+                        fields_to_update = {
+                            'atd_utc': atd_utc,
+                            'takeoff_utc': takeoff_utc,
+                            'touchdown_utc': touchdown_utc,
+                            'ata_utc': ata_utc,
+                        }
+
+                        updated = False
+                        for field, value in fields_to_update.items():
+                            if value and getattr(flight_existing_record, field) != value:
+                                setattr(flight_existing_record, field, value)
+                                updated = True
+
+                        if updated:
+                            flight_existing_record.save()
+                            logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
+                        else:
+                            logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
             except Exception as e:
-                logger.error(f"Error processing line {line_num}: {e} - {fields}")
+                logger.error(f"Error processing line {line_num}: {e} - {fields}", exc_info=True)
                 continue
 
         logger.info("Flight schedule file processed successfully.")
