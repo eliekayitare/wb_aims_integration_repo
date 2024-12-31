@@ -178,6 +178,7 @@ def process_flight_schedule_file(attachment):
     """
     Process the entire flight schedule file with a comma delimiter and update the FlightData table.
     Update `STD` and `STA` for records without ACARS data if they have changed.
+    Avoid duplicate records by enhancing unique criteria and checking actual timings.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -230,12 +231,15 @@ def process_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code
                 arr_code_iata = arr_airport.iata_code
 
-                # Define unique criteria
+                # Define unique criteria (enhanced to avoid duplicates)
                 unique_criteria = {
                     'flight_no': flight_no,
+                    'tail_no': tail_no,
                     'sd_date_utc': sd_date_utc,
                     'dep_code_icao': dep_code_icao,
                     'arr_code_icao': arr_code_icao,
+                    'std_utc': std_utc,
+                    'sta_utc': sta_utc,
                 }
 
                 # Insert or Update FlightData
@@ -243,8 +247,6 @@ def process_flight_schedule_file(attachment):
                 if flight_existing_record:
                     # Update fields if actual timings have changed
                     fields_to_update = {
-                        'std_utc': std_utc,
-                        'sta_utc': sta_utc,
                         'atd_utc': atd_utc,
                         'takeoff_utc': takeoff_utc,
                         'touchdown_utc': touchdown_utc,
@@ -292,6 +294,7 @@ def process_flight_schedule_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
 
 
 
