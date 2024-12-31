@@ -178,7 +178,7 @@ logger = logging.getLogger(__name__)
 def process_flight_schedule_file(attachment):
     """
     Process the entire flight schedule file and update the FlightData table.
-    Update existing records if no ACARS data exists; skip records with ACARS data.
+    Skip processing if a record with the same unique criteria already exists.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -227,54 +227,33 @@ def process_flight_schedule_file(attachment):
                 # Check for an existing record with the unique criteria
                 existing_record = FlightData.objects.filter(
                     flight_no=flight_no,
+                    tail_no=tail_no,
                     dep_code_icao=dep_code_icao,
                     arr_code_icao=arr_code_icao,
                     sd_date_utc=sd_date_utc
                 ).first()
 
-                # If an existing record is found
+                # Skip processing if a record already exists
                 if existing_record:
-                    if any([
-                        existing_record.atd_utc,
-                        existing_record.takeoff_utc,
-                        existing_record.touchdown_utc,
-                        existing_record.ata_utc
-                    ]):
-                        # Skip update if ACARS data exists
-                        logger.info(f"Skipping line {line_num}: ACARS data already exists for flight {flight_no}.")
-                        continue
+                    logger.info(f"Skipping line {line_num}: Existing record found for flight {flight_no}, tail {tail_no}.")
+                    continue
 
-                    # Update `STD` and `STA` if they have changed
-                    updated = False
-                    if existing_record.std_utc != std_utc:
-                        existing_record.std_utc = std_utc
-                        updated = True
-                    if existing_record.sta_utc != sta_utc:
-                        existing_record.sta_utc = sta_utc
-                        updated = True
-
-                    if updated:
-                        existing_record.save()
-                        logger.info(f"Updated STD/STA for flight {flight_no} on {sd_date_utc}.")
-                    else:
-                        logger.info(f"No changes detected for flight {flight_no} on {sd_date_utc}.")
-                else:
-                    # Insert a new record only if no matching record exists
-                    FlightData.objects.create(
-                        flight_no=flight_no,
-                        tail_no=tail_no,
-                        dep_code_iata=dep_code_iata,
-                        dep_code_icao=dep_code_icao,
-                        arr_code_iata=arr_code_iata,
-                        arr_code_icao=arr_code_icao,
-                        sd_date_utc=sd_date_utc,
-                        std_utc=std_utc,
-                        sta_utc=sta_utc,
-                        sa_date_utc=sa_date_utc,
-                        source_type="FDM",
-                        raw_content=line
-                    )
-                    logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}")
+                # Insert a new record only if no matching record exists
+                FlightData.objects.create(
+                    flight_no=flight_no,
+                    tail_no=tail_no,
+                    dep_code_iata=dep_code_iata,
+                    dep_code_icao=dep_code_icao,
+                    arr_code_iata=arr_code_iata,
+                    arr_code_icao=arr_code_icao,
+                    sd_date_utc=sd_date_utc,
+                    std_utc=std_utc,
+                    sta_utc=sta_utc,
+                    sa_date_utc=sa_date_utc,
+                    source_type="FDM",
+                    raw_content=line
+                )
+                logger.info(f"Inserted new flight record: Flight {flight_no} on {sd_date_utc}")
 
             except ValueError as ve:
                 logger.error(f"Error processing line {line_num}: {ve} - {line}")
@@ -284,6 +263,7 @@ def process_flight_schedule_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
 
 
 #CARGO Website
