@@ -188,35 +188,26 @@ def process_flight_schedule_file(attachment):
                 # Split the line based on comma delimiter
                 fields = line.split(',')
 
-                # Extract fields
-                flight_date = fields[0].strip()
-                tail_no = fields[1].strip()
-                flight_no = fields[2].strip()
-                dep_code_icao = fields[3].strip()
-                arr_code_icao = fields[4].strip()
-                std = fields[5].strip()
-                sta = fields[6].strip()
-                atd = fields[7].strip() if len(fields) > 7 else None
-                takeoff = fields[8].strip() if len(fields) > 8 else None
-                touchdown = fields[9].strip() if len(fields) > 9 else None
-                ata = fields[10].strip() if len(fields) > 10 else None
-                arrival_date = fields[11].strip() if len(fields) > 11 else None
-                
-                print("\n ----------------------------------")
-                print(f"\nflight_date: {flight_date}")
-                print(f"\ntail_no: {tail_no}")
-                print(f"\nflight_no: {flight_no}")
-                print(f"\ndep_code_icao: {dep_code_icao}")
-                print(f"\narr_code_icao: {arr_code_icao}")
-                print(f"\nstd: {std}")
-                print(f"\nsta: {sta}")
-                print(f"\natd: {atd}")
-                print(f"\ntakeoff: {takeoff}")
-                print(f"\ntouchdown: {touchdown}")
-                print(f"\nata: {ata}")
-                print(f"\narrival_date: {arrival_date}")
-                print("\n ----------------------------------")
+                # Ensure all fields are stripped of surrounding quotes
+                fields = [field.strip().replace('"', '') for field in fields]
 
+                # Extract fields
+                flight_date = fields[0]
+                tail_no = fields[1]
+                flight_no = fields[2]
+                dep_code_icao = fields[3]
+                arr_code_icao = fields[4]
+                std = fields[5]
+                sta = fields[6]
+                atd = fields[7] if len(fields) > 7 else None
+                takeoff = fields[8] if len(fields) > 8 else None
+                touchdown = fields[9] if len(fields) > 9 else None
+                ata = fields[10] if len(fields) > 10 else None
+                arrival_date = fields[11] if len(fields) > 11 else None
+
+                print("\n-------------------------------------------------")
+                print(f"Fields: {fields}")
+                print(f"Flight Date: {flight_date}")
 
                 # Parse dates and times
                 try:
@@ -256,8 +247,6 @@ def process_flight_schedule_file(attachment):
                 if flight_existing_record:
                     # Update fields if actual timings have changed
                     fields_to_update = {
-                        'std_utc': std_utc,
-                        'sta_utc': sta_utc,
                         'atd_utc': atd_utc,
                         'takeoff_utc': takeoff_utc,
                         'touchdown_utc': touchdown_utc,
@@ -293,21 +282,19 @@ def process_flight_schedule_file(attachment):
                         ata_utc=ata_utc,
                         sa_date_utc=sa_date_utc,
                         source_type="FDM",
-                        raw_content=line
+                        raw_content=",".join(fields)
                     )
                     logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}")
 
-            except IndexError:
-                logger.error(f"Skipping line {line_num} due to missing fields: {line}")
-                continue
             except Exception as e:
-                logger.error(f"Error processing line {line_num}: {e} - {line}")
+                logger.error(f"Error processing line {line_num}: {e} - {fields}")
                 continue
 
         logger.info("Flight schedule file processed successfully.")
 
     except Exception as e:
         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
 
 
 
