@@ -578,7 +578,7 @@ def process_acars_message(item, file_path):
                 from_email=settings.EMAIL_HOST_USER,
                 recipient_list=[
                     settings.FIRST_EMAIL_RECEIVER,
-                    settings.SECOND_EMAIL_RECEIVER,
+                    # settings.SECOND_EMAIL_RECEIVER,
                     settings.THIRD_EMAIL_RECEIVER,
                 ],
                 fail_silently=False,
