@@ -52,127 +52,6 @@ def process_airport_file(attachment):
 
 
 
-# from datetime import datetime
-# from aimsintegration.models import FlightData, AirportData
-# import logging
-
-# logger = logging.getLogger(__name__)
-
-
-# def process_flight_schedule_file(attachment):
-#     """
-#     Process the entire flight schedule file and update the FlightData table.
-#     Avoid updating records with ACARS data in `atd_utc`, `takeoff_utc`, `touchdown_utc`, or `ata_utc`.
-#     Update `STD` and `STA` for records without ACARS data if they have changed.
-#     """
-#     try:
-#         content = attachment.content.decode('utf-8').splitlines()
-#         logger.info("Starting to process the flight schedule file...")
-
-#         for line_num, line in enumerate(content, start=1):
-#             fields = line.split()
-
-#             # Skip line if insufficient fields
-#             if len(fields) < 8:
-#                 logger.error(f"Skipping line {line_num} due to insufficient fields: {fields}")
-#                 continue
-
-#             try:
-#                 # Extract fields
-#                 flight_date = fields[0]
-#                 tail_no = fields[1]
-#                 flight_no = fields[2]
-#                 dep_code_icao = fields[3]
-#                 arr_code_icao = fields[4]
-#                 std = fields[5]
-#                 sta = fields[6]
-#                 arrival_date = fields[-1]
-
-#                 # Parse dates and times
-#                 try:
-#                     sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-#                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date()
-#                     std_utc = datetime.strptime(std, "%H:%M").time()
-#                     sta_utc = datetime.strptime(sta, "%H:%M").time()
-#                 except ValueError:
-#                     logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
-#                     continue
-
-#                 # Fetch airport data
-#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
-#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
-
-#                 if not dep_airport or not arr_airport:
-#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
-#                     continue
-
-#                 dep_code_iata = dep_airport.iata_code
-#                 arr_code_iata = arr_airport.iata_code
-
-#                 # Check for existing record
-#                 existing_record = FlightData.objects.filter(
-#                     flight_no=flight_no,
-#                     tail_no=tail_no,
-#                     dep_code_icao=dep_code_icao,
-#                     arr_code_icao=arr_code_icao,
-#                     sd_date_utc=sd_date_utc
-#                 ).first()
-
-#                 # Logic for updates
-#                 if existing_record:
-#                     # Check for ACARS data
-#                     if any([
-#                         existing_record.atd_utc,
-#                         existing_record.takeoff_utc,
-#                         existing_record.touchdown_utc,
-#                         existing_record.ata_utc
-#                     ]):
-#                         logger.info(f"Skipping line {line_num}: ACARS data already exists for flight {flight_no}.")
-#                         continue
-
-#                     # Update `STD` and `STA` if they have changed
-#                     updated = False
-#                     if existing_record.std_utc != std_utc:
-#                         existing_record.std_utc = std_utc
-#                         updated = True
-#                     if existing_record.sta_utc != sta_utc:
-#                         existing_record.sta_utc = sta_utc
-#                         updated = True
-
-#                     if updated:
-#                         existing_record.save()
-#                         logger.info(f"Updated STD/STA for flight {flight_no} on {sd_date_utc}.")
-#                     else:
-#                         logger.info(f"No changes detected for flight {flight_no} on {sd_date_utc}.")
-
-#                     continue
-
-#                 # Insert new record if no matching record exists
-#                 FlightData.objects.create(
-#                     flight_no=flight_no,
-#                     tail_no=tail_no,
-#                     dep_code_iata=dep_code_iata,
-#                     dep_code_icao=dep_code_icao,
-#                     arr_code_iata=arr_code_iata,
-#                     arr_code_icao=arr_code_icao,
-#                     sd_date_utc=sd_date_utc,
-#                     std_utc=std_utc,
-#                     sta_utc=sta_utc,
-#                     sa_date_utc=sa_date_utc,
-#                     source_type="FDM",
-#                     raw_content=line
-#                 )
-#                 logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}")
-
-#             except ValueError as ve:
-#                 logger.error(f"Error processing line {line_num}: {ve} - {line}")
-#                 continue
-
-#         logger.info("Flight schedule file processed successfully.")
-
-#     except Exception as e:
-#         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
-
 
 from datetime import datetime
 from django.db import transaction
@@ -687,7 +566,7 @@ def process_acars_message(item, file_path):
         if not fdm_flights.exists():
             logger.info(f"No matching FDM flights found for flight number: {flight_no}")
             send_mail(
-                subject=f"No matching flights found for flight number: {flight_no}",
+                subject=f"No matching FDM flights found for flight number: {flight_no}",
                 message=(
                     f"Dear Team,\n\n"
                     f"The ACARS message for flight {flight_no} could not be matched.\n"
