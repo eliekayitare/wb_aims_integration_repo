@@ -534,13 +534,13 @@ def process_acars_message(item, file_path):
             arr_code_iata=arr_code
         )
 
-        #FDM Project
-        fdm_flights = FdmFlightData.objects.filter(
-            flight_no=flight_no,
-            tail_no=tail_number,
-            dep_code_iata=dep_code,
-            arr_code_iata=arr_code
-        )
+        # #FDM Project
+        # fdm_flights = FdmFlightData.objects.filter(
+        #     flight_no=flight_no,
+        #     tail_no=tail_number,
+        #     dep_code_iata=dep_code,
+        #     arr_code_iata=arr_code
+        # )
         
 
         if not flights.exists():
@@ -564,52 +564,52 @@ def process_acars_message(item, file_path):
             )
             return
         
-        if not fdm_flights.exists():
-            logger.info(f"No matching FDM flights found for flight number: {flight_no}")
-            send_mail(
-                subject=f"No matching FDM flights found for flight number: {flight_no}",
-                message=(
-                    f"Dear Team,\n\n"
-                    f"The ACARS message for flight {flight_no} could not be matched.\n"
-                    f"Message details:\n\n{message_body}\n\n"
-                    f"Please review and update manually.\n\n"
-                    f"Regards,\nFlightOps Team"
-                ),
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[
-                    # settings.FIRST_EMAIL_RECEIVER,
-                    # settings.SECOND_EMAIL_RECEIVER,
-                    settings.THIRD_EMAIL_RECEIVER,
-                ],
-                fail_silently=False,
-            )
-            return
+        # if not fdm_flights.exists():
+        #     logger.info(f"No matching FDM flights found for flight number: {flight_no}")
+        #     send_mail(
+        #         subject=f"No matching FDM flights found for flight number: {flight_no}",
+        #         message=(
+        #             f"Dear Team,\n\n"
+        #             f"The ACARS message for flight {flight_no} could not be matched.\n"
+        #             f"Message details:\n\n{message_body}\n\n"
+        #             f"Please review and update manually.\n\n"
+        #             f"Regards,\nFlightOps Team"
+        #         ),
+        #         from_email=settings.EMAIL_HOST_USER,
+        #         recipient_list=[
+        #             # settings.FIRST_EMAIL_RECEIVER,
+        #             # settings.SECOND_EMAIL_RECEIVER,
+        #             settings.THIRD_EMAIL_RECEIVER,
+        #         ],
+        #         fail_silently=False,
+        #     )
+        #     return
 
         closest_flight = min(
             flights,
             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
         )
 
-        closest_fdm_flight = min(
-            fdm_flights,
-            key=lambda fl: abs((fl.sd_date_utc - email_received_date).days)
-        ) 
+        # closest_fdm_flight = min(
+        #     fdm_flights,
+        #     key=lambda fl: abs((fl.sd_date_utc - email_received_date).days)
+        # ) 
 
         if acars_event == "OT":
             closest_flight.atd_utc = event_time
-            closest_fdm_flight.atd_utc = event_time
+            # closest_fdm_flight.atd_utc = event_time
         elif acars_event == "OF":
             closest_flight.takeoff_utc = event_time
-            closest_fdm_flight.takeoff_utc = event_time
+            # closest_fdm_flight.takeoff_utc = event_time
         elif acars_event == "ON":
             closest_flight.touchdown_utc = event_time
-            closest_fdm_flight.touchdown_utc = event_time
+            # closest_fdm_flight.touchdown_utc = event_time
         elif acars_event == "IN":
             closest_flight.ata_utc = event_time
-            closest_fdm_flight.ata_utc = event_time
+            # closest_fdm_flight.ata_utc = event_time
 
         closest_flight.save()
-        closest_fdm_flight.save()
+        # closest_fdm_flight.save()
 
         # Append the updated flight details to the job file
         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
