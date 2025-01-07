@@ -85,14 +85,16 @@ def process_flight_schedule_file(attachment):
                 std = fields[5]
                 sta = fields[6]
                 flight_service_type = fields[7] if len(fields) > 7 else None
-                atd = fields[8] if len(fields) > 8 else None
-                takeoff = fields[9] if len(fields) > 9 else None
-                touchdown = fields[10] if len(fields) > 10 else None
-                ata = fields[11] if len(fields) > 11 else None
-                arrival_date = fields[12] if len(fields) > 12 else None
+                esd = fields[8] if len(fields) > 8 else None
+                eta = fields[9] if len(fields) > 9 else None
+                atd = fields[10] if len(fields) > 10 else None
+                takeoff = fields[11] if len(fields) > 11 else None
+                touchdown = fields[12] if len(fields) > 12 else None
+                ata = fields[13] if len(fields) > 13 else None
+                arrival_date = fields[14] if len(fields) > 14 else None
 
                 print("\n-------------------------------------------------------------\n")
-                print(f"Flight Date: {flight_date} | Tail No: {tail_no} | Flight No: {flight_no} | Dep Code ICAO: {dep_code_icao} | Arr Code ICAO: {arr_code_icao} | STD: {std} | STA: {sta} | flight service type: {flight_service_type} | ATD: {atd} | Takeoff: {takeoff} | Touchdown: {touchdown} | ATA: {ata} | Arrival Date: {arrival_date}")
+                print(f"Flight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ESD: {esd}\n ESTA: {eta}\n ATD: {atd} | Takeoff: {takeoff} | Touchdown: {touchdown} | ATA: {ata} | Arrival Date: {arrival_date}")
                 print("\n-------------------------------------------------------------\n")
 
                 # Parse dates and times
