@@ -91,7 +91,7 @@ def process_flight_schedule_file(attachment):
                 ata = fields[10]
                 arrival_date = fields[11]
 
-                # Parse dates and times with error handling
+                # Parse dates and times with correct formats
                 try:
                     sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
@@ -181,6 +181,7 @@ def process_flight_schedule_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
 
 
 
