@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 def process_flight_schedule_file(attachment):
     """
-    Process the flight schedule file, preventing duplicates using logic checks and transaction handling.
+    Process the flight schedule file, removing the value '1' if it appears incorrectly in the fields and proceeding with the remaining data.
     """
     try:
         # Read file content
@@ -76,6 +76,9 @@ def process_flight_schedule_file(attachment):
 
                 # Ensure all fields are stripped of surrounding quotes and handle empty fields as None
                 fields = [field.strip().replace('"', '') if field.strip() else None for field in fields]
+
+                # Remove the value '1' if it appears incorrectly
+                fields = [field if field != '1' else None for field in fields]
 
                 # Extract fields
                 flight_date = fields[0]
@@ -169,7 +172,7 @@ def process_flight_schedule_file(attachment):
                             touchdown_utc=touchdown_utc,
                             ata_utc=ata_utc,
                             sa_date_utc=sa_date_utc,
-                            source_type="FDM",
+                            source_type="Flights",
                             raw_content=",".join(fields),
                         )
                         logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}.")
@@ -181,6 +184,7 @@ def process_flight_schedule_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
 
 
 
