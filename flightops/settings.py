@@ -253,7 +253,7 @@ CELERY_BEAT_SCHEDULE = {
     # Flight Schedules - Runs every 10 minutes after initial run
     'fetch-flight-schedules-every-10-minutes': {
         'task': 'aimsintegration.tasks.fetch_flight_schedules',
-        'schedule': crontab(minute='*/3'),  # Every 10 minutes
+        'schedule': crontab(minute='*/10'),  # Every 10 minutes
         'options': {'run_immediately': False}
     },
     # ACARS Messages - Runs every 3 minutes
@@ -276,12 +276,12 @@ CELERY_BEAT_SCHEDULE = {
 
     #FDM Project - Runs every 1 hour
 
-    #  # Flight Schedules - Runs every 10 minutes after initial run
-    # 'fetch-fdm_flight-schedules-every-15-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
-    #     'schedule': crontab(minute='*/15'),  # Every 15 minutes
-    #     'options': {'run_immediately': False}
-    # },
+     # Flight Schedules - Runs every 10 minutes after initial run
+    'fetch-fdm_flight-schedules-every-15-minutes': {
+        'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
+        'schedule': crontab(minute='*/3'),  # Every 15 minutes
+        'options': {'run_immediately': False}
+    },
 
     # #Fetch Crew Data - Runs every 15 minutes
     # 'fetch-crew-data-every-15-minutes': {
@@ -290,13 +290,13 @@ CELERY_BEAT_SCHEDULE = {
     #     'options': {'run_immediately': False}
     # },
 
-    # # UPload FDM Data - runs every 1 hour
-    # 'upload-fdm-data-every-hour': {
-    #     'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
-    #     'schedule': crontab(minute='*/60'),  # Every 1 hour
-    #     'options': {'run_immediately': False}
+    # UPload FDM Data - runs every 1 hour
+    'upload-fdm-data-every-hour': {
+        'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
+        'schedule': crontab(minute='*/60'),  # Every 1 hour
+        'options': {'run_immediately': False}
         
-    # },
+    },
 
     # Feed Tableau - Runs every 5 minutes
     'feed-tableau-every-5-minutes': {
