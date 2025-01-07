@@ -301,3 +301,280 @@ def get_crew_details(request):
 
     # Return the response
     return JsonResponse(list(crew_members), safe=False)
+
+
+
+
+
+# Crew Allowance project
+# from django.shortcuts import render, get_object_or_404, redirect
+# from django.http import JsonResponse
+# from .models import Zone, Destination
+
+# def add_zone(request):
+#     """
+#     Create a new zone and add its destinations.
+#     """
+#     if request.method == 'POST':
+#         name = request.POST.get('name')
+#         daily_allowance = request.POST.get('daily_allowance')
+#         hourly_allowance = request.POST.get('hourly_allowance', 0)
+#         destinations_input = request.POST.get('destinations', '')  # Comma-separated destinations
+
+#         # Validate input
+#         if not name or not daily_allowance:
+#             return JsonResponse({'status': 'error', 'message': 'Name and daily allowance are required.'})
+
+#         # Create the zone
+#         zone = Zone.objects.create(
+#             name=name,
+#             daily_allowance=float(daily_allowance),
+#             hourly_allowance=float(hourly_allowance) if hourly_allowance else 0
+#         )
+
+#         # Add destinations
+#         destinations = [code.strip() for code in destinations_input.split(',') if code.strip()]
+#         Destination.objects.bulk_create([
+#             Destination(zone=zone, airport_code=airport_code) for airport_code in destinations
+#         ])
+
+#         return JsonResponse({'status': 'success', 'message': 'Zone created successfully.', 'zone_id': zone.id})
+
+#     return render(request, 'aimsintegration/add_zone.html')
+
+
+# def list_zones(request):
+#     """
+#     Display all zones along with their destinations.
+#     """
+#     zones = Zone.objects.prefetch_related('destinations').all()
+#     return render(request, 'aimsintegration/list_zones.html', {'zones': zones})
+
+
+# # This view lists all zones with their associated destinations in a paginated format.
+# from django.core.paginator import Paginator
+
+# def list_zones_with_destinations(request):
+#     """
+#     Display all zones with their associated destinations, paginated.
+#     """
+#     zones = Zone.objects.prefetch_related('destinations').all()
+#     paginator = Paginator(zones, 10)  # 10 zones per page
+#     page_number = request.GET.get('page')
+#     page_obj = paginator.get_page(page_number)
+
+#     return render(request, 'aimsintegration/list_zones_with_destinations.html', {'page_obj': page_obj})
+
+
+
+# def edit_zone(request, zone_id):
+#     """
+#     Edit a zone and its destinations.
+#     """
+#     zone = get_object_or_404(Zone, id=zone_id)
+
+#     if request.method == 'POST':
+#         # Update zone details
+#         zone.name = request.POST.get('name', zone.name)
+#         zone.daily_allowance = request.POST.get('daily_allowance', zone.daily_allowance)
+#         zone.hourly_allowance = request.POST.get('hourly_allowance', zone.hourly_allowance)
+#         zone.save()
+
+#         # Update destinations
+#         destinations_input = request.POST.get('destinations', '')
+#         updated_destinations = [code.strip() for code in destinations_input.split(',') if code.strip()]
+
+#         # Add new destinations and delete removed ones
+#         existing_destinations = set(zone.destinations.values_list('airport_code', flat=True))
+#         new_destinations = set(updated_destinations) - existing_destinations
+#         removed_destinations = existing_destinations - set(updated_destinations)
+
+#         # Add new destinations
+#         Destination.objects.bulk_create([
+#             Destination(zone=zone, airport_code=airport_code) for airport_code in new_destinations
+#         ])
+
+#         # Remove old destinations
+#         zone.destinations.filter(airport_code__in=removed_destinations).delete()
+
+#         return JsonResponse({'status': 'success', 'message': 'Zone updated successfully.', 'zone_id': zone.id})
+
+#     # Prepare data for the form
+#     destinations = ', '.join(zone.destinations.values_list('airport_code', flat=True))
+#     return render(request, 'aimsintegration/edit_zone.html', {'zone': zone, 'destinations': destinations})
+
+
+# #Allows updating an individual destination in a zone.
+
+# def edit_destination(request, zone_id, destination_id):
+#     """
+#     Edit a specific destination in a zone.
+#     """
+#     zone = get_object_or_404(Zone, id=zone_id)
+#     destination = get_object_or_404(Destination, id=destination_id, zone=zone)
+
+#     if request.method == 'POST':
+#         new_airport_code = request.POST.get('airport_code')
+#         if not new_airport_code:
+#             return JsonResponse({'status': 'error', 'message': 'Airport code is required.'})
+
+#         # Check for uniqueness within the zone
+#         if zone.destinations.filter(airport_code=new_airport_code).exclude(id=destination.id).exists():
+#             return JsonResponse({'status': 'error', 'message': 'This destination already exists in the zone.'})
+
+#         # Update the destination
+#         destination.airport_code = new_airport_code
+#         destination.save()
+
+#         return JsonResponse({'status': 'success', 'message': f"Destination updated to '{new_airport_code}'."})
+
+#     return render(request, 'aimsintegration/edit_destination.html', {'zone': zone, 'destination': destination})
+
+
+# # This view provides detailed information about a single zone, including all its destinations.
+# def zone_details(request, zone_id):
+#     """
+#     Display details of a specific zone along with its destinations.
+#     """
+#     zone = get_object_or_404(Zone.objects.prefetch_related('destinations'), id=zone_id)
+#     return render(request, 'aimsintegration/zone_details.html', {'zone': zone})
+
+
+
+
+# def delete_zone(request, zone_id):
+#     """
+#     Delete a zone and its associated destinations.
+#     """
+#     zone = get_object_or_404(Zone, id=zone_id)
+#     zone.delete()
+#     return JsonResponse({'status': 'success', 'message': f"Zone '{zone.name}' deleted successfully."})
+
+
+# def add_destination(request, zone_id):
+#     """
+#     Add a destination to a specific zone.
+#     """
+#     zone = get_object_or_404(Zone, id=zone_id)
+
+#     if request.method == 'POST':
+#         airport_code = request.POST.get('airport_code')
+#         if not airport_code:
+#             return JsonResponse({'status': 'error', 'message': 'Airport code is required.'})
+
+#         # Check if destination already exists
+#         if zone.destinations.filter(airport_code=airport_code).exists():
+#             return JsonResponse({'status': 'error', 'message': 'Destination already exists in this zone.'})
+
+#         # Add the new destination
+#         Destination.objects.create(zone=zone, airport_code=airport_code)
+#         return JsonResponse({'status': 'success', 'message': f"Destination '{airport_code}' added successfully."})
+
+#     return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
+
+
+# # Allows adding multiple destinations to a zone in one go
+# def batch_add_destinations(request, zone_id):
+#     """
+#     Add multiple destinations to a zone in batch.
+#     """
+#     zone = get_object_or_404(Zone, id=zone_id)
+
+#     if request.method == 'POST':
+#         destinations_input = request.POST.get('destinations', '')  # Comma-separated airport codes
+#         destinations = [code.strip() for code in destinations_input.split(',') if code.strip()]
+
+#         # Filter out duplicates and already existing destinations
+#         existing_destinations = set(zone.destinations.values_list('airport_code', flat=True))
+#         new_destinations = [code for code in destinations if code not in existing_destinations]
+
+#         # Add new destinations in bulk
+#         Destination.objects.bulk_create([Destination(zone=zone, airport_code=code) for code in new_destinations])
+
+#         return JsonResponse({'status': 'success', 'message': f"Added {len(new_destinations)} new destinations."})
+
+#     return render(request, 'aimsintegration/batch_add_destinations.html', {'zone': zone})
+
+
+
+# def delete_destination(request, zone_id, destination_id):
+#     """
+#     Delete a specific destination from a zone.
+#     """
+#     zone = get_object_or_404(Zone, id=zone_id)
+#     destination = get_object_or_404(Destination, id=destination_id, zone=zone)
+
+#     # Delete the destination
+#     destination.delete()
+#     return JsonResponse({'status': 'success', 'message': f"Destination '{destination.airport_code}' deleted successfully."})
+
+
+
+
+# import csv
+# from datetime import datetime
+# from django.http import JsonResponse
+# from django.shortcuts import render
+# from .models import Crew, FlightCrewRecord
+
+# def upload_file(request):
+#     """
+#     Upload a file and process it to populate Crew and FlightRecord models.
+#     """
+#     if request.method == 'POST' and request.FILES.get('file'):
+#         uploaded_file = request.FILES['file']
+#         file_data = uploaded_file.read().decode('utf-8').splitlines()
+#         csv_reader = csv.reader(file_data)
+
+#         for row in csv_reader:
+#             # Map columns from the file to the required fields
+#             duty_date = row[0]  # Column 5: Duty Date
+#             crew_id = row[1]  # Column 2: Crew ID
+#             first_name = row[2]  # Column 59: Crew First Name
+#             last_name = row[3]  # Column 58: Crew Surname
+#             position = row[4]  # Column 3: Crew Pos
+#             flight_number = row[5]  # Column 18: Flight Number
+#             tail_number = row[6]  # Column 16: Tail Number
+#             departure_airport = row[7]  # Column 21: Departure Airport
+#             arrival_airport = row[8]  # Column 30: Arrival Airport
+#             layover_time = row[9]  # Column 49: Layover Time for This Day
+
+#             # Add crew if not already in the database
+#             crew, created = Crew.objects.get_or_create(
+#                 crew_id=crew_id,
+#                 defaults={'first_name': first_name, 'last_name': last_name, 'position': position}
+#             )
+
+#             # Add flight record
+#             FlightCrewRecord.objects.create(
+#                 duty_date=datetime.strptime(duty_date, '%d/%m/%y'),
+#                 flight_number=flight_number,
+#                 tail_number=tail_number,
+#                 departure_airport=departure_airport,
+#                 arrival_airport=arrival_airport,
+#                 layover_time=layover_time
+#             )
+
+#         return JsonResponse({'status': 'success', 'message': 'File processed and records saved successfully.'})
+
+#     return render(request, 'aimsintegration/upload_file.html')
+
+
+
+# from django.shortcuts import render
+# from django.core.paginator import Paginator
+# from .models import FlightRecord
+
+# def list_crew_flights(request):
+#     """
+#     Display all crew flights with assigned crew members and pagination.
+#     """
+#     # Get all flight records
+#     flight_records = FlightRecord.objects.prefetch_related('crew').order_by('-duty_date')
+
+#     # Pagination: 10 flights per page
+#     paginator = Paginator(flight_records, 10)
+#     page_number = request.GET.get('page')
+#     page_obj = paginator.get_page(page_number)
+
+#     return render(request, 'aimsintegration/list_crew_flights.html', {'page_obj': page_obj})

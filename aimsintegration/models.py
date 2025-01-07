@@ -226,3 +226,67 @@ class TableauData(models.Model):
             models.Index(fields=['updated_at']),  # Optimize queries based on this field
         ]
 
+
+
+
+# Crew Allowance Project models
+
+
+# from django.db import models
+
+# class Zone(models.Model):
+#     name = models.CharField(max_length=50, unique=True)  # Zone name (e.g., Zone 1)
+#     daily_allowance = models.DecimalField(max_digits=8, decimal_places=2)  # Allowance per 24 hours
+#     hourly_allowance = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)  # Hourly allowance (optional)
+
+#     def __str__(self):
+#         return self.name
+
+
+# class Destination(models.Model):
+#     zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name='destinations')  # Link destination to a zone
+#     airport_code = models.CharField(max_length=4, unique=True)  # Airport code (e.g., LHR, CDG)
+
+#     def __str__(self):
+#         return f"{self.airport_code} ({self.zone.name})"
+
+
+
+# class Crew(models.Model):
+#     """
+#     Model to represent crew members with their roles.
+#     """
+#     crew_id = models.CharField(max_length=50, unique=True)  # Unique identifier for the crew
+#     first_name = models.CharField(max_length=100)  # Crew's first name
+#     last_name = models.CharField(max_length=100)  # Crew's last name
+#     position = models.CharField(max_length=50)  # Crew position (e.g., Captain, First Officer)
+
+#     def __str__(self):
+#         return f"{self.first_name} {self.last_name} ({self.crew_id})"
+
+
+# class FlightCrewRecord(models.Model):
+#     """
+#     Model to represent flight records with layover information.
+#     """
+#     duty_date = models.DateField()  # Date of the flight duty
+#     flight_number = models.CharField(max_length=50)  # Flight number
+#     tail_number = models.CharField(max_length=50)  # Aircraft registration/tail number
+#     departure_airport = models.CharField(max_length=4)  # Departure airport code
+#     arrival_airport = models.CharField(max_length=4)  # Arrival airport code
+#     layover_time = models.CharField(max_length=10, null=True, blank=True)  # Layover time in "HH:MM" format
+
+#     def __str__(self):
+#         return f"{self.flight_number} ({self.departure_airport} -> {self.arrival_airport})"
+
+
+# class Invoice(models.Model):
+#     """
+#     Model to represent crew invoices for layover allowances.
+#     """
+#     crew = models.ForeignKey(Crew, on_delete=models.CASCADE)  # Link invoice to a crew member
+#     invoice_date = models.DateField(auto_now_add=True)  # Date the invoice was created
+#     total_amount = models.DecimalField(max_digits=10, decimal_places=2)  # Total invoice amount
+
+#     def __str__(self):
+#         return f"Invoice for {self.crew} on {self.invoice_date}"
