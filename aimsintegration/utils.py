@@ -92,20 +92,8 @@ def process_flight_schedule_file(attachment):
                 arrival_date = fields[12] if len(fields) > 12 else None
 
                 print("\n-------------------------------------------------------------\n")
-                print(f"flight_date: {flight_date}]n")
-                print(f"tail_no: {tail_no}\n")
-                print(f"flight_no: {flight_no}\n")
-                print(f"dep_code_icao: {dep_code_icao}\n")
-                print(f"arr_code_icao: {arr_code_icao}\n")
-                print(f"std: {std}\n")
-                print(f"sta: {sta}\n")
-                print(f"flight_service_type: {flight_service_type}\n")
-                print(f"atd: {atd}\n")
-                print(f"takeoff: {takeoff}\n")
-                print(f"touchdown: {touchdown}\n")
-                print(f"ata: {ata}\n")
-                print(f"arrival_date: {arrival_date}\n")
-                print("-------------------------------------------------------------\n")
+                print(f"Flight Date: {flight_date} | Tail No: {tail_no} | Flight No: {flight_no} | Dep Code ICAO: {dep_code_icao} | Arr Code ICAO: {arr_code_icao} | STD: {std} | STA: {sta} | flight service type: {flight_service_type} | ATD: {atd} | Takeoff: {takeoff} | Touchdown: {touchdown} | ATA: {ata} | Arrival Date: {arrival_date}")
+                print("\n-------------------------------------------------------------\n")
 
                 # Parse dates and times
                 try:
