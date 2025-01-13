@@ -307,6 +307,13 @@ VALIDITY_PERIODS = {
     "LVO-G": 36,    # LVO Ground    
     "PBNGRN": 12,   # PBN Ground
     "RVSMGS": 0,    # RVSM Ground (never expires)
+    "A330C1": 6,
+    "FAS": 12,
+    "B737C1": 6,
+    "Q400C1": 6,
+    "TCAS": 36,
+    "ADW": 36,
+    "PWS": 36,
 }
 
 
