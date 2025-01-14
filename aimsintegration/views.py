@@ -233,7 +233,7 @@ def fdm_dashboard_view(request):
     # Convert filter_date to a timezone-aware datetime object (UTC)
     # filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
     
-    filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
+    filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone.utc)
 
     logger.info(f"Selected Date: {selected_date}, Filter Date (UTC): {filter_date}")
 
