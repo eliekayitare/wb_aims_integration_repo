@@ -208,10 +208,10 @@ def todays_completion_records_view(request):
 
 from django.http import JsonResponse
 from django.shortcuts import render
-from django.utils.timezone import make_aware
-from datetime import datetime, date, timezone  # Correct import for timezone
 from .models import FdmFlightData
 import logging
+import datetime as dt
+from django.utils.timezone import make_aware
 
 
 logger = logging.getLogger(__name__)
@@ -233,7 +233,7 @@ def fdm_dashboard_view(request):
     # Convert filter_date to a timezone-aware datetime object (UTC)
     # filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
     
-    filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone.utc)
+    filter_date = make_aware(dt.datetime.combine(filter_date, dt.datetime.min.time()),dt.timezone.utc)
 
     logger.info(f"Selected Date: {selected_date}, Filter Date (UTC): {filter_date}")
 
