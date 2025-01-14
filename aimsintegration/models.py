@@ -235,7 +235,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 
-class Crew(models.Model):
+class CrewOld(models.Model):
     """
     Basic info about a crew member.
     """
@@ -251,14 +251,14 @@ class Crew(models.Model):
         return f"{self.crew_id} - {self.first_name} {self.last_name}"
 
 
-class Airport(models.Model):
+class AirportOld(models.Model):
     """
     Example for linking airports to zones, if needed.
     """
     iata_code = models.CharField(max_length=10, unique=True)
 
     class Meta:
-        db_table = 'destinations'
+        db_table = 'airport_destinations'
 
 
     def __str__(self):
@@ -267,22 +267,22 @@ class Airport(models.Model):
 
 
 
-class Duty(models.Model):
+class DutyOld(models.Model):
     """
     Represents a single row from the uploaded file (or any flight info).
     """
     duty_date = models.DateField()
-    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    crew = models.ForeignKey(CrewOld, on_delete=models.CASCADE)
     flight_number = models.CharField(max_length=20, blank=True)
     departure_airport = models.ForeignKey(
-        Airport,
+        AirportOld,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='duty_departures'
     )
     arrival_airport = models.ForeignKey(
-        Airport,
+        AirportOld,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -298,11 +298,11 @@ class Duty(models.Model):
         return f"Duty {self.id}: {self.crew} on {self.duty_date}"
 
 
-class Invoice(models.Model):
+class InvoiceOld(models.Model):
     """
     One invoice per Crew per Month.
     """
-    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    crew = models.ForeignKey(CrewOld, on_delete=models.CASCADE)
     # We'll store the first day of the month in 'month' to represent that invoice period.
     month = models.DateField()
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
@@ -323,12 +323,12 @@ class Invoice(models.Model):
         self.save()
 
 
-class InvoiceItem(models.Model):
+class InvoiceItemOld(models.Model):
     """
     Each InvoiceItem corresponds to a single Duty for that month.
     """
-    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE)
-    duty = models.ForeignKey(Duty, on_delete=models.CASCADE)
+    invoice = models.ForeignKey(InvoiceOld, on_delete=models.CASCADE)
+    duty = models.ForeignKey(DutyOld, on_delete=models.CASCADE)
     allowance_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
@@ -337,3 +337,9 @@ class InvoiceItem(models.Model):
 
     def __str__(self):
         return f"InvoiceItem {self.id} (Invoice {self.invoice.id})"
+
+
+
+
+
+
