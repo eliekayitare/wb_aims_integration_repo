@@ -230,63 +230,90 @@ class TableauData(models.Model):
 
 
 # Crew Allowance Project models
+from django.db import models
+from django.utils import timezone
+from decimal import Decimal
 
 
-# from django.db import models
+class Crew(models.Model):
+    """
+    Basic info about a crew member.
+    """
+    crew_id = models.CharField(max_length=50, unique=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    position = models.CharField(max_length=50, blank=True, null=True)  # CP, FO, CC, etc.
 
-# class Zone(models.Model):
-#     name = models.CharField(max_length=50, unique=True)  # Zone name (e.g., Zone 1)
-#     daily_allowance = models.DecimalField(max_digits=8, decimal_places=2)  # Allowance per 24 hours
-#     hourly_allowance = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)  # Hourly allowance (optional)
-
-#     def __str__(self):
-#         return self.name
-
-
-# class Destination(models.Model):
-#     zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name='destinations')  # Link destination to a zone
-#     airport_code = models.CharField(max_length=4, unique=True)  # Airport code (e.g., LHR, CDG)
-
-#     def __str__(self):
-#         return f"{self.airport_code} ({self.zone.name})"
+    def __str__(self):
+        return f"{self.crew_id} - {self.first_name} {self.last_name}"
 
 
+class Airport(models.Model):
+    """
+    Example for linking airports to zones, if needed.
+    """
+    iata_code = models.CharField(max_length=10, unique=True)
 
-# class Crew(models.Model):
-#     """
-#     Model to represent crew members with their roles.
-#     """
-#     crew_id = models.CharField(max_length=50, unique=True)  # Unique identifier for the crew
-#     first_name = models.CharField(max_length=100)  # Crew's first name
-#     last_name = models.CharField(max_length=100)  # Crew's last name
-#     position = models.CharField(max_length=50)  # Crew position (e.g., Captain, First Officer)
-
-#     def __str__(self):
-#         return f"{self.first_name} {self.last_name} ({self.crew_id})"
+    def __str__(self):
+        return self.iata_code
 
 
-# class FlightCrewRecord(models.Model):
-#     """
-#     Model to represent flight records with layover information.
-#     """
-#     duty_date = models.DateField()  # Date of the flight duty
-#     flight_number = models.CharField(max_length=50)  # Flight number
-#     tail_number = models.CharField(max_length=50)  # Aircraft registration/tail number
-#     departure_airport = models.CharField(max_length=4)  # Departure airport code
-#     arrival_airport = models.CharField(max_length=4)  # Arrival airport code
-#     layover_time = models.CharField(max_length=10, null=True, blank=True)  # Layover time in "HH:MM" format
+class Duty(models.Model):
+    """
+    Represents a single row from the uploaded file (or any flight info).
+    """
+    duty_date = models.DateField()
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    flight_number = models.CharField(max_length=20, blank=True)
+    departure_airport = models.ForeignKey(
+        Airport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='duty_departures'
+    )
+    arrival_airport = models.ForeignKey(
+        Airport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='duty_arrivals'
+    )
+    layover_time_minutes = models.PositiveIntegerField(default=0)
+    tail_number = models.CharField(max_length=20, blank=True)
 
-#     def __str__(self):
-#         return f"{self.flight_number} ({self.departure_airport} -> {self.arrival_airport})"
+    def __str__(self):
+        return f"Duty {self.id}: {self.crew} on {self.duty_date}"
 
 
-# class Invoice(models.Model):
-#     """
-#     Model to represent crew invoices for layover allowances.
-#     """
-#     crew = models.ForeignKey(Crew, on_delete=models.CASCADE)  # Link invoice to a crew member
-#     invoice_date = models.DateField(auto_now_add=True)  # Date the invoice was created
-#     total_amount = models.DecimalField(max_digits=10, decimal_places=2)  # Total invoice amount
+class Invoice(models.Model):
+    """
+    One invoice per Crew per Month.
+    """
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    # We'll store the first day of the month in 'month' to represent that invoice period.
+    month = models.DateField()
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-#     def __str__(self):
-#         return f"Invoice for {self.crew} on {self.invoice_date}"
+    def __str__(self):
+        month_str = self.month.strftime('%B %Y')
+        return f"Invoice for {self.crew.crew_id} - {month_str}"
+
+    def recalculate_total(self):
+        total = sum(item.allowance_amount for item in self.invoiceitem_set.all())
+        self.total_amount = total
+        self.save()
+
+
+class InvoiceItem(models.Model):
+    """
+    Each InvoiceItem corresponds to a single Duty for that month.
+    """
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE)
+    duty = models.ForeignKey(Duty, on_delete=models.CASCADE)
+    allowance_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    def __str__(self):
+        return f"InvoiceItem {self.id} (Invoice {self.invoice.id})"

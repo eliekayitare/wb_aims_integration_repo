@@ -11,16 +11,17 @@ urlpatterns = [
     path('fdm_dashboard/', views.fdm_dashboard_view, name='fdm_dashboard'),
     path('get_crew_details/', views.get_crew_details, name='get_crew_details'),
 
-    # Crew allowance project
-    # path('list_zones/', views.list_zones, name='list_zones'),
-    # path('add_zone/', views.add_zone, name='add_zone'),
-    # path('zones/<int:zone_id>/edit_zone/', views.edit_zone, name='edit_zone'),
-    # path('zones/<int:zone_id>/delete_zone/', views.delete_zone, name='delete_zone'),
-    # path('zones/<int:zone_id>/add_destination/', views.add_destination, name='add_destination'),
-    # path('zones/<int:zone_id>/destinations/<int:destination_id>/delete_destination/', views.delete_destination, name='delete_destination'),
-    # path('zones/<int:zone_id>/', views.zone_details, name='zone_details'),
-    # path('zones/<int:zone_id>/destinations/<int:destination_id>/edit_destination/', views.edit_destination, name='edit_destination'),
-    # path('zones/<int:zone_id>/destinations/batch_add/', views.batch_add_destinations, name='batch_add_destinations'),
-    # path('zones_with_destinations/', views.list_zones_with_destinations, name='list_zones_with_destinations'),
+     # Upload
+    path('c-all/upload/', views.upload_callowance_file, name='callowance_upload'),
+
+    # Main list: by default show previous month's data
+    path('c-all/', views.crew_allowance_list, name='crew_allowance_list'),
+
+    # Generate overall invoice for the month
+    path('c-all/generate-invoice/', views.generate_overall_invoice, name='generate_overall_invoice'),
+
+    # Show details for one crew's duties
+    path('c-all/details/<int:crew_id>/<int:year>/<int:month>/',
+         views.crew_allowance_details, name='crew_allowance_details'),
 
 ]
