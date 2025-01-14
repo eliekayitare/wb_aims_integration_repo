@@ -85,7 +85,7 @@ def process_flight_schedule_file(attachment):
                 std = fields[5]
                 sta = fields[6]
                 flight_service_type = fields[7] if len(fields) > 7 else None
-                esd = fields[8] if len(fields) > 8 else None
+                etd = fields[8] if len(fields) > 8 else None
                 eta = fields[9] if len(fields) > 9 else None
                 atd = fields[10] if len(fields) > 10 else None
                 takeoff = fields[11] if len(fields) > 11 else None
@@ -94,7 +94,7 @@ def process_flight_schedule_file(attachment):
                 arrival_date = fields[14] if len(fields) > 14 else None
 
                 print("\n-------------------------------------------------------------\n")
-                print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ESD: {esd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
+                print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
                 print("\n-------------------------------------------------------------\n")
 
                 # Parse dates and times
@@ -107,6 +107,8 @@ def process_flight_schedule_file(attachment):
                     takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
                     touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
+                    etd_utc = datetime.strptime(etd, "%H:%M").time() if etd else None
+                    eta_utc = datetime.strptime(eta, "%H:%M").time() if eta else None
                 except ValueError:
                     logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
                     continue
@@ -152,7 +154,7 @@ def process_flight_schedule_file(attachment):
                         if ata_utc and existing_record.ata_utc != ata_utc:
                             existing_record.ata_utc = ata_utc
                             updated = True
-
+                     
                         if updated:
                             existing_record.save()
                             logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
@@ -792,6 +794,10 @@ def process_fdm_flight_schedule_file(attachment):
                         updated = True
                     if eta_utc_time and existing_record.eta_utc != eta_utc_time:
                         existing_record.eta_utc = eta_utc_time
+                        updated = True
+
+                    if flight_type and existing_record.flight_type != flight_type:
+                        existing_record.flight_type = flight_type
                         updated = True
 
                     if updated:
