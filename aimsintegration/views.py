@@ -209,7 +209,7 @@ def todays_completion_records_view(request):
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils.timezone import make_aware
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone  # Correct import for timezone
 from .models import FdmFlightData
 import logging
 
