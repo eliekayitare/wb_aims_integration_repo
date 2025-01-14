@@ -310,264 +310,264 @@ def get_crew_details(request):
 
 
 # Crew Allowance project
-# import csv
-# from datetime import datetime, date
-# from django.shortcuts import render, redirect, get_object_or_404
-# from django.http import JsonResponse, HttpResponse
-# from django.utils import timezone
-# from django.db.models import Sum
-# from decimal import Decimal
+import csv
+from datetime import datetime, date
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse, HttpResponse
+from django.utils import timezone
+from django.db.models import Sum
+from decimal import Decimal
 
-# from .models import Crew, Duty, Airport, Invoice, InvoiceItem
-# from .forms import CSVUploadForm
-
-
-# def upload_callowance_file(request):
-#     """
-#     Allows user to upload a CSV file with Duty records.
-#     """
-#     if request.method == 'POST':
-#         form = CSVUploadForm(request.POST, request.FILES)
-#         if form.is_valid():
-#             csv_file = request.FILES['file']
-#             handle_callowance_csv(csv_file)
-#             # After processing, redirect to the list where user can see results
-#             return redirect('crew_allowance_list')
-#     else:
-#         form = CSVUploadForm()
-
-#     return render(request, 'callowance_upload.html', {
-#         'form': form,
-#     })
+from .models import Crew, Duty, Airport, Invoice, InvoiceItem
+from .forms import CSVUploadForm
 
 
-# def handle_callowance_csv(csv_file):
-#     """
-#     Parses the CSV and creates/updates Duty records (and related Crew/Airports).
-#     Example CSV columns (adjust indices as needed):
-#       Date, CrewID, FName, LName, FlightNo, Dep, Arr, Layover(min), TailNo
-#     """
-#     decoded_file = csv_file.read().decode('utf-8', errors='replace').splitlines()
-#     reader = csv.reader(decoded_file)
+def upload_callowance_file(request):
+    """
+    Allows user to upload a CSV file with Duty records.
+    """
+    if request.method == 'POST':
+        form = CSVUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            csv_file = request.FILES['file']
+            handle_callowance_csv(csv_file)
+            # After processing, redirect to the list where user can see results
+            return redirect('crew_allowance_list')
+    else:
+        form = CSVUploadForm()
 
-#     # skip header if needed
-#     # next(reader, None)
-
-#     for row in reader:
-#         # Adjust indices to match your CSV
-#         duty_date_str = row[0].strip()
-#         crew_id_str = row[1].strip()
-#         first_name = row[2].strip()
-#         last_name = row[3].strip()
-#         flight_no = row[4].strip()
-#         dep_code = row[5].strip()
-#         arr_code = row[6].strip()
-#         layover_str = row[7].strip()
-#         tail_no = row[8].strip() if len(row) > 8 else ""
-
-#         # Convert date
-#         # Expected format "YYYY-MM-DD" or "DD/MM/YY" etc. Adjust to your CSV
-#         try:
-#             duty_date = datetime.strptime(duty_date_str, '%Y-%m-%d').date()
-#         except ValueError:
-#             # fallback or handle differently if format is different
-#             duty_date = datetime.strptime(duty_date_str, '%d/%m/%y').date()
-
-#         # Layover in minutes
-#         try:
-#             layover_minutes = int(layover_str)
-#         except ValueError:
-#             layover_minutes = 0
-
-#         # Crew
-#         crew, _ = Crew.objects.get_or_create(
-#             crew_id=crew_id_str,
-#             defaults={'first_name': first_name, 'last_name': last_name}
-#         )
-#         # Optionally update the crew info if it changes:
-#         # crew.first_name = first_name
-#         # crew.last_name = last_name
-#         # crew.save()
-
-#         # Airport (dep)
-#         departure_airport, _ = Airport.objects.get_or_create(iata_code=dep_code)
-#         # Airport (arr)
-#         arrival_airport, _ = Airport.objects.get_or_create(iata_code=arr_code)
-
-#         # Create the Duty
-#         Duty.objects.create(
-#             duty_date=duty_date,
-#             crew=crew,
-#             flight_number=flight_no,
-#             departure_airport=departure_airport,
-#             arrival_airport=arrival_airport,
-#             layover_time_minutes=layover_minutes,
-#             tail_number=tail_no
-#         )
+    return render(request, 'callowance_upload.html', {
+        'form': form,
+    })
 
 
-# def crew_allowance_list(request):
-#     """
-#     Shows a table with:
-#       - One row per Crew for the selected month
-#       - The sum of allowances for that month
-#       - A button to 'View' details of that crew's duties
-#       - A button to 'Generate Overall Invoice'
-#     Filters by month/year. Default: previous month.
-#     """
-#     # 1) Determine which month/year to display
-#     #    We can receive something like ?month=2025-01 for January 2025
-#     #    If none, default to previous month
-#     month_str = request.GET.get('month')
-#     if month_str:
-#         # parse the string
-#         year, mo = map(int, month_str.split('-'))
-#         filter_month = date(year, mo, 1)
-#     else:
-#         # default: previous month from now
-#         today = date.today()
-#         first_of_this_month = date(today.year, today.month, 1)
-#         # Subtract 1 day from the first of this month => end of previous month
-#         # and then take that month's "first day"
-#         prev_month_end = first_of_this_month.replace(day=1) - timezone.timedelta(days=1)
-#         filter_month = date(prev_month_end.year, prev_month_end.month, 1)
+def handle_callowance_csv(csv_file):
+    """
+    Parses the CSV and creates/updates Duty records (and related Crew/Airports).
+    Example CSV columns (adjust indices as needed):
+      Date, CrewID, FName, LName, FlightNo, Dep, Arr, Layover(min), TailNo
+    """
+    decoded_file = csv_file.read().decode('utf-8', errors='replace').splitlines()
+    reader = csv.reader(decoded_file)
 
-#     # 2) For each crew, find if there's an existing invoice for that month.
-#     #    If no invoice, we can compute an "on-the-fly" total or just show 0.
-#     #    Alternatively, we can do a query that sums the duties for each crew.
+    # skip header if needed
+    # next(reader, None)
 
-#     # Let’s see if we already have Invoices for that month
-#     invoices_qs = Invoice.objects.filter(month=filter_month)
-#     existing_invoices = {inv.crew_id: inv for inv in invoices_qs}
+    for row in reader:
+        # Adjust indices to match your CSV
+        duty_date_str = row[0].strip()
+        crew_id_str = row[1].strip()
+        first_name = row[2].strip()
+        last_name = row[3].strip()
+        flight_no = row[4].strip()
+        dep_code = row[5].strip()
+        arr_code = row[6].strip()
+        layover_str = row[7].strip()
+        tail_no = row[8].strip() if len(row) > 8 else ""
 
-#     # We'll build a list of crew_data objects for the template
-#     crews = Crew.objects.all()
-#     crew_data_list = []
-#     for cr in crews:
-#         invoice = existing_invoices.get(cr.id)
-#         if invoice:
-#             total_amount = invoice.total_amount
-#             invoice_id = invoice.id
-#         else:
-#             # no invoice found, compute the sum of all duties for this month on the fly
-#             total_amount = compute_crew_allowance_for_month(cr, filter_month)
-#             invoice_id = None
+        # Convert date
+        # Expected format "YYYY-MM-DD" or "DD/MM/YY" etc. Adjust to your CSV
+        try:
+            duty_date = datetime.strptime(duty_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            # fallback or handle differently if format is different
+            duty_date = datetime.strptime(duty_date_str, '%d/%m/%y').date()
 
-#         crew_data_list.append({
-#             'crew': cr,
-#             'total_amount': total_amount,
-#             'invoice_id': invoice_id
-#         })
+        # Layover in minutes
+        try:
+            layover_minutes = int(layover_str)
+        except ValueError:
+            layover_minutes = 0
 
-#     context = {
-#         'selected_month': filter_month,
-#         'crew_data_list': crew_data_list,
-#     }
-#     return render(request, 'crew_allowance_list.html', context)
+        # Crew
+        crew, _ = Crew.objects.get_or_create(
+            crew_id=crew_id_str,
+            defaults={'first_name': first_name, 'last_name': last_name}
+        )
+        # Optionally update the crew info if it changes:
+        # crew.first_name = first_name
+        # crew.last_name = last_name
+        # crew.save()
 
+        # Airport (dep)
+        departure_airport, _ = Airport.objects.get_or_create(iata_code=dep_code)
+        # Airport (arr)
+        arrival_airport, _ = Airport.objects.get_or_create(iata_code=arr_code)
 
-# def compute_crew_allowance_for_month(crew, month_first_day):
-#     """
-#     Compute the allowance for a crew for a given month (on the fly),
-#     by summing the duties in that month * some rate logic.
-#     (Adjust your daily/hourly logic here.)
-#     """
-#     year = month_first_day.year
-#     month = month_first_day.month
-
-#     duties = Duty.objects.filter(crew=crew, duty_date__year=year, duty_date__month=month)
-#     # Example: let's assume a flat $2/hour logic
-#     # If layover_time_minutes is used, we convert to hours, multiply by rate
-#     total = Decimal('0.00')
-#     hourly_rate = Decimal('2.00')  # just an example
-
-#     for d in duties:
-#         hours = Decimal(d.layover_time_minutes) / Decimal(60)
-#         total += hours * hourly_rate
-
-#     return total.quantize(Decimal('0.00'))
+        # Create the Duty
+        Duty.objects.create(
+            duty_date=duty_date,
+            crew=crew,
+            flight_number=flight_no,
+            departure_airport=departure_airport,
+            arrival_airport=arrival_airport,
+            layover_time_minutes=layover_minutes,
+            tail_number=tail_no
+        )
 
 
-# def generate_overall_invoice(request):
-#     """
-#     Generate or update Invoices for every crew in the specified month (GET param).
-#     If none provided, uses the default (previous month).
-#     """
-#     month_str = request.GET.get('month')
-#     if month_str:
-#         year, mo = map(int, month_str.split('-'))
-#         filter_month = date(year, mo, 1)
-#     else:
-#         # same logic as above: default to previous month
-#         today = date.today()
-#         first_of_this_month = date(today.year, today.month, 1)
-#         prev_month_end = first_of_this_month - timezone.timedelta(days=1)
-#         filter_month = date(prev_month_end.year, prev_month_end.month, 1)
+def crew_allowance_list(request):
+    """
+    Shows a table with:
+      - One row per Crew for the selected month
+      - The sum of allowances for that month
+      - A button to 'View' details of that crew's duties
+      - A button to 'Generate Overall Invoice'
+    Filters by month/year. Default: previous month.
+    """
+    # 1) Determine which month/year to display
+    #    We can receive something like ?month=2025-01 for January 2025
+    #    If none, default to previous month
+    month_str = request.GET.get('month')
+    if month_str:
+        # parse the string
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+    else:
+        # default: previous month from now
+        today = date.today()
+        first_of_this_month = date(today.year, today.month, 1)
+        # Subtract 1 day from the first of this month => end of previous month
+        # and then take that month's "first day"
+        prev_month_end = first_of_this_month.replace(day=1) - timezone.timedelta(days=1)
+        filter_month = date(prev_month_end.year, prev_month_end.month, 1)
 
-#     # For each crew, gather all duties in that month, create or update Invoice
-#     # Then create InvoiceItems for each Duty
-#     all_crews = Crew.objects.all()
-#     for cr in all_crews:
-#         # fetch or create invoice
-#         invoice, _ = Invoice.objects.get_or_create(
-#             crew=cr,
-#             month=filter_month,
-#         )
-#         # Clear out old invoice items if needed (re-generate)
-#         invoice.invoiceitem_set.all().delete()
+    # 2) For each crew, find if there's an existing invoice for that month.
+    #    If no invoice, we can compute an "on-the-fly" total or just show 0.
+    #    Alternatively, we can do a query that sums the duties for each crew.
 
-#         # find all duties in that month
-#         year = filter_month.year
-#         month = filter_month.month
-#         duties = Duty.objects.filter(crew=cr, duty_date__year=year, duty_date__month=month)
+    # Let’s see if we already have Invoices for that month
+    invoices_qs = Invoice.objects.filter(month=filter_month)
+    existing_invoices = {inv.crew_id: inv for inv in invoices_qs}
 
-#         total_for_crew = Decimal('0.00')
-#         for d in duties:
-#             # Example logic: $2/hour
-#             hours = Decimal(d.layover_time_minutes) / Decimal(60)
-#             line_amount = hours * Decimal('2.00')
-#             InvoiceItem.objects.create(
-#                 invoice=invoice,
-#                 duty=d,
-#                 allowance_amount=line_amount.quantize(Decimal('0.00'))
-#             )
-#             total_for_crew += line_amount
+    # We'll build a list of crew_data objects for the template
+    crews = Crew.objects.all()
+    crew_data_list = []
+    for cr in crews:
+        invoice = existing_invoices.get(cr.id)
+        if invoice:
+            total_amount = invoice.total_amount
+            invoice_id = invoice.id
+        else:
+            # no invoice found, compute the sum of all duties for this month on the fly
+            total_amount = compute_crew_allowance_for_month(cr, filter_month)
+            invoice_id = None
 
-#         invoice.total_amount = total_for_crew.quantize(Decimal('0.00'))
-#         invoice.save()
+        crew_data_list.append({
+            'crew': cr,
+            'total_amount': total_amount,
+            'invoice_id': invoice_id
+        })
 
-#     # Redirect back to the crew allowance list
-#     return redirect('crew_allowance_list')
+    context = {
+        'selected_month': filter_month,
+        'crew_data_list': crew_data_list,
+    }
+    return render(request, 'crew_allowance_list.html', context)
 
 
-# def crew_allowance_details(request, crew_id, year, month):
-#     """
-#     Show a detail page (or modal) listing all the duties for one crew in the specified month,
-#     plus a total allowance.
-#     """
-#     cr = get_object_or_404(Crew, id=crew_id)
-#     filter_month = date(year, month, 1)
+def compute_crew_allowance_for_month(crew, month_first_day):
+    """
+    Compute the allowance for a crew for a given month (on the fly),
+    by summing the duties in that month * some rate logic.
+    (Adjust your daily/hourly logic here.)
+    """
+    year = month_first_day.year
+    month = month_first_day.month
 
-#     # either get existing invoice or compute on the fly
-#     try:
-#         invoice = Invoice.objects.get(crew=cr, month=filter_month)
-#         total_amount = invoice.total_amount
-#         # we can also get the invoice items
-#         invoice_items = invoice.invoiceitem_set.select_related('duty').all()
-#         duties_list = [item.duty for item in invoice_items]
-#     except Invoice.DoesNotExist:
-#         # no invoice, compute on the fly
-#         duties_list = Duty.objects.filter(
-#             crew=cr,
-#             duty_date__year=year,
-#             duty_date__month=month
-#         )
-#         total_amount = compute_crew_allowance_for_month(cr, filter_month)
+    duties = Duty.objects.filter(crew=crew, duty_date__year=year, duty_date__month=month)
+    # Example: let's assume a flat $2/hour logic
+    # If layover_time_minutes is used, we convert to hours, multiply by rate
+    total = Decimal('0.00')
+    hourly_rate = Decimal('2.00')  # just an example
 
-#     context = {
-#         'crew': cr,
-#         'filter_month': filter_month,
-#         'duties_list': duties_list,
-#         'total_amount': total_amount,
-#     }
-#     return render(request, 'crew_allowance_details.html', context)
+    for d in duties:
+        hours = Decimal(d.layover_time_minutes) / Decimal(60)
+        total += hours * hourly_rate
+
+    return total.quantize(Decimal('0.00'))
+
+
+def generate_overall_invoice(request):
+    """
+    Generate or update Invoices for every crew in the specified month (GET param).
+    If none provided, uses the default (previous month).
+    """
+    month_str = request.GET.get('month')
+    if month_str:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+    else:
+        # same logic as above: default to previous month
+        today = date.today()
+        first_of_this_month = date(today.year, today.month, 1)
+        prev_month_end = first_of_this_month - timezone.timedelta(days=1)
+        filter_month = date(prev_month_end.year, prev_month_end.month, 1)
+
+    # For each crew, gather all duties in that month, create or update Invoice
+    # Then create InvoiceItems for each Duty
+    all_crews = Crew.objects.all()
+    for cr in all_crews:
+        # fetch or create invoice
+        invoice, _ = Invoice.objects.get_or_create(
+            crew=cr,
+            month=filter_month,
+        )
+        # Clear out old invoice items if needed (re-generate)
+        invoice.invoiceitem_set.all().delete()
+
+        # find all duties in that month
+        year = filter_month.year
+        month = filter_month.month
+        duties = Duty.objects.filter(crew=cr, duty_date__year=year, duty_date__month=month)
+
+        total_for_crew = Decimal('0.00')
+        for d in duties:
+            # Example logic: $2/hour
+            hours = Decimal(d.layover_time_minutes) / Decimal(60)
+            line_amount = hours * Decimal('2.00')
+            InvoiceItem.objects.create(
+                invoice=invoice,
+                duty=d,
+                allowance_amount=line_amount.quantize(Decimal('0.00'))
+            )
+            total_for_crew += line_amount
+
+        invoice.total_amount = total_for_crew.quantize(Decimal('0.00'))
+        invoice.save()
+
+    # Redirect back to the crew allowance list
+    return redirect('crew_allowance_list')
+
+
+def crew_allowance_details(request, crew_id, year, month):
+    """
+    Show a detail page (or modal) listing all the duties for one crew in the specified month,
+    plus a total allowance.
+    """
+    cr = get_object_or_404(Crew, id=crew_id)
+    filter_month = date(year, month, 1)
+
+    # either get existing invoice or compute on the fly
+    try:
+        invoice = Invoice.objects.get(crew=cr, month=filter_month)
+        total_amount = invoice.total_amount
+        # we can also get the invoice items
+        invoice_items = invoice.invoiceitem_set.select_related('duty').all()
+        duties_list = [item.duty for item in invoice_items]
+    except Invoice.DoesNotExist:
+        # no invoice, compute on the fly
+        duties_list = Duty.objects.filter(
+            crew=cr,
+            duty_date__year=year,
+            duty_date__month=month
+        )
+        total_amount = compute_crew_allowance_for_month(cr, filter_month)
+
+    context = {
+        'crew': cr,
+        'filter_month': filter_month,
+        'duties_list': duties_list,
+        'total_amount': total_amount,
+    }
+    return render(request, 'crew_allowance_details.html', context)

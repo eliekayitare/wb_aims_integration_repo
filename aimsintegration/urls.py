@@ -12,16 +12,16 @@ urlpatterns = [
     path('get_crew_details/', views.get_crew_details, name='get_crew_details'),
 
      # Upload
-    # path('c-all/upload/', views.upload_callowance_file, name='callowance_upload'),
+    path('c-all/upload/', views.upload_callowance_file, name='callowance_upload'),
 
-    # # Main list: by default show previous month's data
-    # path('c-all/', views.crew_allowance_list, name='crew_allowance_list'),
+    # Main list: by default show previous month's data
+    path('c-all/', views.crew_allowance_list, name='crew_allowance_list'),
 
-    # # Generate overall invoice for the month
-    # path('c-all/generate-invoice/', views.generate_overall_invoice, name='generate_overall_invoice'),
+    # Generate overall invoice for the month
+    path('c-all/generate-invoice/', views.generate_overall_invoice, name='generate_overall_invoice'),
 
-    # # Show details for one crew's duties
-    # path('c-all/details/<int:crew_id>/<int:year>/<int:month>/',
-    #      views.crew_allowance_details, name='crew_allowance_details'),
+    # Show details for one crew's duties
+    path('c-all/details/<int:crew_id>/<int:year>/<int:month>/',
+         views.crew_allowance_details, name='crew_allowance_details'),
 
 ]
