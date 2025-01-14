@@ -318,7 +318,7 @@ from django.utils import timezone
 from django.db.models import Sum
 from decimal import Decimal
 
-from .models import CrewOld, DutyOld, AirportOld, InvoiceOld, InvoiceItemOld
+from .models import Crew, Duty, Airport, Invoice, InvoiceItem
 from .forms import CSVUploadForm
 
 
@@ -380,7 +380,7 @@ def handle_callowance_csv(csv_file):
             layover_minutes = 0
 
         # Crew
-        crew, _ = CrewOld.objects.get_or_create(
+        crew, _ = Crew.objects.get_or_create(
             crew_id=crew_id_str,
             defaults={'first_name': first_name, 'last_name': last_name}
         )
@@ -390,12 +390,12 @@ def handle_callowance_csv(csv_file):
         # crew.save()
 
         # Airport (dep)
-        departure_airport, _ = AirportOld.objects.get_or_create(iata_code=dep_code)
+        departure_airport, _ = Airport.objects.get_or_create(iata_code=dep_code)
         # Airport (arr)
-        arrival_airport, _ = AirportOld.objects.get_or_create(iata_code=arr_code)
+        arrival_airport, _ = Airport.objects.get_or_create(iata_code=arr_code)
 
         # Create the Duty
-        DutyOld.objects.create(
+        Duty.objects.create(
             duty_date=duty_date,
             crew=crew,
             flight_number=flight_no,
@@ -437,11 +437,11 @@ def crew_allowance_list(request):
     #    Alternatively, we can do a query that sums the duties for each crew.
 
     # Let’s see if we already have Invoices for that month
-    invoices_qs = InvoiceOld.objects.filter(month=filter_month)
+    invoices_qs = Invoice.objects.filter(month=filter_month)
     existing_invoices = {inv.crew_id: inv for inv in invoices_qs}
 
     # We'll build a list of crew_data objects for the template
-    crews = CrewOld.objects.all()
+    crews = Crew.objects.all()
     crew_data_list = []
     for cr in crews:
         invoice = existing_invoices.get(cr.id)
@@ -475,7 +475,7 @@ def compute_crew_allowance_for_month(crew, month_first_day):
     year = month_first_day.year
     month = month_first_day.month
 
-    duties = DutyOld.objects.filter(crew=crew, duty_date__year=year, duty_date__month=month)
+    duties = Duty.objects.filter(crew=crew, duty_date__year=year, duty_date__month=month)
     # Example: let's assume a flat $2/hour logic
     # If layover_time_minutes is used, we convert to hours, multiply by rate
     total = Decimal('0.00')
@@ -506,10 +506,10 @@ def generate_overall_invoice(request):
 
     # For each crew, gather all duties in that month, create or update Invoice
     # Then create InvoiceItems for each Duty
-    all_crews = CrewOld.objects.all()
+    all_crews = Crew.objects.all()
     for cr in all_crews:
         # fetch or create invoice
-        invoice, _ = InvoiceOld.objects.get_or_create(
+        invoice, _ = Invoice.objects.get_or_create(
             crew=cr,
             month=filter_month,
         )
@@ -519,14 +519,14 @@ def generate_overall_invoice(request):
         # find all duties in that month
         year = filter_month.year
         month = filter_month.month
-        duties = DutyOld.objects.filter(crew=cr, duty_date__year=year, duty_date__month=month)
+        duties = Duty.objects.filter(crew=cr, duty_date__year=year, duty_date__month=month)
 
         total_for_crew = Decimal('0.00')
         for d in duties:
             # Example logic: $2/hour
             hours = Decimal(d.layover_time_minutes) / Decimal(60)
             line_amount = hours * Decimal('2.00')
-            InvoiceItemOld.objects.create(
+            InvoiceItem.objects.create(
                 invoice=invoice,
                 duty=d,
                 allowance_amount=line_amount.quantize(Decimal('0.00'))
@@ -545,19 +545,19 @@ def crew_allowance_details(request, crew_id, year, month):
     Show a detail page (or modal) listing all the duties for one crew in the specified month,
     plus a total allowance.
     """
-    cr = get_object_or_404(CrewOld, id=crew_id)
+    cr = get_object_or_404(Crew, id=crew_id)
     filter_month = date(year, month, 1)
 
     # either get existing invoice or compute on the fly
     try:
-        invoice = InvoiceOld.objects.get(crew=cr, month=filter_month)
+        invoice = Invoice.objects.get(crew=cr, month=filter_month)
         total_amount = invoice.total_amount
         # we can also get the invoice items
         invoice_items = invoice.invoiceitem_set.select_related('duty').all()
         duties_list = [item.duty for item in invoice_items]
-    except InvoiceOld.DoesNotExist:
+    except Invoice.DoesNotExist:
         # no invoice, compute on the fly
-        duties_list = DutyOld.objects.filter(
+        duties_list = Duty.objects.filter(
             crew=cr,
             duty_date__year=year,
             duty_date__month=month
