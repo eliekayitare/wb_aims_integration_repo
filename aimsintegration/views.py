@@ -213,6 +213,7 @@ from datetime import datetime, date, timezone
 from .models import FdmFlightData
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 def fdm_dashboard_view(request):
@@ -230,6 +231,8 @@ def fdm_dashboard_view(request):
         filter_date = date.today()
 
     # Convert filter_date to a timezone-aware datetime object (UTC)
+    # filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
+    
     filter_date = make_aware(datetime.combine(filter_date, datetime.min.time()), timezone=timezone.utc)
 
     logger.info(f"Selected Date: {selected_date}, Filter Date (UTC): {filter_date}")
