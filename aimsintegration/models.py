@@ -244,6 +244,9 @@ class Crew(models.Model):
     last_name = models.CharField(max_length=100)
     position = models.CharField(max_length=50, blank=True, null=True)  # CP, FO, CC, etc.
 
+    class Meta:
+        db_table = 'crew_info'
+
     def __str__(self):
         return f"{self.crew_id} - {self.first_name} {self.last_name}"
 
@@ -254,8 +257,14 @@ class Airport(models.Model):
     """
     iata_code = models.CharField(max_length=10, unique=True)
 
+    class Meta:
+        db_table = 'destinations'
+
+
     def __str__(self):
         return self.iata_code
+    
+
 
 
 class Duty(models.Model):
@@ -282,6 +291,9 @@ class Duty(models.Model):
     layover_time_minutes = models.PositiveIntegerField(default=0)
     tail_number = models.CharField(max_length=20, blank=True)
 
+    class Meta:
+        db_table = 'duty_info'
+
     def __str__(self):
         return f"Duty {self.id}: {self.crew} on {self.duty_date}"
 
@@ -296,6 +308,10 @@ class Invoice(models.Model):
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'crew_invoice'
+        unique_together = ('crew', 'month')
 
     def __str__(self):
         month_str = self.month.strftime('%B %Y')
@@ -314,6 +330,10 @@ class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE)
     duty = models.ForeignKey(Duty, on_delete=models.CASCADE)
     allowance_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        db_table = 'invoice_item'
+        unique_together = ('invoice', 'duty')
 
     def __str__(self):
         return f"InvoiceItem {self.id} (Invoice {self.invoice.id})"
