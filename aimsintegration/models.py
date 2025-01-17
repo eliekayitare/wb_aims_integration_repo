@@ -357,3 +357,139 @@ class InvoiceItem(models.Model):
 
     def __str__(self):
         return f"InvoiceItem {self.id} (Invoice {self.invoice.id})"
+
+
+
+
+
+
+
+
+# Crew Allowance Project models
+from django.db import models
+from django.utils import timezone
+from decimal import Decimal
+
+
+class CrewOld(models.Model):
+    """
+    Basic info about a crew member.
+    """
+    crew_id = models.CharField(max_length=50, unique=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    position = models.CharField(max_length=50, blank=True, null=True)  # CP, FO, CC, etc.
+
+    class Meta:
+        db_table = 'crew_info_old'
+
+    def __str__(self):
+        return f"{self.crew_id} - {self.first_name} {self.last_name}"
+
+
+class ZoneOld(models.Model):
+    """
+    Each Zone can contain one or many Airports.
+    Each Zone has a unique name and an hourly rate.
+    """
+    name = models.CharField(max_length=100, unique=True)
+    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        db_table = 'zone_info_old'
+
+    def __str__(self):
+        return f"{self.name} (Rate: {self.hourly_rate})"
+
+
+class AirportOld(models.Model):
+    """
+    Each Airport belongs to one Zone (so a Zone can have multiple Airports).
+    """
+    iata_code = models.CharField(max_length=10, unique=True)
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.CASCADE,
+        related_name='airports_old',
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        db_table = 'airport_destinations'
+
+    def __str__(self):
+        return self.iata_code
+
+
+class DutyOld(models.Model):
+    """
+    Represents a single row from the uploaded file (or any flight info).
+    References Crew, departure/arrival Airports.
+    """
+    duty_date = models.DateField()
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    flight_number = models.CharField(max_length=20, blank=True)
+    departure_airport = models.ForeignKey(
+        Airport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='duty_departures'
+    )
+    arrival_airport = models.ForeignKey(
+        Airport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='duty_arrivals'
+    )
+    layover_time_minutes = models.PositiveIntegerField(default=0)
+    tail_number = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        db_table = 'duty_info_old'
+
+    def __str__(self):
+        return f"Duty {self.id}: {self.crew} on {self.duty_date}"
+
+
+class InvoiceOld(models.Model):
+    """
+    One invoice per Crew per Month.
+    """
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    # We'll store the first day of the month in 'month' to represent that invoice period.
+    month = models.DateField()
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'crew_invoice_old'
+        unique_together = ('crew', 'month')
+
+    def __str__(self):
+        month_str = self.month.strftime('%B %Y')
+        return f"Invoice for {self.crew.crew_id} - {month_str}"
+
+    def recalculate_total(self):
+        total = sum(item.allowance_amount for item in self.invoiceitem_set.all())
+        self.total_amount = total
+        self.save()
+
+
+class InvoiceItemOld(models.Model):
+    """
+    Each InvoiceItem corresponds to a single Duty for that month.
+    """
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE)
+    duty = models.ForeignKey(Duty, on_delete=models.CASCADE)
+    allowance_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        db_table = 'invoice_item_old'
+        unique_together = ('invoice', 'duty')
+
+    def __str__(self):
+        return f"InvoiceItem {self.id} (Invoice {self.invoice.id})"
