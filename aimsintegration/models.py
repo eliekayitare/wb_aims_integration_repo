@@ -416,7 +416,7 @@ class AirportOld(models.Model):
     )
 
     class Meta:
-        db_table = 'airport_destinations'
+        db_table = 'airport_destinations_old'
 
     def __str__(self):
         return self.iata_code
@@ -435,14 +435,14 @@ class DutyOld(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='duty_departures'
+        related_name='duty_departures_old'
     )
     arrival_airport = models.ForeignKey(
         Airport,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='duty_arrivals'
+        related_name='duty_arrivals_old'
     )
     layover_time_minutes = models.PositiveIntegerField(default=0)
     tail_number = models.CharField(max_length=20, blank=True)
