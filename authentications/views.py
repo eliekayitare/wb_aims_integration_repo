@@ -50,13 +50,14 @@ def login_view(request):
                             user.station = station
                             user.save()
 
-                        if user.role.name == 'admin':
+                        if user.role and user.role.name == 'admin':
                             login(request, user)
                             messages.success(request, "Login successful. Welcome!")
                             return redirect('dashboard')
                         else:
                             messages.error(request, 'Login failed. You must have the admin role to access the system.')
                             return render(request, 'authentications/login.html')
+
 
                     else:
                         messages.error(request, 'User not found or inactive in the ERP system.')

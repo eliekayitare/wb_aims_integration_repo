@@ -1,10 +1,9 @@
 {% extends 'base.html' %} {% load static %} {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
-  /* -------------------------
-     Reuse the snippet you provided 
-     (Modal, table, toast styling, etc.)
-  --------------------------*/
+  /* ---------------------------------
+     1) Modal, table, toast styling
+  ----------------------------------*/
   .modal {
     display: none;
     position: fixed;
@@ -46,27 +45,6 @@
     max-height: calc(100% - 50px);
     padding: 10px 0;
   }
-  table.crew-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: "Arial", sans-serif;
-  }
-  .crew-table th,
-  .crew-table td {
-    text-align: left;
-    padding: 12px;
-    border-bottom: 1px solid #ddd;
-  }
-  .crew-table th {
-    background-color: #f4f4f4;
-    color: #333;
-  }
-  .crew-table tr:nth-child(even) {
-    background-color: #f9f9f9;
-  }
-  .crew-table tr:hover {
-    background-color: #f1f1f1;
-  }
   .close {
     color: #aaa;
     font-size: 30px;
@@ -82,7 +60,6 @@
     text-decoration: none;
   }
 
-  /* Table Styling */
   table {
     width: 100%;
     border-collapse: collapse;
@@ -109,7 +86,7 @@
   a.btn-action {
     padding: 8px 16px;
     background-color: #007bff;
-    color: white !important;
+    color: #fff !important;
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -121,7 +98,6 @@
     background-color: #0056b3;
   }
 
-  /* Toast Notification Styling */
   .toast {
     padding: 15px;
     margin-bottom: 10px;
@@ -148,7 +124,6 @@
     gap: 10px;
   }
 
-  /* Additional spacing or container styling */
   .search-filter-container {
     display: flex;
     align-items: center;
@@ -193,6 +168,101 @@
     margin-top: 20px;
     overflow-x: auto;
   }
+
+  /* ---------------------------------
+     2) Tabs styling
+  ----------------------------------*/
+  .custom-tab-links {
+    display: flex;
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+    border-bottom: 2px solid #ddd;
+  }
+  .custom-tab-links li {
+    padding: 10px 20px;
+    cursor: pointer;
+    margin-right: 5px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+  }
+  .custom-tab-links li:hover {
+    background: #f1f1f1;
+  }
+  .custom-tab-links li.active {
+    background: #fff;
+    font-weight: bold;
+    color: #007bff;
+    border-bottom: 2px solid #fff;
+  }
+
+  .tab-panels {
+    border: 1px solid #ddd;
+    border-radius: 0 4px 4px 4px;
+    padding: 10px;
+    background: #fff;
+  }
+  .tab-panel {
+    display: none; /* hidden by default */
+  }
+  .tab-panel.active {
+    display: block; /* show when active */
+  }
+
+  /* ---------------------------------
+     3) Compact Pagination styling
+  ----------------------------------*/
+  .pagination-container {
+    margin-top: 20px;
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+  .pagination-container a,
+  .pagination-container span {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #007bff;
+  }
+  .pagination-container a:hover {
+    background-color: #f1f1f1;
+  }
+  .current {
+    background-color: #007bff;
+    color: #fff;
+    font-weight: bold;
+    border-color: #007bff;
+    cursor: default;
+  }
+  .disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .dots {
+    padding: 6px 10px;
+    background-color: #f9f9f9;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+
+  select#invoice-type-select {
+    height: 38px;      /* match your buttons' height */
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+  }
+  
+  button.btn-action.go-button {
+    height: 38px;      /* match the dropdown height */
+    line-height: 38px; /* vertical centering of text */
+    margin-left: 5px;  /* small gap from the select */
+  }
+  
 </style>
 {% endblock %} {% block content %}
 <div class="dashboard-container">
@@ -202,88 +272,186 @@
       <li><a href="{% url 'dashboard' %}">ACARS</a></li>
       <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
       <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
-      <!-- New link for Cabin Crew Allowance (C-ALL) -->
-      <li><a href="{% url 'crew_allowance_list' %}">C-ALL</a></li>
+      <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
     </ul>
   </aside>
 
   <!-- Main Content -->
   <div class="main-content">
-    <h2>Cabin Crew Allowance</h2>
+    <h2>Crew Allowance</h2>
 
-    <!-- Search & Filter Bar -->
-    <div class="search-filter-container">
-      <input
-        type="text"
-        placeholder="Search Crew"
-        class="search-input"
-        id="search-input"
-      />
-
-      <!-- Example: filter by month or date -->
-      <select class="filter-select" id="filter-select">
-        <option value="none">Filter by</option>
-        <option value="month">Month</option>
-      </select>
-
-      <input type="month" id="month-picker" style="display: none" />
-
-      <!-- Buttons: Upload New File, Generate Overall Invoice, etc. -->
-      <a
-        href="{% url 'callowance_upload' %}"
-        class="btn-action"
-        style="margin-left: auto"
+    <!-- TAB LINKS -->
+    <ul class="custom-tab-links">
+      <li
+        data-tab="tab-layover"
+        onclick="window.location.href='{% url 'layover_setup' %}'"
       >
-        Upload New File
-      </a>
-      <a href="{% url 'generate_overall_invoice' %}" class="btn-action">
-        Generate Overall Invoice
-      </a>
-    </div>
+        LayOver Setup
+      </li>
+      <li class="active" data-tab="tab-layover">Setup 2</li>
+      <li class="active" data-tab="tab-layover">Setup 3</li>
+      <li class="active" data-tab="tab-layover">Setup 4</li>
+    </ul>
 
-    <!-- Table Container: By default, records for previous month -->
-    <div class="table-container">
-      <table id="crew-allowance-table">
-        <thead>
-          <tr>
-            <th>Crew ID</th>
-            <th>Name</th>
-            <th>Position</th>
-            <th>Total Allowance</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="crew-data">
-          <!-- Example: We assume 'crew_data_list' or similar is passed from the view -->
-          {% for entry in crew_data_list %}
-          <tr>
-            <td>{{ entry.crew.crew_id }}</td>
-            <td>{{ entry.crew.first_name }} {{ entry.crew.last_name }}</td>
-            <td>{{ entry.crew.position|default:'--' }}</td>
-            <td>{{ entry.total_amount }}</td>
-            <td>
-              <button
-                class="btn-action"
-                onclick="viewCrewDetails('{{ entry.crew.id }}', '{{ selected_month|date:'Y' }}', '{{ selected_month|date:'m' }}')"
-              >
-                View
+    <!-- TAB CONTENT CONTAINER -->
+    <div class="tab-panels">
+      <!-- LAYOVER TAB -->
+      <div id="tab-layover" class="tab-panel active">
+        <!-- Existing search/filter + table code -->
+        <div class="search-filter-container">
+          <input
+            type="text"
+            placeholder="Search Crew"
+            class="search-input"
+            id="search-input"
+          />
+          <select class="filter-select" id="filter-select">
+            <option value="none">Filter by</option>
+            <option value="month">Month</option>
+          </select>
+          <input type="month" id="month-picker" style="display: none" />
+
+          <button
+            type="button"
+            class="btn-action"
+            style="margin-left: auto"
+            onclick="openUploadModal()"
+          >
+            Upload New File
+          </button>
+
+          {% comment %} <a href="{% url 'generate_overall_invoice' %}" class="btn-action">
+            Generate Overall Invoice
+          </a> {% endcomment %}
+          <!-- Replace your old <a> with something like this -->
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <select id="invoice-type-select">
+                <option value="overall">Generate Overall Payslip</option>
+                <option value="overall">Generate Overall Payslip by Position</option>
+                <option value="overall">Generate Overall Payslip by Bank</option>
+                <option value="individual">Generate Individual Payslip</option>
+              </select>
+            
+              <button type="button" class="btn-action go-button" onclick="handleGenerateInvoice()">
+                Go
               </button>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            </div>
+            
+
+        </div>
+
+        <div class="table-container">
+          <table id="crew-allowance-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>WB No</th>
+                <th>Name</th>
+                <th>Position</th>
+                <th>Total Allowance($)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="crew-data">
+              {% for entry in crew_data_list %}
+              <tr>
+                <td>{{ entry.invoice_month|date:"F Y" }}</td>
+                <td>{{ entry.crew.crew_id }}</td>
+                <td>{{ entry.crew.first_name }} {{ entry.crew.last_name }}</td>
+                <td>{{ entry.crew.position|default:'--' }}</td>
+                <td>{{ entry.total_amount }}</td>
+                <td>
+                  <button
+                    class="btn-action"
+                    onclick="viewCrewDetails('{{ entry.crew.id }}', '{{ selected_month|date:'Y' }}', '{{ selected_month|date:'m' }}')"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- PAGINATION CONTROLS -->
+        <div class="pagination-container">
+          <!-- "First" -->
+          {% if crew_data_list.number > 1 %}
+          <a
+            href="?page=1{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+            class="btn-action"
+          >
+            First
+          </a>
+          {% else %}
+          <span class="disabled">First</span>
+          {% endif %}
+
+          <!-- "Previous" -->
+          {% if crew_data_list.has_previous %}
+          <a
+            href="?page={{ crew_data_list.previous_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+            class="btn-action"
+          >
+            &laquo; Prev
+          </a>
+          {% else %}
+          <span class="disabled">&laquo; Prev</span>
+          {% endif %}
+
+          <!-- Windowed page links from get_display_pages -->
+          {% for pg in display_pages %} {% if pg == '...' %}
+          <span class="dots">...</span>
+          {% elif pg == crew_data_list.number %}
+          <span class="current">{{ pg }}</span>
+          {% else %}
+          <a
+            href="?page={{ pg }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+          >
+            {{ pg }}
+          </a>
+          {% endif %} {% endfor %}
+
+          <!-- "Next" -->
+          {% if crew_data_list.has_next %}
+          <a
+            href="?page={{ crew_data_list.next_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+            class="btn-action"
+          >
+            Next &raquo;
+          </a>
+          {% else %}
+          <span class="disabled">Next &raquo;</span>
+          {% endif %}
+
+          <!-- "Last" -->
+          {% if crew_data_list.number < crew_data_list.paginator.num_pages %}
+          <a
+            href="?page={{ crew_data_list.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+            class="btn-action"
+          >
+            Last
+          </a>
+          {% else %}
+          <span class="disabled">Last</span>
+          {% endif %}
+        </div>
+        <!-- /Pagination -->
+      </div>
+      <!-- /#tab-layover -->
     </div>
+    <!-- /.tab-panels -->
   </div>
 </div>
 
 <!-- Toast Container -->
 <div id="toast-container" class="toast-container"></div>
 
-<!-- Modal for Crew Duties (if you want to show details in a modal) -->
-<div id="crewModal" class="modal" onclick="closeModalOnOutsideClick(event)">
+<!-- (1) Crew Duties Modal -->
+<div id="crewModal" class="modal" onclick="closeCrewModalOnOutsideClick(event)">
   <div class="modal-content">
-    <span class="close" onclick="closeModal()">&times;</span>
+    <span class="close" onclick="closeCrewModal()">&times;</span>
     <div class="modal-header">
       <h3 id="modal-crew-details"></h3>
     </div>
@@ -293,22 +461,90 @@
           <tr>
             <th>Duty Date</th>
             <th>Flight No.</th>
-            <th>Departure</th>
-            <th>Arrival</th>
-            <th>Layover (min)</th>
+            <th>Dep</th>
+            <th>Arr</th>
+            <!-- Show layover in hours -->
+            <th>Layover (Hrs)</th>
+            <!-- Add columns for Rate & Amount -->
+            <th>Rate</th>
+            <th>Amount</th>
             <th>Tail No.</th>
           </tr>
         </thead>
         <tbody id="crew-duties-body">
-          <!-- Fetched details go here -->
+          <!-- Inserted by JavaScript -->
         </tbody>
       </table>
+      <!-- We'll place the total at the bottom -->
+      <div style="margin-top: 10px; text-align: right">
+        <strong>Total Amount: <span id="modal-total-amount">0.00</span></strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- (2) Upload Modal -->
+<div
+  id="uploadModal"
+  class="modal"
+  onclick="closeUploadModalOnOutsideClick(event)"
+>
+  <div class="modal-content">
+    <span class="close" onclick="closeUploadModal()">&times;</span>
+    <div class="modal-header">
+      <h3>Upload Cabin Crew Allowance CSV/TXT</h3>
+    </div>
+    <div class="modal-body">
+      <form
+        method="POST"
+        action="{% url 'callowance_upload' %}"
+        enctype="multipart/form-data"
+        id="upload-form"
+      >
+        {% csrf_token %}
+        <p>
+          <label for="id_file">Select CSV or TXT File:</label><br />
+          <input
+            type="file"
+            name="file"
+            id="id_file"
+            accept=".csv,.txt"
+            required
+          />
+        </p>
+        <button type="submit" class="btn-action">Upload</button>
+        <button type="button" class="btn-action" onclick="closeUploadModal()">
+          Cancel
+        </button>
+      </form>
     </div>
   </div>
 </div>
 
 <script>
-  // Handle month filter logic
+  // =========================================
+  // 1) Professional Tabs JavaScript
+  // =========================================
+  const tabLinks = document.querySelectorAll('.custom-tab-links li');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  tabLinks.forEach(tabLink => {
+    tabLink.addEventListener('click', () => {
+      tabLinks.forEach(link => link.classList.remove('active'));
+      tabPanels.forEach(panel => panel.classList.remove('active'));
+      tabLink.classList.add('active');
+
+      const targetId = tabLink.getAttribute('data-tab');
+      const targetPanel = document.getElementById(targetId);
+      if (targetPanel) {
+        targetPanel.classList.add('active');
+      }
+    });
+  });
+
+  // =========================================
+  // 2) Search & Filter
+  // =========================================
   document.getElementById("filter-select").addEventListener("change", function () {
     const monthPicker = document.getElementById("month-picker");
     if (this.value === "month") {
@@ -316,30 +552,26 @@
     } else {
       monthPicker.style.display = "none";
       monthPicker.value = "";
-      // Possibly trigger a search with no filter
       searchCrewAllowances();
     }
   });
 
-  // Listen for changes in search or month
   document.getElementById("search-input").addEventListener("input", searchCrewAllowances);
   document.getElementById("month-picker").addEventListener("change", searchCrewAllowances);
 
   function searchCrewAllowances() {
     const query = document.getElementById("search-input").value;
     const selectedMonth = document.getElementById("month-picker").value;
-
-    // Example GET parameters:
-    // /c-all/?query=<query>&month=<YYYY-MM>
-    let url = `/c-all/?query=${query}&month=${selectedMonth}`;
-    // Could also do an AJAX fetch if you prefer:
+    // Adjust the URL as needed for your routes
+    const url = `/aims/c-all/?query=${query}&month=${selectedMonth}`;
     window.location.href = url;
   }
 
-  // Show Crew Details in Modal
+  // =========================================
+  // 3) Crew Duties Modal
+  // =========================================
   function viewCrewDetails(crewId, year, month) {
-    // Example: /c-all/details/<crew_id>/<year>/<month>/
-    const detailUrl = `/c-all/details/${crewId}/${year}/${month}/`;
+    const detailUrl = `/aims/c-all/details/${crewId}/${year}/${month}/`;
 
     fetch(detailUrl, {
       headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -351,57 +583,107 @@
       return response.json();
     })
     .then(data => {
-      // data might contain the crew's name, plus a list of duties
-      // Fill the modal's header
-      document.getElementById("modal-crew-details").innerText = data.crew_info;
-      // Populate the table
-      const body = document.getElementById("crew-duties-body");
-      body.innerHTML = "";
+      document.getElementById("modal-crew-details").textContent = data.crew_info || 'Crew Details';
+      const tbody = document.getElementById("crew-duties-body");
+      tbody.innerHTML = "";
 
       if (data.duties && data.duties.length > 0) {
-        data.duties.forEach(duty => {
+        data.duties.forEach(d => {
           const row = document.createElement("tr");
+          /*
+             We expect these fields from the JSON:
+               - duty_date
+               - flight_number
+               - departure
+               - arrival
+               - layover_hours    (string)
+               - hourly_rate      (string)
+               - line_amount      (string)
+               - tail_number
+          */
           row.innerHTML = `
-            <td>${duty.duty_date}</td>
-            <td>${duty.flight_number}</td>
-            <td>${duty.departure}</td>
-            <td>${duty.arrival}</td>
-            <td>${duty.layover_time_minutes}</td>
-            <td>${duty.tail_number}</td>
+            <td>${d.duty_date}</td>
+            <td>${d.flight_number}</td>
+            <td>${d.departure}</td>
+            <td>${d.arrival}</td>
+            <td>${d.layover_hours}</td>
+            <td>${d.hourly_rate}</td>
+            <td>${d.line_amount}</td>
+            <td>${d.tail_number}</td>
           `;
-          body.appendChild(row);
+          tbody.appendChild(row);
         });
+
+        // Show final total in the bottom "Total Amount" area
+        if (data.total_amount) {
+          document.getElementById("modal-total-amount").textContent = data.total_amount;
+        } else {
+          document.getElementById("modal-total-amount").textContent = "0.00";
+        }
       } else {
-        // Show message if no duties
-        body.innerHTML = `
+        tbody.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center;">No duties found.</td>
+            <td colspan="8" style="text-align:center;">No duties found.</td>
           </tr>
         `;
+        document.getElementById("modal-total-amount").textContent = "0.00";
       }
-
-      // Show the modal
       document.getElementById("crewModal").style.display = "block";
     })
     .catch(error => {
       console.error("Error fetching crew details:", error);
-      // Show an error or fallback
       showToast("Error fetching crew details: " + error.message, "error");
     });
   }
 
-  // Close modal
-  function closeModal() {
+  function closeCrewModal() {
     document.getElementById("crewModal").style.display = "none";
   }
-  function closeModalOnOutsideClick(event) {
-    const modalContent = document.querySelector(".modal-content");
+  function closeCrewModalOnOutsideClick(event) {
+    const modalContent = document.querySelector("#crewModal .modal-content");
     if (!modalContent.contains(event.target)) {
-      closeModal();
+      closeCrewModal();
     }
   }
 
-  // Toast
+  // =========================================
+  // 4) CSV Upload Modal
+  // =========================================
+  function openUploadModal() {
+    document.getElementById("uploadModal").style.display = "block";
+  }
+  function closeUploadModal() {
+    document.getElementById("uploadModal").style.display = "none";
+  }
+  function closeUploadModalOnOutsideClick(event) {
+    const modalContent = document.querySelector("#uploadModal .modal-content");
+    if (!modalContent.contains(event.target)) {
+      closeUploadModal();
+    }
+  }
+
+  function handleGenerateInvoice() {
+    const typeSelect = document.getElementById("invoice-type-select").value;
+    // If user chooses "overall," we redirect to /generate_overall_payslip/?month=...
+    // If "individual," maybe we prompt or have a way to pick a single crew
+    const urlParams = new URLSearchParams(window.location.search);
+    const monthParam = urlParams.get("month"); // e.g. "2024-11"
+    
+    if (typeSelect === "overall") {
+      let pdfUrl = "/aims/generate_overall_payslip/";
+      if (monthParam) {
+        pdfUrl += `?month=${monthParam}`;
+      }
+      window.location.href = pdfUrl;
+    } else {
+      // handle individual logic
+    }
+  }
+  
+
+  // =========================================
+  // 5) Toast Handling
+  // =========================================
   function showToast(message, type) {
     const container = document.getElementById("toast-container");
     const toast = document.createElement("div");
@@ -414,7 +696,6 @@
     }, 3000);
   }
 
-  // Handle Django messages -> Toast
   {% if messages %}
     {% for message in messages %}
       {% if message.tags == 'success' %}

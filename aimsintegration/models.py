@@ -251,25 +251,45 @@ class Crew(models.Model):
         return f"{self.crew_id} - {self.first_name} {self.last_name}"
 
 
+class Zone(models.Model):
+    """
+    Each Zone can contain one or many Airports.
+    Each Zone has a unique name and an hourly rate.
+    """
+    name = models.CharField(max_length=100, unique=True)
+    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        db_table = 'zone_info'
+
+    def __str__(self):
+        return f"{self.name} (Rate: {self.hourly_rate})"
+
+
 class Airport(models.Model):
     """
-    Example for linking airports to zones, if needed.
+    Each Airport belongs to one Zone (so a Zone can have multiple Airports).
     """
     iata_code = models.CharField(max_length=10, unique=True)
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.CASCADE,
+        related_name='airports',
+        null=True,
+        blank=True
+    )
 
     class Meta:
         db_table = 'airport_destinations'
 
-
     def __str__(self):
         return self.iata_code
-    
-
 
 
 class Duty(models.Model):
     """
     Represents a single row from the uploaded file (or any flight info).
+    References Crew, departure/arrival Airports.
     """
     duty_date = models.DateField()
     crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
@@ -337,6 +357,3 @@ class InvoiceItem(models.Model):
 
     def __str__(self):
         return f"InvoiceItem {self.id} (Invoice {self.invoice.id})"
-
-
-

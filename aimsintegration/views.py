@@ -3,7 +3,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FlightData,FdmFlightData
 from datetime import date, datetime
-
+from .models import *
 def dashboard_view(request):
     query = request.GET.get('query', '')
     selected_date = request.GET.get('date', '')
@@ -311,221 +311,197 @@ def get_crew_details(request):
 
 # Crew Allowance project
 import csv
+import io
 from datetime import datetime, date
+from decimal import Decimal
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Sum
-from decimal import Decimal
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+
+import openpyxl
 
 from .models import Crew, Duty, Airport, Invoice, InvoiceItem
 from .forms import CSVUploadForm
 
 
+def get_display_pages(page_obj, num_links=2):
+    """
+    Returns a list of page numbers around the current page,
+    plus '...' if there's a gap, plus the very first and last pages if needed.
+    """
+    current_page = page_obj.number
+    total_pages = page_obj.paginator.num_pages
+
+    # If total_pages is small, just show all pages.
+    if total_pages <= num_links * 2 + 6:
+        return list(range(1, total_pages + 1))
+
+    # Otherwise, build a “window” around current_page.
+    pages = []
+    left_bound = current_page - num_links
+    right_bound = current_page + num_links
+
+    # Always show page #1
+    pages.append(1)
+
+    # "..." if there's a gap between 1 and left_bound
+    if left_bound > 2:
+        pages.append("...")
+
+    # Pages in [left_bound..right_bound], clipped to [2..(total_pages-1)]
+    for p in range(max(left_bound, 2), min(right_bound, total_pages - 1) + 1):
+        pages.append(p)
+
+    # "..." if there's a gap between right_bound and total_pages - 1
+    if right_bound < total_pages - 1:
+        pages.append("...")
+
+    # Always show the last page
+    pages.append(total_pages)
+
+    return pages
+
+
 def upload_callowance_file(request):
     """
-    Allows user to upload a CSV file with Duty records.
+    Allows user to upload a CSV or TXT file that may contain multiple months of data.
     """
     if request.method == 'POST':
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
             csv_file = request.FILES['file']
+            # Parse and generate invoices for all months found
             handle_callowance_csv(csv_file)
-            # After processing, redirect to the list where user can see results
             return redirect('crew_allowance_list')
     else:
         form = CSVUploadForm()
 
-    return render(request, 'callowance_upload.html', {
+    return render(request, 'aimsintegration/callowance_upload.html', {
         'form': form,
     })
 
 
 def handle_callowance_csv(csv_file):
     """
-    Parses the CSV and creates/updates Duty records (and related Crew/Airports).
-    Example CSV columns (adjust indices as needed):
-      Date, CrewID, FName, LName, FlightNo, Dep, Arr, Layover(min), TailNo
+    1. Reads CSV/TXT rows.
+    2. Converts layover hh:mm -> minutes in Duty.
+    3. Creates/updates Crew, Duty, etc.
+    4. For each distinct (Crew, Month) in the file, automatically creates/updates
+       an Invoice and its InvoiceItems. That way if the CSV has multiple months,
+       each month gets its own Invoice.
     """
     decoded_file = csv_file.read().decode('utf-8', errors='replace').splitlines()
     reader = csv.reader(decoded_file)
 
-    # skip header if needed
-    # next(reader, None)
+    # next(reader, None)  # Uncomment if first row is a header
 
-    for row in reader:
-        # Adjust indices to match your CSV
-        duty_date_str = row[0].strip()
-        crew_id_str = row[1].strip()
-        first_name = row[2].strip()
-        last_name = row[3].strip()
-        flight_no = row[4].strip()
-        dep_code = row[5].strip()
-        arr_code = row[6].strip()
-        layover_str = row[7].strip()
-        tail_no = row[8].strip() if len(row) > 8 else ""
+    # We'll store (crew_id, month_first_day) -> list_of_duty_ids
+    duties_by_crew_month = {}
 
-        # Convert date
-        # Expected format "YYYY-MM-DD" or "DD/MM/YY" etc. Adjust to your CSV
-        try:
-            duty_date = datetime.strptime(duty_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            # fallback or handle differently if format is different
-            duty_date = datetime.strptime(duty_date_str, '%d/%m/%y').date()
+    for idx, row in enumerate(reader, start=1):
+        # Safe extraction of each column; adjust indices to match your CSV
+        date_str    = row[0].strip() if len(row) > 0 else ""
+        crew_id_str = row[1].strip() if len(row) > 1 else ""
+        first_name  = row[2].strip() if len(row) > 2 else ""
+        last_name   = row[3].strip() if len(row) > 3 else ""
+        position    = row[4].strip() if len(row) > 4 else ""
+        flight_no   = row[5].strip() if len(row) > 5 else ""
+        tail_no     = row[6].strip() if len(row) > 6 else ""
+        dep_code    = row[7].strip().upper() if len(row) > 7 else ""
+        arr_code    = row[8].strip().upper() if len(row) > 8 else ""
+        layover_str = row[9].strip() if len(row) > 9 else ""
 
-        # Layover in minutes
-        try:
-            layover_minutes = int(layover_str)
-        except ValueError:
-            layover_minutes = 0
+        # Parse the date
+        duty_date = None
+        if date_str:
+            for fmt in ["%d/%m/%y", "%Y-%m-%d"]:
+                try:
+                    duty_date = datetime.strptime(date_str, fmt).date()
+                    break
+                except ValueError:
+                    pass
+
+        if not duty_date:
+            # If we can't parse the date, skip this row
+            continue
+
+        # Parse layover hh:mm => total minutes
+        layover_minutes = 0
+        if ":" in layover_str:
+            try:
+                hh, mm = layover_str.split(":")
+                layover_minutes = int(hh)*60 + int(mm)
+            except ValueError:
+                pass
 
         # Crew
-        crew, _ = Crew.objects.get_or_create(
+        if not crew_id_str:
+            crew_id_str = f"no_id_{idx}"
+        crew_obj, created = Crew.objects.get_or_create(
             crew_id=crew_id_str,
-            defaults={'first_name': first_name, 'last_name': last_name}
+            defaults={
+                'first_name': first_name,
+                'last_name': last_name,
+                'position': position,
+            }
         )
-        # Optionally update the crew info if it changes:
-        # crew.first_name = first_name
-        # crew.last_name = last_name
-        # crew.save()
+        if not created:
+            # Optionally update if changed
+            crew_obj.first_name = first_name
+            crew_obj.last_name = last_name
+            crew_obj.position = position
+            crew_obj.save()
 
-        # Airport (dep)
-        departure_airport, _ = Airport.objects.get_or_create(iata_code=dep_code)
-        # Airport (arr)
-        arrival_airport, _ = Airport.objects.get_or_create(iata_code=arr_code)
+        # Airports (Note: if no zone is assigned in DB, the allowance will be 0)
+        dep_airport = None
+        if dep_code:
+            dep_airport, _ = Airport.objects.get_or_create(iata_code=dep_code)
+        arr_airport = None
+        if arr_code:
+            arr_airport, _ = Airport.objects.get_or_create(iata_code=arr_code)
 
-        # Create the Duty
-        Duty.objects.create(
+        # Create Duty
+        duty = Duty.objects.create(
             duty_date=duty_date,
-            crew=crew,
+            crew=crew_obj,
             flight_number=flight_no,
-            departure_airport=departure_airport,
-            arrival_airport=arrival_airport,
+            departure_airport=dep_airport,
+            arrival_airport=arr_airport,
             layover_time_minutes=layover_minutes,
             tail_number=tail_no
         )
 
+        # Identify the "month" -> 1st day of that month
+        month_first = date(duty_date.year, duty_date.month, 1)
+        key = (crew_obj.id, month_first)
+        if key not in duties_by_crew_month:
+            duties_by_crew_month[key] = []
+        duties_by_crew_month[key].append(duty.id)
 
-def crew_allowance_list(request):
-    """
-    Shows a table with:
-      - One row per Crew for the selected month
-      - The sum of allowances for that month
-      - A button to 'View' details of that crew's duties
-      - A button to 'Generate Overall Invoice'
-    Filters by month/year. Default: previous month.
-    """
-    # 1) Determine which month/year to display
-    #    We can receive something like ?month=2025-01 for January 2025
-    #    If none, default to previous month
-    month_str = request.GET.get('month')
-    if month_str:
-        # parse the string
-        year, mo = map(int, month_str.split('-'))
-        filter_month = date(year, mo, 1)
-    else:
-        # default: previous month from now
-        today = date.today()
-        first_of_this_month = date(today.year, today.month, 1)
-        # Subtract 1 day from the first of this month => end of previous month
-        # and then take that month's "first day"
-        prev_month_end = first_of_this_month.replace(day=1) - timezone.timedelta(days=1)
-        filter_month = date(prev_month_end.year, prev_month_end.month, 1)
-
-    # 2) For each crew, find if there's an existing invoice for that month.
-    #    If no invoice, we can compute an "on-the-fly" total or just show 0.
-    #    Alternatively, we can do a query that sums the duties for each crew.
-
-    # Let’s see if we already have Invoices for that month
-    invoices_qs = Invoice.objects.filter(month=filter_month)
-    existing_invoices = {inv.crew_id: inv for inv in invoices_qs}
-
-    # We'll build a list of crew_data objects for the template
-    crews = Crew.objects.all()
-    crew_data_list = []
-    for cr in crews:
-        invoice = existing_invoices.get(cr.id)
-        if invoice:
-            total_amount = invoice.total_amount
-            invoice_id = invoice.id
-        else:
-            # no invoice found, compute the sum of all duties for this month on the fly
-            total_amount = compute_crew_allowance_for_month(cr, filter_month)
-            invoice_id = None
-
-        crew_data_list.append({
-            'crew': cr,
-            'total_amount': total_amount,
-            'invoice_id': invoice_id
-        })
-
-    context = {
-        'selected_month': filter_month,
-        'crew_data_list': crew_data_list,
-    }
-    return render(request, 'crew_allowance_list.html', context)
-
-
-def compute_crew_allowance_for_month(crew, month_first_day):
-    """
-    Compute the allowance for a crew for a given month (on the fly),
-    by summing the duties in that month * some rate logic.
-    (Adjust your daily/hourly logic here.)
-    """
-    year = month_first_day.year
-    month = month_first_day.month
-
-    duties = Duty.objects.filter(crew=crew, duty_date__year=year, duty_date__month=month)
-    # Example: let's assume a flat $2/hour logic
-    # If layover_time_minutes is used, we convert to hours, multiply by rate
-    total = Decimal('0.00')
-    hourly_rate = Decimal('2.00')  # just an example
-
-    for d in duties:
-        hours = Decimal(d.layover_time_minutes) / Decimal(60)
-        total += hours * hourly_rate
-
-    return total.quantize(Decimal('0.00'))
-
-
-def generate_overall_invoice(request):
-    """
-    Generate or update Invoices for every crew in the specified month (GET param).
-    If none provided, uses the default (previous month).
-    """
-    month_str = request.GET.get('month')
-    if month_str:
-        year, mo = map(int, month_str.split('-'))
-        filter_month = date(year, mo, 1)
-    else:
-        # same logic as above: default to previous month
-        today = date.today()
-        first_of_this_month = date(today.year, today.month, 1)
-        prev_month_end = first_of_this_month - timezone.timedelta(days=1)
-        filter_month = date(prev_month_end.year, prev_month_end.month, 1)
-
-    # For each crew, gather all duties in that month, create or update Invoice
-    # Then create InvoiceItems for each Duty
-    all_crews = Crew.objects.all()
-    for cr in all_crews:
-        # fetch or create invoice
+    # Now generate Invoices for each (Crew, Month) found in the file
+    for (crew_id, month_day), duty_ids in duties_by_crew_month.items():
+        cr = Crew.objects.get(id=crew_id)
         invoice, _ = Invoice.objects.get_or_create(
             crew=cr,
-            month=filter_month,
+            month=month_day
         )
-        # Clear out old invoice items if needed (re-generate)
+        # Clear old invoice items if re-running
         invoice.invoiceitem_set.all().delete()
 
-        # find all duties in that month
-        year = filter_month.year
-        month = filter_month.month
-        duties = Duty.objects.filter(crew=cr, duty_date__year=year, duty_date__month=month)
-
         total_for_crew = Decimal('0.00')
-        for d in duties:
-            # Example logic: $2/hour
+        for d_id in duty_ids:
+            d = Duty.objects.get(id=d_id)
+            # Convert minutes -> hours
             hours = Decimal(d.layover_time_minutes) / Decimal(60)
-            line_amount = hours * Decimal('2.00')
+            if d.arrival_airport and d.arrival_airport.zone:
+                rate = d.arrival_airport.zone.hourly_rate
+            else:
+                rate = Decimal('0.00')
+
+            line_amount = hours * rate
             InvoiceItem.objects.create(
                 invoice=invoice,
                 duty=d,
@@ -536,38 +512,699 @@ def generate_overall_invoice(request):
         invoice.total_amount = total_for_crew.quantize(Decimal('0.00'))
         invoice.save()
 
-    # Redirect back to the crew allowance list
-    return redirect('crew_allowance_list')
+# from django.db.models import Max
+
+# def crew_allowance_list(request):
+#     """
+#     Shows a paginated table of ONLY those Crews that have an Invoice
+#     for the selected month (?month=YYYY-MM).
+#     If no ?month= param is provided, automatically pick the *most recent*
+#     month that exists in the Invoice table (i.e. the maximum month).
+#     Also displays the invoice's month (date) in the template.
+#     """
+#     month_str = request.GET.get('month')
+#     if month_str:
+#         # 1) If user explicitly specified ?month=YYYY-MM, parse it
+#         year, mo = map(int, month_str.split('-'))
+#         filter_month = date(year, mo, 1)
+#     else:
+#         # 2) If no month in the URL, find the max month in Invoice
+#         latest_invoice = Invoice.objects.aggregate(latest_month=Max('month'))
+#         latest_month = latest_invoice['latest_month']
+#         if latest_month:
+#             filter_month = latest_month
+#         else:
+#             # No data at all => handle gracefully
+#             filter_month = None
+
+#     # 3) If filter_month=None => no data at all
+#     if not filter_month:
+#         context = {
+#             'selected_month': None,
+#             'crew_data_list': [],
+#             'display_pages': [],
+#         }
+#         return render(request, 'aimsintegration/crew_allowance.html', context)
+
+#     # 4) Fetch only Invoices for that month
+#     invoices_qs = (
+#         Invoice.objects
+#         .filter(month=filter_month)
+#         .select_related('crew')
+#         .order_by('crew__crew_id')
+#     )
+
+#     # 5) Build a list for the template, including invoice.month
+#     raw_crew_data_list = []
+#     for inv in invoices_qs:
+#         raw_crew_data_list.append({
+#             'crew': inv.crew,
+#             'total_amount': inv.total_amount,
+#             'invoice_id': inv.id,
+#             'invoice_month': inv.month,  # <-- NEW
+#         })
+
+#     # 6) Paginate
+#     paginator = Paginator(raw_crew_data_list, 10)
+#     page_number = request.GET.get('page', 1)
+#     try:
+#         crew_data_page = paginator.page(page_number)
+#     except PageNotAnInteger:
+#         crew_data_page = paginator.page(1)
+#     except EmptyPage:
+#         crew_data_page = paginator.page(paginator.num_pages)
+
+#     # 7) Windowed page range
+#     display_pages = get_display_pages(crew_data_page, num_links=2)
+
+#     context = {
+#         'selected_month': filter_month,
+#         'crew_data_list': crew_data_page,  # Page object
+#         'display_pages': display_pages,
+#     }
+#     return render(request, 'aimsintegration/crew_allowance.html', context)
+
+from django.db.models import Max
+
+def crew_allowance_list(request):
+    """
+    Shows a paginated table of only those Invoices for the selected month,
+    skipping any that are zero. If the user doesn't pick ?month=,
+    we find the most recent month that has at least one invoice > 0.
+    """
+    month_str = request.GET.get('month')
+
+    # ------------------------
+    # 1) If user picks a month, parse it
+    # ------------------------
+    if month_str:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+    else:
+        # ------------------------
+        # 2) Otherwise, find the "latest" month that has at least one > 0
+        # ------------------------
+        # We'll look at all distinct months in descending order:
+        distinct_months = (
+            Invoice.objects
+            .values_list('month', flat=True)
+            .distinct()
+            .order_by('-month')
+        )
+
+        filter_month = None
+        for m in distinct_months:
+            # Check if this month has an Invoice with total_amount > 0
+            has_nonzero = Invoice.objects.filter(month=m, total_amount__gt=0).exists()
+            if has_nonzero:
+                # This is our default month
+                filter_month = m
+                break
+
+    # If we still have None => no data, or all zero
+    if not filter_month:
+        context = {
+            'selected_month': None,
+            'crew_data_list': [],
+            'display_pages': [],
+        }
+        return render(request, 'aimsintegration/crew_allowance.html', context)
+
+    # ------------------------
+    # 3) Now fetch Invoices for that month, skipping total_amount=0
+    # ------------------------
+    invoices_qs = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)  # skip zero
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    raw_crew_data_list = []
+    for inv in invoices_qs:
+        raw_crew_data_list.append({
+            'crew': inv.crew,
+            'total_amount': inv.total_amount,
+            'invoice_id': inv.id,
+            'invoice_month': inv.month,
+        })
+
+    # ------------------------
+    # 4) Paginate
+    # ------------------------
+    paginator = Paginator(raw_crew_data_list, 10)
+    page_number = request.GET.get('page', 1)
+    try:
+        crew_data_page = paginator.page(page_number)
+    except PageNotAnInteger:
+        crew_data_page = paginator.page(1)
+    except EmptyPage:
+        crew_data_page = paginator.page(paginator.num_pages)
+
+    # ------------------------
+    # 5) Windowed page range
+    # ------------------------
+    display_pages = get_display_pages(crew_data_page, num_links=2)
+
+    context = {
+        'selected_month': filter_month,
+        'crew_data_list': crew_data_page,
+        'display_pages': display_pages,
+    }
+    return render(request, 'aimsintegration/crew_allowance.html', context)
+
+
+
+
+
+
+def compute_crew_allowance_for_month(crew, month_first_day):
+    """
+    On-the-fly calculation: sum each Duty's layover hours * arrival zone's rate.
+    """
+    year = month_first_day.year
+    month = month_first_day.month
+
+    duties = Duty.objects.filter(crew=crew, duty_date__year=year, duty_date__month=month)
+    total = Decimal('0.00')
+    for d in duties:
+        if d.arrival_airport and d.arrival_airport.zone:
+            rate = d.arrival_airport.zone.hourly_rate
+        else:
+            rate = Decimal('0.00')
+        hours = Decimal(d.layover_time_minutes) / Decimal(60)
+        total += hours * rate
+
+    return total.quantize(Decimal('0.00'))
+
+
+
 
 
 def crew_allowance_details(request, crew_id, year, month):
     """
-    Show a detail page (or modal) listing all the duties for one crew in the specified month,
-    plus a total allowance.
+    Displays (or returns JSON) all duties for one crew in the chosen month.
+    For each duty:
+      - Layover in HOURS (not minutes)
+      - Rate per hour (based on arrival airport's zone)
+      - Line amount = hours * rate
+    Then, show a total at the bottom of the modal.
     """
+    from decimal import Decimal
+
     cr = get_object_or_404(Crew, id=crew_id)
     filter_month = date(year, month, 1)
 
-    # either get existing invoice or compute on the fly
     try:
         invoice = Invoice.objects.get(crew=cr, month=filter_month)
-        total_amount = invoice.total_amount
-        # we can also get the invoice items
         invoice_items = invoice.invoiceitem_set.select_related('duty').all()
+        # If ignoring zero-layover:
+        invoice_items = invoice_items.filter(duty__layover_time_minutes__gt=0)
         duties_list = [item.duty for item in invoice_items]
+        # We can use the invoice's total_amount or compute a grand_total below
+        invoice_total = invoice.total_amount
     except Invoice.DoesNotExist:
-        # no invoice, compute on the fly
+        # Fallback: no invoice => fetch from Duty
         duties_list = Duty.objects.filter(
             crew=cr,
             duty_date__year=year,
-            duty_date__month=month
+            duty_date__month=month,
+            layover_time_minutes__gt=0  # if ignoring 0-layover
         )
-        total_amount = compute_crew_allowance_for_month(cr, filter_month)
+        invoice_total = compute_crew_allowance_for_month(cr, filter_month)
 
+    # Build a data structure that includes layover_hours, rate, line_amount
+    duties_data = []
+    grand_total = Decimal('0.00')  # if you want to compute on the fly
+
+    for d in duties_list:
+        # Convert minutes -> decimal hours
+        layover_hours = Decimal(d.layover_time_minutes) / Decimal(60)
+        # Rate from arrival's zone
+        if d.arrival_airport and d.arrival_airport.zone:
+            hourly_rate = d.arrival_airport.zone.hourly_rate
+        else:
+            hourly_rate = Decimal('0.00')
+
+        line_amount = layover_hours * hourly_rate
+        grand_total += line_amount
+
+        duties_data.append({
+            'duty_date': str(d.duty_date) if d.duty_date else "",
+            'flight_number': d.flight_number,
+            'departure': d.departure_airport.iata_code if d.departure_airport else "",
+            'arrival': d.arrival_airport.iata_code if d.arrival_airport else "",
+            'layover_hours': str(layover_hours.quantize(Decimal('0.00'))),
+            'hourly_rate': str(hourly_rate.quantize(Decimal('0.00'))),
+            'line_amount': str(line_amount.quantize(Decimal('0.00'))),
+            'tail_number': d.tail_number,
+        })
+
+    # final total => either use invoice_total or grand_total
+    # (If your invoice is already correct, just use invoice_total.)
+    final_total = grand_total.quantize(Decimal('0.00'))  # or invoice_total
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # Return JSON to the modal
+        data = {
+            'crew_info': f"{cr.crew_id} - {cr.first_name} {cr.last_name}",
+            'duties': duties_data,
+            'total_amount': str(final_total),  # So we can show at bottom of modal
+        }
+        return JsonResponse(data)
+    else:
+        # Or render a template with all that info
+        context = {
+            'crew': cr,
+            'filter_month': filter_month,
+            'duties_data': duties_data,
+            'final_total': final_total,
+        }
+        return render(request, 'aimsintegration/crew_allowance_details.html', context)
+    
+
+
+# somewhere in utils/pdf_utils.py
+import io
+from xhtml2pdf import pisa
+
+def convert_html_to_pdf(html_content):
+    """
+    Returns a bytes object of the PDF, or None if there's an error.
+    """
+    result = io.BytesIO()
+    pdf = pisa.pisaDocument(io.BytesIO(html_content.encode("utf-8")), result)
+    if not pdf.err:
+        return result.getvalue()
+    return None
+
+
+
+# Suppose you're in a view that handles "Generate Overall Payslip"
+
+from django.db import connections
+from django.template.loader import render_to_string
+from decimal import Decimal
+from django.templatetags.static import static  # So we can reference static files
+from django.http import HttpResponse
+from datetime import date
+from .models import Invoice
+
+from django.db import connections
+from django.template.loader import render_to_string
+from decimal import Decimal
+from django.templatetags.static import static
+from django.http import HttpResponse
+from datetime import date
+
+from .models import Invoice
+
+
+# def generate_overall_payslip(request):
+#     # 1) Read ?month=YYYY-MM
+#     month_str = request.GET.get('month')
+#     if not month_str:
+#         return HttpResponse("No month selected", status=400)
+
+#     year, mo = map(int, month_str.split('-'))
+#     filter_month = date(year, mo, 1)
+
+#     # 2) Fetch Invoices for that month, skipping total_amount=0
+#     invoices = (
+#         Invoice.objects
+#         .filter(month=filter_month, total_amount__gt=0)
+#         .select_related('crew')
+#         .order_by('crew__crew_id')
+#     )
+
+#     if not invoices.exists():
+#         return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+#     # 3) Connect to MSSQL using your EXACT query
+#     with connections['mssql'].cursor() as cursor:
+#         cursor.execute("""
+#             SELECT [Relational Exch_ Rate Amount]
+# FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+# WHERE [Currency Code] = 'USD'
+#   AND [Starting Date] = (
+#     SELECT MAX([Starting Date])
+#     FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+#     WHERE [Currency Code] = 'USD'
+# );
+#         """)
+#         row = cursor.fetchone()
+
+#     if not row:
+#         return HttpResponse("No exchange rate found from that query.", status=400)
+
+#     # 'row[0]' should contain the Exchange Rate
+#     exchange_rate = Decimal(str(row[0]))
+
+#     # 4) Build items list for the PDF table
+#     items = []
+#     for inv in invoices:
+#         usd_amount = inv.total_amount
+#         rwf_amount = (usd_amount * exchange_rate).quantize(Decimal('0.00'))
+#         items.append({
+#             'wb_no': inv.crew.crew_id,
+#             'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+#             'position': inv.crew.position,
+#             'usd_amount': usd_amount,
+#             # 'rwf_amount': rwf_amount,
+#             'rwf_amount': f"{rwf_amount:,.2f}",  # Format RWF amount with commas and two decimal places
+#             # Optionally include the exchange_rate per row if you want to show it
+#             'exchange_rate': exchange_rate,
+#         })
+
+#     # 5) Render to HTML via template
+#     context = {
+#         'items': items,
+#         'filter_month': filter_month,
+#         'exchange_rate': exchange_rate,
+#         'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
+#     }
+#     html_string = render_to_string('aimsintegration/payslip_template.html', context)
+
+#     # 6) Convert the HTML to PDF
+#     pdf_file = convert_html_to_pdf(html_string)
+#     if not pdf_file:
+#         return HttpResponse("Error generating PDF.", status=500)
+
+#     # 7) Return PDF response
+#     response = HttpResponse(pdf_file, content_type='application/pdf')
+#     filename = f"Crew_Allowance_Payslip_{filter_month.strftime('%Y-%m')}.pdf"
+#     response['Content-Disposition'] = f'attachment; filename="{filename}"'
+#     return response
+from django.db import connections
+from decimal import Decimal
+from datetime import date
+from django.db.models import Max
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.templatetags.static import static
+from .models import Invoice
+
+
+def generate_overall_payslip(request):
+    # 1) Read ?month=YYYY-MM
+    month_str = request.GET.get('month')
+    if not month_str:
+        # Find the latest (max) month in your Invoice table if not provided
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        # Parse the user-provided month
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+
+    # 2) Fetch Invoices for that month, skipping total_amount=0
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    if not invoices.exists():
+        return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+    # 3) Connect to MSSQL to get the exchange rate
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = 'USD'
+              AND [Starting Date] = (
+                  SELECT MAX([Starting Date])
+                  FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                  WHERE [Currency Code] = 'USD'
+              );
+        """)
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    # 4a) Gather all unique crew WB numbers and format them to WBXXXX
+    crew_ids = list({inv.crew.crew_id for inv in invoices})
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+
+    # 4b) Fetch bank details for these WB numbers
+    employee_bank_data = {}
+    if wb_formatted_ids:
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [Bank Name], [Bank Account No]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [No_] IN ({placeholders})
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+
+        for no_, bank_name, bank_account_no in rows:
+            formatted_no = no_.strip()
+            employee_bank_data[formatted_no] = {
+                'bank_name': bank_name.strip() if bank_name else '',
+                'bank_account_no': bank_account_no.strip() if bank_account_no else '',
+            }
+
+    # 4c) Build items list for the PDF table
+    items = []
+    for inv in invoices:
+        wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {
+            'bank_name': '',
+            'bank_account_no': '',
+        })
+
+        usd_amount = inv.total_amount
+        rwf_amount = (usd_amount * exchange_rate).quantize(Decimal('0.00'))
+        bank_name = bank_data['bank_name']
+        account_no = bank_data['bank_account_no']
+
+        items.append({
+            'wb_no': inv.crew.crew_id,
+            'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+            'position': inv.crew.position,
+            'usd_amount': usd_amount,
+            'rwf_amount': f"{rwf_amount:,.2f}",  # Add commas to RWF
+            'exchange_rate': exchange_rate,
+            'bank_name': bank_name,
+            'account_no': account_no,
+        })
+
+    # 5) Render to HTML via template
     context = {
-        'crew': cr,
+        'items': items,
         'filter_month': filter_month,
-        'duties_list': duties_list,
-        'total_amount': total_amount,
+        'exchange_rate': exchange_rate,
+        'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
     }
-    return render(request, 'crew_allowance_details.html', context)
+    html_string = render_to_string('aimsintegration/payslip_template.html', context)
+
+    # 6) Convert the HTML to PDF
+    pdf_file = convert_html_to_pdf(html_string)
+    if not pdf_file:
+        return HttpResponse("Error generating PDF.", status=500)
+
+    # 7) Return PDF response
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    filename = f"Crew_Allowance_Payslip_{filter_month.strftime('%Y-%m')}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+
+
+
+def layover_setup(request):
+    zones = Zone.objects.all().prefetch_related('airports')
+    # Convert each zone’s airports into a list or handle in template
+    return render(request, 'aimsintegration/layover_setup.html', {
+        'zones': zones
+    })
+
+
+
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+import json
+from .models import Zone, Airport
+
+@require_POST
+def create_zone(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        zone_name = data.get('zone_name')
+        hourly_rate = data.get('hourly_rate')
+        airport_codes = data.get('airports', [])
+
+        if not zone_name or hourly_rate is None:
+            return JsonResponse({'error': 'Missing zone_name or hourly_rate'}, status=400)
+
+        # Create the Zone
+        zone = Zone.objects.create(name=zone_name, hourly_rate=hourly_rate)
+
+        # Create or update Airports for this zone
+        for code in airport_codes:
+            airport, created = Airport.objects.get_or_create(iata_code=code)
+            airport.zone = zone
+            airport.save()
+
+        return JsonResponse({
+            'message': 'Zone created successfully!',
+            'zone': {
+                'id': zone.id,
+                'name': zone.name,
+                'hourly_rate': str(zone.hourly_rate)
+            }
+        }, status=201)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from django.shortcuts import get_object_or_404
+from .models import Zone, Airport
+
+@csrf_exempt
+def update_zone(request, zone_id):
+    """
+    Update a zone's details including its name, hourly rate, and associated airports.
+    """
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+
+            # Fetch the zone
+            zone = get_object_or_404(Zone, id=zone_id)
+
+            # Update Zone name and hourly rate
+            zone.name = data.get("zone_name", zone.name)
+            zone.hourly_rate = data.get("hourly_rate", zone.hourly_rate)
+            zone.save()
+
+            # Handle airport updates
+            if "airports" in data:
+                updated_airports = data["airports"]  # List of {id, iata_code, action}
+
+                for airport_data in updated_airports:
+                    airport_id = airport_data.get("id")
+                    iata_code = airport_data.get("iata_code").strip().upper()
+                    action = airport_data.get("action")  # "update", "delete", "add"
+
+                    if action == "update" and airport_id:
+                        airport = get_object_or_404(Airport, id=airport_id, zone=zone)
+                        airport.iata_code = iata_code
+                        airport.save()
+
+                    elif action == "delete" and airport_id:
+                        Airport.objects.filter(id=airport_id, zone=zone).delete()
+
+                    elif action == "add":
+                        Airport.objects.create(iata_code=iata_code, zone=zone)
+
+            return JsonResponse({"message": "Zone updated successfully!"}, status=200)
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data"}, status=400)
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+
+
+
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from .models import Zone
+
+def get_zone_airports(request, zone_id):
+    """
+    Fetch all airports belonging to a specific zone.
+    """
+    zone = get_object_or_404(Zone, id=zone_id)
+    airports = list(zone.airports.values("id", "iata_code"))
+    return JsonResponse({"airports": airports})
+
+
+
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import json
+from .models import Airport
+
+@csrf_exempt
+def update_airport(request, airport_id):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            new_code = data.get("iata_code", "").strip().upper()
+            airport = get_object_or_404(Airport, id=airport_id)
+            airport.iata_code = new_code
+            airport.save()
+            return JsonResponse({"message": "Airport updated successfully!"})
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+@csrf_exempt
+def delete_airport(request, airport_id):
+    if request.method == "POST":
+        airport = get_object_or_404(Airport, id=airport_id)
+        airport.delete()
+        return JsonResponse({"message": "Airport deleted successfully!"})
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from .models import Zone
+
+@csrf_exempt
+def delete_zone(request, zone_id):
+    if request.method == "POST":
+        zone = get_object_or_404(Zone, id=zone_id)
+        zone.delete()  # This will cascade and delete associated airports
+        return JsonResponse({"message": "Zone and associated airports deleted successfully!"})
+    else:
+        return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+import json
+from .models import Zone, Airport
+
+@csrf_exempt
+def add_airport(request, zone_id):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            airport_code = data.get("airport_code", "").strip().upper()
+            if not airport_code:
+                return JsonResponse({"error": "Airport code is required."}, status=400)
+            
+            zone = get_object_or_404(Zone, id=zone_id)
+            # Create and associate a new Airport with the given zone
+            Airport.objects.create(iata_code=airport_code, zone=zone)
+            return JsonResponse({"message": "Airport added successfully!"}, status=201)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    return JsonResponse({"error": "Invalid request method"}, status=405)

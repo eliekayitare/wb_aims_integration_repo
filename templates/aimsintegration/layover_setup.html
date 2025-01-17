@@ -1,0 +1,800 @@
+{% extends 'base.html' %} {% load static %} {% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+  integrity="sha512-...your_integrity_hash..."
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"
+/>
+
+<style>
+  /* Reuse your existing styling for modals, tables, etc. */
+
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding-top: 100px;
+    transition: opacity 0.3s ease;
+  }
+  .modal-content {
+    background-color: #fff;
+    margin: auto;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 700px;
+    position: relative;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    max-height: 80%;
+    overflow: hidden;
+  }
+  .modal-header {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+    position: relative;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+    text-align: center;
+  }
+  .modal-body {
+    font-size: 16px;
+    color: #555;
+    overflow-y: auto;
+    max-height: calc(100% - 50px);
+    padding: 10px 0;
+  }
+  .close {
+    color: #aaa;
+    font-size: 30px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+  }
+  .close:hover,
+  .close:focus {
+    color: #000;
+    text-decoration: none;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Arial", sans-serif;
+    margin-top: 20px;
+  }
+  th,
+  td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+  th {
+    background-color: #f4f4f4;
+    color: #333;
+  }
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  tr:hover {
+    background-color: #f1f1f1;
+  }
+  button.btn-action,
+  a.btn-action {
+    padding: 8px 16px;
+    background-color: #007bff;
+    color: #fff !important;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    text-decoration: none;
+  }
+  button.btn-action:hover,
+  a.btn-action:hover {
+    background-color: #0056b3;
+  }
+
+  .toast {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    color: white;
+    width: 300px;
+    opacity: 0.9;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    font-size: 14px;
+    transition: opacity 0.3s ease-in-out;
+  }
+  .toast.success {
+    background-color: #28a745;
+  }
+  .toast.error {
+    background-color: #dc3545;
+  }
+  .toast-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Additional styling */
+  .page-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .airports-list {
+    margin-left: 20px;
+    font-size: 14px;
+    color: #555;
+  }
+
+  /* Style form labels and inputs inside the modal */
+  .zone-form label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .zone-form input[type="text"],
+  .zone-form input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .zone-form input.airport-code {
+    width: calc(
+      100% - 20px
+    ); /* Adjust width to leave space for potential icons */
+    margin-bottom: 10px;
+  }
+
+  /* Style the "+ Add another airport" button */
+  .zone-form button[type="button"] {
+    background-color: #28a745;
+    margin-top: 10px;
+    margin-bottom: 20px;
+  }
+
+  .zone-form button[type="button"]:hover {
+    background-color: #218838;
+  }
+
+  /* Style the Save and Cancel buttons inside the form */
+  .zone-form button.btn-action[type="submit"],
+  .zone-form button.btn-action[type="button"] {
+    width: auto;
+    margin-right: 10px;
+  }
+
+  /* Optional: Add spacing and professional look for airports container */
+  #airports_container {
+    margin-bottom: 15px;
+  }
+
+  #airports_container label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  /* --- Additional styling for airport entries within modal --- */
+  .airport-entry {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.7em;
+  }
+
+  .airport-entry input[type="text"] {
+    flex: 0 0 auto;
+    width: 150px;
+    padding: 0.5em;
+    margin-right: 0.5em;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .airport-entry button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9em;
+    color: #007bff;
+    margin-left: 0.3em;
+    transition: color 0.3s ease;
+  }
+
+  .airport-entry button:hover {
+    color: #0056b3;
+  }
+
+  /* Optional tooltip styling if desired */
+  .airport-entry button[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    background: #333;
+    color: #fff;
+    padding: 2px 6px;
+    font-size: 12px;
+    border-radius: 4px;
+    top: -25px;
+    white-space: nowrap;
+    z-index: 1001;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="dashboard-container">
+  <!-- Sidebar (reused from base) -->
+  <aside class="sidebar">
+    <ul>
+      <li><a href="{% url 'dashboard' %}">ACARS</a></li>
+      <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
+      <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
+      <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="page-title">
+      <h2>LayOver Setup</h2>
+      <!-- A button to add a new Zone (modal form) -->
+      <button class="btn-action" onclick="openAddZoneModal()">
+        Add New Zone
+      </button>
+    </div>
+
+    <!-- Table of Zones -->
+    <table id="zone-table">
+      <thead>
+        <tr>
+          <th>Zone Name</th>
+          <th>Hourly Rate</th>
+          <th>Airports</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for zone in zones %}
+        <tr data-zone-id="{{ zone.id }}">
+          <td>{{ zone.name }}</td>
+          <td>{{ zone.hourly_rate }}</td>
+          <td>
+            <!-- Show list of airport codes in this zone -->
+            {% if zone.airports %}
+            <div class="airports-list">
+                {% for airport in zone.airports.all %}
+                    {{ airport.iata_code }}{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+            </div>
+            
+
+            {% else %}
+            <em>No airports</em>
+            {% endif %}
+          </td>
+          <td>
+            <button
+              class="btn-action"
+              onclick="openEditZoneModal('{{ zone.id }}', '{{ zone.name }}', '{{ zone.hourly_rate }}')"
+            >
+              Edit
+            </button>
+            <button class="btn-action" onclick="deleteZone('{{ zone.id }}')">
+              Delete
+            </button>
+            <!-- Button to add an Airport to this zone -->
+            <button
+              class="btn-action"
+              onclick="openAddAirportModal('{{ zone.id }}')"
+            >
+              +Airport
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- (1) Modal: Add New Zone -->
+<div
+  id="addZoneModal"
+  class="modal"
+  onclick="closeAddZoneModalOnOutsideClick(event)"
+>
+  <div class="modal-content">
+    <span class="close" onclick="closeAddZoneModal()">&times;</span>
+    <div class="modal-header">
+      <h3>Add New Zone</h3>
+    </div>
+    <div class="modal-body">
+      <form id="add-zone-form" class="zone-form">
+        {% csrf_token %}
+        <p>
+          <label for="zone_name">Zone Name:</label><br />
+          <input type="text" id="zone_name" name="zone_name" required />
+        </p>
+        <p>
+          <label for="hourly_rate">Hourly Rate (amount):</label>
+          <input
+            type="number"
+            step="0.01"
+            id="hourly_rate"
+            name="hourly_rate"
+            min="0.01"
+            required
+            oninput="validatePositiveNumber(this)"
+          />
+        </p>
+        <div id="airports_container">
+          <label>Airports (IATA codes):</label><br />
+          <input
+            type="text"
+            name="airport_codes"
+            class="airport-code"
+            placeholder="e.g., JFK"
+          />
+        </div>
+        <button type="button" onclick="addAirportField()" class="btn-action">
+          + Add another airport
+        </button>
+        <br /><br />
+        <button type="submit" class="btn-action">Save Zone</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- (2) Modal: Edit Zone -->
+<div
+  id="editZoneModal"
+  class="modal"
+  onclick="closeEditZoneModalOnOutsideClick(event)"
+>
+  <div class="modal-content">
+    <span class="close" onclick="closeEditZoneModal()">&times;</span>
+    <div class="modal-header">
+      <h3>Edit Zone</h3>
+    </div>
+    <div class="modal-body">
+      <form id="edit-zone-form">
+        {% csrf_token %}
+        <input type="hidden" id="edit_zone_id" name="zone_id" />
+        <p>
+          <label for="edit_zone_name">Zone Name:</label><br />
+          <input
+            type="text"
+            id="edit_zone_name"
+            name="edit_zone_name"
+            required
+          />
+        </p>
+        <p>
+          <label for="edit_hourly_rate">Hourly Rate (amount):</label><br />
+          <input
+            type="number"
+            step="0.01"
+            id="edit_hourly_rate"
+            name="edit_hourly_rate"
+            required
+          />
+        </p>
+
+        <!-- Airport management section -->
+        <div id="airport-list-container">
+          <h4>Airports in this Zone:</h4>
+          <!-- Airports will be injected here -->
+        </div>
+
+        <!-- Field to add new airport -->
+        <p>
+          <label for="new_airport_code">Add New Airport:</label><br />
+          <input type="text" id="new_airport_code" placeholder="e.g., LAX" />
+          <button type="button" onclick="addNewAirport()">Add Airport</button>
+        </p>
+
+        <button type="submit" class="btn-action">Update Zone</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- (3) Modal: Add Airport to a Zone -->
+<div
+  id="addAirportModal"
+  class="modal"
+  onclick="closeAddAirportModalOnOutsideClick(event)"
+>
+  <div class="modal-content">
+    <span class="close" onclick="closeAddAirportModal()">&times;</span>
+    <div class="modal-header">
+      <h3>Add Airport to Zone</h3>
+    </div>
+    <div class="modal-body">
+      <form id="add-airport-form">
+        {% csrf_token %}
+        <input type="hidden" id="airport_zone_id" name="zone_id" />
+        <p>
+          <label for="airport_code">Airport IATA Code:</label><br />
+          <input type="text" id="airport_code" name="airport_code" required />
+        </p>
+        <button type="submit" class="btn-action">Add Airport</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  // =========================================================
+  // 1) Add Zone Modal
+  // =========================================================
+  function openAddZoneModal() {
+    document.getElementById("addZoneModal").style.display = "block";
+  }
+  function closeAddZoneModal() {
+    document.getElementById("addZoneModal").style.display = "none";
+  }
+  function closeAddZoneModalOnOutsideClick(event) {
+    const modalContent = document.querySelector("#addZoneModal .modal-content");
+    if (!modalContent.contains(event.target)) {
+      closeAddZoneModal();
+    }
+  }
+
+  // Submit new zone to backend
+  document.getElementById("add-zone-form").addEventListener("submit", function(e) {
+    e.preventDefault();
+    const name = document.getElementById("zone_name").value;
+    const rate = document.getElementById("hourly_rate").value;
+
+    // Gather all airport codes entered
+    const airportCodeInputs = document.querySelectorAll('input[name="airport_codes"]');
+    let airport_codes = [];
+    airportCodeInputs.forEach(input => {
+      const code = input.value.trim();
+      if (code) {
+        airport_codes.push(code);
+      }
+    });
+
+    fetch("/aims/zones/create/", {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}"
+      },
+      body: JSON.stringify({
+        zone_name: name,
+        hourly_rate: rate,
+        airports: airport_codes
+      }),
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error creating zone");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Zone added successfully!", "success");
+      window.location.reload();
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to create zone", "error");
+    });
+  });
+
+
+  // =========================================================
+  // 2) Edit Zone Modal
+  // =========================================================
+  function openEditZoneModal(zoneId, zoneName, hourlyRate) {
+    document.getElementById("edit_zone_id").value = zoneId;
+    document.getElementById("edit_zone_name").value = zoneName;
+    document.getElementById("edit_hourly_rate").value = hourlyRate;
+    document.getElementById("editZoneModal").style.display = "block";
+
+    // Fetch airports for the zone and populate the list
+    fetch(`/aims/zones/${zoneId}/get_airports/`)
+      .then(res => res.json())
+      .then(data => {
+        const container = document.getElementById("airport-list-container");
+        // Clear previous content, if any
+        container.innerHTML = "<h4>Airports in this Zone:</h4>";
+        data.airports.forEach(airport => {
+          // Create a container for each airport
+          const airportDiv = document.createElement("div");
+          airportDiv.className = "airport-entry";
+          airportDiv.innerHTML = `
+            <input type="text" value="${airport.iata_code}" id="airport_input_${airport.id}" />
+            <button title="Edit" onclick="updateAirport(${airport.id})">
+              <i class="fa fa-pencil-alt"></i>
+            </button>
+            <button title="Delete" onclick="deleteAirport(${airport.id})">
+              <i class="fa fa-trash-alt"></i>
+            </button>
+          `;
+          container.appendChild(airportDiv);
+        });
+      })
+      .catch(err => console.error("Failed to fetch airports:", err));
+  }
+
+
+  function updateAirport(airportId) {
+    const input = document.getElementById(`airport_input_${airportId}`);
+    const newCode = input.value.trim().toUpperCase();
+    if (!newCode) return alert("Airport code cannot be empty.");
+
+    fetch(`/aims/airport/${airportId}/update/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}",
+      },
+      body: JSON.stringify({ iata_code: newCode }),
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error updating airport");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Airport updated!", "success");
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to update airport", "error");
+    });
+  }
+
+  function deleteAirport(airportId) {
+    if (!confirm("Are you sure you want to delete this airport?")) return;
+
+    fetch(`/aims/airport/${airportId}/delete/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}",
+      }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error deleting airport");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Airport deleted!", "success");
+      // Optionally, remove the airport entry from the DOM
+      document.getElementById(`airport_input_${airportId}`).parentElement.remove();
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to delete airport", "error");
+    });
+  }
+
+  function addNewAirport() {
+    const zoneId = document.getElementById("edit_zone_id").value;
+    const newAirportCode = document.getElementById("new_airport_code").value.trim().toUpperCase();
+    if (!newAirportCode) return alert("Please enter an airport code.");
+
+    fetch(`/aims/zones/${zoneId}/add_airport/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}",
+      },
+      body: JSON.stringify({ airport_code: newAirportCode }),
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error adding airport");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Airport added!", "success");
+      // Optionally refresh the airport list
+      openEditZoneModal(
+        zoneId,
+        document.getElementById("edit_zone_name").value,
+        document.getElementById("edit_hourly_rate").value
+      );
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to add airport", "error");
+    });
+  }
+
+
+
+
+
+  function closeEditZoneModal() {
+    document.getElementById("editZoneModal").style.display = "none";
+  }
+  function closeEditZoneModalOnOutsideClick(event) {
+    const modalContent = document.querySelector("#editZoneModal .modal-content");
+    if (!modalContent.contains(event.target)) {
+      closeEditZoneModal();
+    }
+  }
+
+  // Submit updated zone to backend
+  document.getElementById("edit-zone-form").addEventListener("submit", function(e) {
+    e.preventDefault();
+    const zoneId = document.getElementById("edit_zone_id").value;
+    const name = document.getElementById("edit_zone_name").value;
+    const rate = document.getElementById("edit_hourly_rate").value;
+
+    fetch(`/aims/zones/${zoneId}/edit/`, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}"
+      },
+      body: JSON.stringify({
+        zone_name: name,
+        hourly_rate: rate
+      }),
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error editing zone");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Zone updated successfully!", "success");
+      window.location.reload();
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to edit zone", "error");
+    });
+  });
+
+  // =========================================================
+  // 3) Add Airport to a Zone
+  // =========================================================
+  function openAddAirportModal(zoneId) {
+    document.getElementById("airport_zone_id").value = zoneId;
+    document.getElementById("addAirportModal").style.display = "block";
+  }
+  function closeAddAirportModal() {
+    document.getElementById("addAirportModal").style.display = "none";
+  }
+  function closeAddAirportModalOnOutsideClick(event) {
+    const modalContent = document.querySelector("#addAirportModal .modal-content");
+    if (!modalContent.contains(event.target)) {
+      closeAddAirportModal();
+    }
+  }
+
+  function addAirportField() {
+    var container = document.getElementById("airports_container");
+    var br = document.createElement("br");
+    var input = document.createElement("input");
+    input.type = "text";
+    input.name = "airport_codes";
+    input.classList.add("airport-code");
+    input.placeholder = "e.g., LAX";
+    container.appendChild(br);
+    container.appendChild(input);
+  }
+
+  function validatePositiveNumber(input) {
+    if (input.value < 0.01) {
+      input.value = ''; // Clear the invalid value
+    }
+  }
+
+
+  // Submit new airport to backend
+  document.getElementById("add-airport-form").addEventListener("submit", function(e) {
+    e.preventDefault();
+    const zoneId = document.getElementById("airport_zone_id").value;
+    const airportCode = document.getElementById("airport_code").value;
+
+    fetch(`/aims/zones/${zoneId}/add_airport/`, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}"
+      },
+      body: JSON.stringify({
+        airport_code: airportCode
+      }),
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error adding airport");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Airport added successfully!", "success");
+      window.location.reload();
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to add airport", "error");
+    });
+  });
+
+  // =========================================================
+  // 4) Delete Zone
+  // =========================================================
+  function deleteZone(zoneId) {
+    if (!confirm("Are you sure you want to delete this zone?")) {
+      return;
+    }
+    fetch(`/aims/zones/${zoneId}/delete/`, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}"
+      }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Error deleting zone");
+      return res.json();
+    })
+    .then(data => {
+      showToast("Zone deleted!", "success");
+      window.location.reload();
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Failed to delete zone", "error");
+    });
+  }
+
+  // =========================================================
+  // Toast Handling (same pattern as your snippet)
+  // =========================================================
+  function showToast(message, type) {
+    const container = document.getElementById("toast-container");
+    const toast = document.createElement("div");
+    toast.classList.add("toast", type);
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => container.removeChild(toast), 300);
+    }, 3000);
+  }
+
+  {% if messages %}
+    {% for message in messages %}
+      {% if message.tags == 'success' %}
+        showToast("{{ message }}", "success");
+      {% elif message.tags == 'error' %}
+        showToast("{{ message }}", "error");
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+</script>
+{% endblock %}
