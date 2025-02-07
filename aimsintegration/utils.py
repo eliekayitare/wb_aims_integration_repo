@@ -142,6 +142,12 @@ def process_flight_schedule_file(attachment):
                         
                         # Check if any actual times need updating
                         updated = False
+                        if std_utc and existing_record.std_utc != std_utc:
+                            existing_record.std_utc = std_utc
+                            updated = True
+                        if sta_utc and existing_record.sta_utc != sta_utc:
+                            existing_record.sta_utc = sta_utc
+                            updated = True
                         if atd_utc and existing_record.atd_utc != atd_utc:
                             existing_record.atd_utc = atd_utc
                             updated = True

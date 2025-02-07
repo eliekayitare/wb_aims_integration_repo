@@ -273,6 +273,7 @@
       <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
       <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
       <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
+      <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
     </ul>
   </aside>
 
@@ -288,9 +289,9 @@
       >
         LayOver Setup
       </li>
-      <li class="active" data-tab="tab-layover">Setup 2</li>
-      <li class="active" data-tab="tab-layover">Setup 3</li>
-      <li class="active" data-tab="tab-layover">Setup 4</li>
+      <li class="active" data-tab="tab-layover">Phase 2</li>
+      <li class="active" data-tab="tab-layover">Phase 3</li>
+      <li class="active" data-tab="tab-layover">Phase 4</li>
     </ul>
 
     <!-- TAB CONTENT CONTAINER -->
@@ -327,8 +328,8 @@
             <div style="display: flex; align-items: center; gap: 10px;">
               <select id="invoice-type-select">
                 <option value="overall">Generate Overall Payslip</option>
-                <option value="overall">Generate Overall Payslip by Position</option>
-                <option value="overall">Generate Overall Payslip by Bank</option>
+                <option value="overall_position">Generate Overall Payslip by Position</option>
+                <option value="by_bank">Generate Overall Payslip by Bank</option>
                 <option value="individual">Generate Individual Payslip</option>
               </select>
             
@@ -348,7 +349,13 @@
                 <th>WB No</th>
                 <th>Name</th>
                 <th>Position</th>
-                <th>Total Allowance($)</th>
+                {% comment %} <th>Total Allowance($)</th> {% endcomment %}
+                <th>
+                  Total Allowance($)
+                  <button onclick="sortTable('asc')">▲</button>
+                  <button onclick="sortTable('desc')">▼</button>
+                </th>
+                
                 <th>Actions</th>
               </tr>
             </thead>
@@ -662,24 +669,82 @@
     }
   }
 
+
+  
   function handleGenerateInvoice() {
     const typeSelect = document.getElementById("invoice-type-select").value;
-    // If user chooses "overall," we redirect to /generate_overall_payslip/?month=...
-    // If "individual," maybe we prompt or have a way to pick a single crew
+    // Get the query parameter for the selected month
     const urlParams = new URLSearchParams(window.location.search);
-    const monthParam = urlParams.get("month"); // e.g. "2024-11"
-    
+    const monthParam = urlParams.get("month"); // e.g., "2024-11"
+
     if (typeSelect === "overall") {
-      let pdfUrl = "/aims/generate_overall_payslip/";
-      if (monthParam) {
-        pdfUrl += `?month=${monthParam}`;
-      }
-      window.location.href = pdfUrl;
+        let pdfUrl = "/aims/generate_overall_payslip/";
+        if (monthParam) {
+            pdfUrl += `?month=${monthParam}`;
+        }
+        window.location.href = pdfUrl;
+
+    } else if (typeSelect === "overall_position") {
+        // For "Generate Overall Payslip by Position," open both reports
+        let cpUrl = "/aims/generate_usd_payslip/";
+        let othersUrl = "/aims/generate_others_payslip/";
+
+        if (monthParam) {
+            cpUrl += `?month=${monthParam}`;
+            othersUrl += `?month=${monthParam}`;
+        }
+
+        // Open both reports in separate browser tabs
+        window.open(cpUrl, "_blank"); // Open CP payslip
+        window.open(othersUrl, "_blank"); // Open Others payslip
+
+    }  else if (typeSelect === "by_bank") {
+        // For "Generate Overall Payslip by Bank"
+        let bankUrl = "/aims/get_bank_names/"; // Endpoint to fetch bank names
+
+        fetch(bankUrl, {
+            method: "GET",
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch bank names: ${response.status}`);
+                }
+                return response.json(); // Expect a JSON array of bank names
+            })
+            .then((bankNames) => {
+                bankNames.forEach((bankName) => {
+                    // Build URL for each bank's payslip PDF
+                    let pdfUrl = `/aims/generate_payslip_for_bank/?bank_name=${encodeURIComponent(bankName)}`;
+                    pdfUrl += `&month=${encodeURIComponent(monthParam)}`;
+
+                    // Open each bank's PDF in a new tab
+                    window.open(pdfUrl, "_blank");
+                });
+            })
+            .catch((error) => {
+                console.error("Error fetching bank names:", error);
+                alert(`Error: ${error.message}`);
+            });
+
     } else {
-      // handle individual logic
+        // Handle individual logic or other cases
+        alert("Individual payslip generation is not implemented yet.");
     }
-  }
-  
+}
+
+
+function sortTable(order) {
+  const urlParams = new URLSearchParams(window.location.search);
+  urlParams.set('sort', order); // Add or update the 'sort' parameter
+  urlParams.set('page', 1); // Reset to the first page
+  window.location.search = urlParams.toString(); // Reload the page with the updated query parameters
+}
+
+
+
+
+
 
   // =========================================
   // 5) Toast Handling

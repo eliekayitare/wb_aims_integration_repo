@@ -24,6 +24,12 @@ urlpatterns = [
          views.crew_allowance_details, name='crew_allowance_details'),
         
     path('generate_overall_payslip/', views.generate_overall_payslip, name='generate_overall_payslip'),
+    path("generate_usd_payslip/", views.generate_usd_payslip, name="generate_usd_payslip"),
+    path("generate_others_payslip/", views.generate_others_payslip, name="generate_others_payslip"),
+    # New endpoint for generating payslips by bank
+     # New URLs for payslips by bank
+    path('get_bank_names/', views.get_bank_names, name='get_bank_names'),
+    path('generate_payslip_for_bank/', views.generate_payslip_for_bank, name='generate_payslip_for_bank'),
 
     path('layover_setup/', views.layover_setup, name='layover_setup'),
     path('zones/create/', views.create_zone, name='create_zone'),

@@ -25,7 +25,7 @@
   <div class="header">
     <img src="{{ logo_path }}" alt="RwandAir Logo" class="logo"/>
     <h2>Payslip - {{ filter_month|date:"F Y" }}</h2>
-    <strong><p>Exchange Rate: 1 USD = {{ exchange_rate }} RWF</p></strong>
+    {% comment %} <strong><p>Exchange Rate: 1 USD = {{ exchange_rate }} RWF</p></strong> {% endcomment %}
   </div>
 
   <table>
@@ -35,9 +35,9 @@
         <th style="width: 20%;">Name</th>
         <th>Position</th>
         <th style="width: 12%;">Allowance (USD)</th>
-        <th style="width: 12%;">Allowance (RWF)</th>
-        <th style="width: 20%;">Bank Name</th>
-        <th style="width: 20%;">Account Number</th>
+        {% comment %} <th style="width: 12%;">Allowance (RWF)</th> {% endcomment %}
+        <th style="width: 26%;">Bank Name</th>
+        <th style="width: 26%;">Account Number</th>
       </tr>
     </thead>
     <tbody>
@@ -47,7 +47,7 @@
         <td>{{ row.name }}</td>
         <td>{{ row.position }}</td>
         <td class="right">{{ row.usd_amount }}</td>
-        <td class="right">{{ row.rwf_amount }}</td>
+        {% comment %} <td class="right">{{ row.rwf_amount }}</td> {% endcomment %}
         <td>{{ row.bank_name|default_if_none:"-" }}</td>
         <td>{{ row.account_no|default_if_none:"-" }}</td>
       </tr>
@@ -56,16 +56,16 @@
       <tr class="total-row">
         <td colspan="3">Total</td>
         <td class="right">{{ total_usd }}</td>
-        <td class="right">{{ total_rwf }}</td>
+        {% comment %} <td class="right">{{ total_rwf }}</td> {% endcomment %}
         <td colspan="2"></td>
       </tr>
     </tbody>
   </table>
 
   <!-- Footer with exchange rate -->
-  <div class="footer">
+  {% comment %} <div class="footer">
     <p class="exchange-rate">Exchange Rate: 1 USD = {{ exchange_rate }} RWF</p>
-  </div>
+  </div> {% endcomment %}
 
   <!-- Approval Section -->
   <div class="approval-section">
@@ -84,32 +84,19 @@
     <table style="width: 100%; margin-top: 20px; text-align: center;">
       <tr>
         <td>
-          <strong>Prepared By</strong>
+          <strong>Approver 1</strong>
           <p>Name: ...............................................</p>
           <p>Date: ...............................................</p>
           <p>Signature: ..........................................</p>
         </td>
         <td>
-          <strong>Checked By</strong>
+          <strong>Approver 2</strong>
           <p>Name: ...............................................</p>
           <p>Date: ...............................................</p>
           <p>Signature: ..........................................</p>
         </td>
         <td>
-          <strong>Revised By</strong>
-          <p>Name: ...............................................</p>
-          <p>Date: ...............................................</p>
-          <p>Signature: ..........................................</p>
-        </td>
-        <td>
-          <strong>Approved By</strong>
-          <p>Name: ...............................................</p>
-          <p>Date: ...............................................</p>
-          <p>Signature: ..........................................</p>
-        </td>
-        
-        <td>
-          <strong>Authorised By</strong>
+          <strong>Approver 3</strong>
           <p>Name: ...............................................</p>
           <p>Date: ...............................................</p>
           <p>Signature: ..........................................</p>
