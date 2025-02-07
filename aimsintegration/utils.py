@@ -445,36 +445,6 @@ def write_job_one_row(file_path, flight_data, acars_event, event_time, email_arr
 
 
 
-# import re
-# import logging
-
-# # Initialize logger
-# logger = logging.getLogger(__name__)
-
-# def extract_departure_and_arrival_codes(message_body):
-#     # Pattern to match the departure code after 'DA'
-#     dep_code_pattern = r'DA\s+([A-Z]{4})'
-    
-#     # Pattern to capture the arrival code after 'DS' or 'AD'
-#     arr_code_pattern = r'(?:DS|AD)\s+([A-Z]{4})'
-
-#     # Match departure code
-#     dep_code_match = re.search(dep_code_pattern, message_body)
-#     # Match arrival code
-#     arr_code_match = re.search(arr_code_pattern, message_body)
-
-#     # Extract codes if matched
-#     dep_code_iata = dep_code_match.group(1) if dep_code_match else None
-#     arr_code_iata = arr_code_match.group(1) if arr_code_match else None
-
-#     # Log warnings for missing codes
-#     if not dep_code_iata:
-#         logger.warning("Departure code not found in message.")
-#     if not arr_code_iata:
-#         logger.warning("Arrival code not found in message.")
-
-#     return dep_code_iata, arr_code_iata
-
 import re
 import logging
 
@@ -783,6 +753,13 @@ def process_fdm_flight_schedule_file(attachment):
                 if existing_record:
                     # Update fields if actual timings have changed
                     updated = False
+                    if std_utc_time and existing_record.std_utc != std_utc_time:
+                        existing_record.std_utc = std_utc_time
+                        updated = True
+                    if sta_utc_time and existing_record.sta_utc != sta_utc_time:
+                        existing_record.sta_utc = sta_utc_time
+                        updated = True
+
                     if atd_utc_time and existing_record.atd_utc != atd_utc_time:
                         existing_record.atd_utc = atd_utc_time
                         updated = True
