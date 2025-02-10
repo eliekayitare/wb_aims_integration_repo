@@ -841,141 +841,34 @@ def process_fdm_email_attachment(item, process_function):
         logger.error(f"Error processing fdm email attachment: {e}")
 
 
-# from datetime import datetime
-# from .models import CrewMember
-# def preprocess_crew_file(content):
-#     """
-#     Preprocess the crew file to ensure each flight's data is on a single row.
-#     Rows should start with the flight number.
-#     """
-#     formatted_lines = []
-#     current_line = ""
+from datetime import datetime
+from .models import CrewMember
+def preprocess_crew_file(content):
+    """
+    Preprocess the crew file to ensure each flight's data is on a single row.
+    Rows should start with the flight number.
+    """
+    formatted_lines = []
+    current_line = ""
 
-#     for line in content.splitlines():
-#         stripped_line = line.strip()
+    for line in content.splitlines():
+        stripped_line = line.strip()
 
-#         # Check if the line starts with a flight number (numeric)
-#         if stripped_line[:3].isdigit():  # Assuming flight numbers are at least 3 digits
-#             if current_line:
-#                 formatted_lines.append(current_line.strip())  # Add the previous line
-#             current_line = stripped_line  # Start a new record
-#         else:
-#             current_line += f" {stripped_line}"  # Append to the current line
+        # Check if the line starts with a flight number (numeric)
+        if stripped_line[:3].isdigit():  # Assuming flight numbers are at least 3 digits
+            if current_line:
+                formatted_lines.append(current_line.strip())  # Add the previous line
+            current_line = stripped_line  # Start a new record
+        else:
+            current_line += f" {stripped_line}"  # Append to the current line
 
-#     if current_line:
-#         formatted_lines.append(current_line.strip())  # Add the last record
+    if current_line:
+        formatted_lines.append(current_line.strip())  # Add the last record
 
-#     return formatted_lines
-
-
+    return formatted_lines
 
 
 
-# import re
-# import pandas as pd
-# from datetime import datetime
-# from .models import CrewMember
-
-
-
-# def process_crew_details_file(attachment):
-#     """
-#     Parse and process crew details from an unstructured file.
-#     """
-#     try:
-#         # Read file content
-#         raw_content = attachment.content.decode('utf-8').splitlines()
-#         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
-
-#         parsed_data = []
-#         valid_roles = {'CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC'}  # Valid roles
-#         flight_context = {}
-
-#         for line_num, line in enumerate(rows, start=1):
-#             try:
-#                 # Detect flight header
-#                 flight_no = line[:4].strip()
-#                 flight_date_str = line[4:13].strip()
-#                 origin = line[13:17].strip()
-#                 destination = line[17:20].strip()
-
-#                 print("\n=======================================================")
-#                 print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
-#                 print("\n=======================================================\n")
-
-#                 # Convert date
-#                 try:
-#                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
-#                 except ValueError:
-#                     raise ValueError(f"Invalid date format: {flight_date_str}")
-
-#                 # Update flight context
-#                 flight_context = {
-#                     "flight_no": flight_no,
-#                     "sd_date_utc": sd_date_utc,
-#                     "origin": origin,
-#                     "destination": destination,
-#                 }
-
-#                 # Crew data starts after position 20
-#                 crew_data = line[20:].strip()
-
-#                 # Regex to match role, crew ID, and name
-#                 crew_pattern = re.compile(r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)")
-
-#                 for match in crew_pattern.finditer(crew_data):
-#                     role = match.group("role")
-#                     crew_id = match.group("crew_id")
-#                     name = match.group("name").strip()
-
-#                     if not role or not crew_id or not name:
-#                         print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
-#                         continue
-
-#                     # Append parsed data
-#                     parsed_data.append({
-#                         **flight_context,
-#                         "role": role,
-#                         "crew_id": crew_id,
-#                         "name": name,
-#                     })
-
-#                     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-#                     print(f"\nCrew ID: {crew_id}\nRole: {role}\nName: {name}")
-#                     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-
-#             except ValueError as ve:
-#                 print(f"Error in crew data on line {line_num}: {ve}")
-#             except Exception as e:
-#                 print(f"Error processing line {line_num}: {e}")
-
-#         # Convert parsed data to DataFrame
-#         crew_df = pd.DataFrame(parsed_data)
-#         if crew_df.empty:
-#             print("No valid data extracted.")
-#             return
-
-#         # Save to the database
-#         for _, row in crew_df.iterrows():
-#             try:
-#                 CrewMember.objects.update_or_create(
-#                     crew_id=row["crew_id"],
-#                     defaults={
-#                         "flight_no": row["flight_no"],
-#                         "sd_date_utc": row["sd_date_utc"],
-#                         "origin": row["origin"],
-#                         "destination": row["destination"],
-#                         "role": row["role"],
-#                         "name": row["name"],
-#                     }
-#                 )
-#             except Exception as db_err:
-#                 print(f"Database error for {row['crew_id']}: {db_err}")
-
-#         print("Crew details file processed successfully.")
-
-#     except Exception as e:
-#         print(f"Error processing crew details file: {e}")
 
 
 import re
@@ -983,103 +876,106 @@ import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
+
+
 def process_crew_details_file(attachment):
     """
-    Parses crew details from an unstructured file, but only for CP and FO.
-    The expected format per line:
-      [flight_no] [date+origin] [destination] [crew details...]
-    Example:
-      464 31012025EBB NBO CP 00001404 DOMINIK HODEL FO 00003110 JESSE Ruvebana
+    Parse and process crew details from an unstructured file.
     """
+    try:
+        # Read file content
+        raw_content = attachment.content.decode('utf-8').splitlines()
+        rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
-    # Read file content
-    raw_text = attachment.content.decode("utf-8")
-    
-    # Cleanup text: Remove unwanted characters and normalize spaces
-    cleaned_text = re.sub(r"[@#]", "", raw_text)  # Remove OCR artifacts
-    cleaned_text = re.sub(r"\s{2,}", " ", cleaned_text)  # Replace multiple spaces with single space
-    raw_lines = cleaned_text.splitlines()
-    rows = [line.strip() for line in raw_lines if line.strip()]  # Remove empty lines
+        parsed_data = []
+        valid_roles = {'CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC'}  # Valid roles
+        flight_context = {}
 
-    parsed_data = []
+        for line_num, line in enumerate(rows, start=1):
+            try:
+                # Detect flight header
+                flight_no = line[:4].strip()
+                flight_date_str = line[4:13].strip()
+                origin = line[13:17].strip()
+                destination = line[17:20].strip()
 
-    # **Flight details regex** (Handles variations)
-    flight_pattern = re.compile(
-        r"(?P<flight_no>\d{1,4})\s+(?P<date>\d{8})(?P<origin>[A-Z]{3})\s+(?P<destination>[A-Z]{3})"
-    )
+                print("\n=======================================================")
+                print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
+                print("\n=======================================================\n")
 
-    # **Improved crew regex** (Handles "D" before crew ID & spaces in names)
-    crew_pattern = re.compile(
-        r"(?P<role>CP|FO)\s+D?(?P<crew_id>\d{8})\s+(?P<name>[A-Z][A-Z\s]+?)(?=\s+CP|\s+FO|$|FP|FA|FE|AC)"
-    )
+                # Convert date
+                try:
+                    sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
+                except ValueError:
+                    raise ValueError(f"Invalid date format: {flight_date_str}")
 
-    for line_num, line in enumerate(rows, start=1):
-        # Match flight details
-        flight_match = flight_pattern.search(line)
-        if not flight_match:
-            print(f"[Line {line_num}] Skipping: Flight details not found -> {line}")
-            continue
+                # Update flight context
+                flight_context = {
+                    "flight_no": flight_no,
+                    "sd_date_utc": sd_date_utc,
+                    "origin": origin,
+                    "destination": destination,
+                }
 
-        flight_no = flight_match.group("flight_no")
-        date_str = flight_match.group("date")
-        origin = flight_match.group("origin")
-        destination = flight_match.group("destination")
+                # Crew data starts after position 20
+                crew_data = line[20:].strip()
 
-        # Validate and parse date
-        try:
-            sd_date_utc = datetime.strptime(date_str, "%d%m%Y").date()
-        except ValueError as e:
-            print(f"[Line {line_num}] Skipping: Invalid date format -> {date_str} | {e}")
-            continue
+                # Regex to match role, crew ID, and name
+                crew_pattern = re.compile(r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)")
 
-        # Extract crew details (CP & FO only)
-        remainder = line[flight_match.end():].strip()  # Extract remaining part of the line
-        matches = list(crew_pattern.finditer(remainder))
+                for match in crew_pattern.finditer(crew_data):
+                    role = match.group("role")
+                    crew_id = match.group("crew_id")
+                    name = match.group("name").strip()
 
-        if not matches:
-            print(f"[Line {line_num}] WARNING: No CP/FO crew found -> {remainder}")
-            continue
+                    if not role or not crew_id or not name:
+                        print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
+                        continue
 
-        for match in matches:
-            role = match.group("role")
-            crew_id = match.group("crew_id")
-            name = match.group("name").strip()
+                    # Append parsed data
+                    parsed_data.append({
+                        **flight_context,
+                        "role": role,
+                        "crew_id": crew_id,
+                        "name": name,
+                    })
 
-            parsed_data.append({
-                "flight_no": flight_no,
-                "sd_date_utc": sd_date_utc,
-                "origin": origin,
-                "destination": destination,
-                "role": role,
-                "crew_id": crew_id,
-                "name": name,
-            })
+                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                    print(f"\nCrew ID: {crew_id}\nRole: {role}\nName: {name}")
+                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
-    crew_df = pd.DataFrame(parsed_data)
-    if crew_df.empty:
-        print("No valid CP/FO data extracted.")
-        return
+            except ValueError as ve:
+                print(f"Error in crew data on line {line_num}: {ve}")
+            except Exception as e:
+                print(f"Error processing line {line_num}: {e}")
 
-    # Save to the database
-    for _, row in crew_df.iterrows():
-        try:
-            CrewMember.objects.update_or_create(
-                crew_id=row["crew_id"].strip(),
-                defaults={
-                    "flight_no": row["flight_no"].strip(),
-                    "sd_date_utc": row["sd_date_utc"],  # already a date object
-                    "origin": row["origin"].strip(),
-                    "destination": row["destination"].strip(),
-                    "role": row["role"].strip(),
-                    "name": row["name"].strip(),
-                },
-            )
-            print(f"✅ Saved crew: {row['crew_id']} - {row['name']}")
-        except Exception as db_err:
-            print(f"❌ Database error for crew_id={row['crew_id']}: {db_err}")
+        # Convert parsed data to DataFrame
+        crew_df = pd.DataFrame(parsed_data)
+        if crew_df.empty:
+            print("No valid data extracted.")
+            return
 
-    print(f"🎉 File processed successfully: {len(crew_df)} CP/FO entries saved.")
+        # Save to the database
+        for _, row in crew_df.iterrows():
+            try:
+                CrewMember.objects.update_or_create(
+                    crew_id=row["crew_id"],
+                    defaults={
+                        "flight_no": row["flight_no"],
+                        "sd_date_utc": row["sd_date_utc"],
+                        "origin": row["origin"],
+                        "destination": row["destination"],
+                        "role": row["role"],
+                        "name": row["name"],
+                    }
+                )
+            except Exception as db_err:
+                print(f"Database error for {row['crew_id']}: {db_err}")
 
+        print("Crew details file processed successfully.")
+
+    except Exception as e:
+        print(f"Error processing crew details file: {e}")
 
 
 
