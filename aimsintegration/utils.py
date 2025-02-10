@@ -980,96 +980,108 @@ def process_fdm_email_attachment(item, process_function):
 
 
 import re
+import logging
 import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
+logger = logging.getLogger(__name__)
+
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file,
-    focusing only on CP and FO roles.
+    with debug logging to identify parsing issues.
     """
     try:
-        # Read file content
         raw_lines = attachment.content.decode("utf-8").splitlines()
+        rows = [line.strip() for line in raw_lines if line.strip()]  # Non-empty lines
 
-        # Remove completely empty lines
-        rows = [line.strip() for line in raw_lines if line.strip()]
-
+        valid_roles = {"CP", "FO"}   # Only these roles
         parsed_data = []
-        valid_roles = {"CP", "FO"}  # We only want CP and FO
+
+        # Regex for crew segments
+        crew_pattern = re.compile(
+            r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+"
+            r"(?P<crew_id>\d{8})"
+            r"(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)"
+        )
 
         for line_num, line in enumerate(rows, start=1):
+            logger.debug("Processing line %d: %r", line_num, line)
 
-            # Step 1: Split the line into at least 4 parts (flight_no, date_origin, dest, remainder)
+            # Split into at most 4 parts (flight_no, date+origin, dest, remainder)
             parts = line.split(maxsplit=3)
             if len(parts) < 4:
-                print(f"Skipping line {line_num}: not enough fields -> {line}")
+                logger.warning("Line %d skipped: not enough parts -> %s", line_num, parts)
                 continue
 
             flight_no, date_origin, destination, remainder = parts
+            logger.debug(
+                "Line %d parts -> flight_no=%r, date_origin=%r, destination=%r",
+                line_num, flight_no, date_origin, destination
+            )
 
-            # Step 2: Extract date (first 8 chars) and origin (rest)
-            # e.g. date_origin="31012025EBB" -> date_str="31012025", origin="EBB"
+            # Extract date (8 digits) + origin (the rest)
             date_str = date_origin[:8]
-            origin = date_origin[8:]
+            origin   = date_origin[8:]
 
-            # Validate that we got exactly 8 digits for date
-            if not (len(date_str) == 8 and date_str.isdigit()):
-                print(f"Skipping line {line_num}: invalid date/origin -> {date_origin}")
+            if len(date_str) != 8 or not date_str.isdigit():
+                logger.error(
+                    "Line %d skipped: invalid date string -> %r (date_origin=%r)",
+                    line_num, date_str, date_origin
+                )
                 continue
 
-            # Parse the date
+            # Try parsing the date
             try:
                 sd_date_utc = datetime.strptime(date_str, "%d%m%Y").date()
-            except ValueError:
-                print(f"Skipping line {line_num}: invalid date string -> {date_str}")
+            except ValueError as ve:
+                logger.error("Line %d skipped: date parse error -> %s", line_num, ve)
                 continue
 
-            # Build a context dict for the flight
+            # Prepare flight context
             flight_context = {
                 "flight_no": flight_no,
                 "sd_date_utc": sd_date_utc,
                 "origin": origin,
                 "destination": destination,
             }
+            logger.debug("Line %d flight_context -> %r", line_num, flight_context)
 
-            # Step 3: Parse crew details from the remainder
-            # We'll look for role/ID/name patterns, e.g.: "CP 00004104DOMINIK HODEL"
-            # Role: CP|FO|FP|SA|FA|FE|AC (but we'll only keep CP/FO)
-            # ID: exactly 8 digits
-            # Name: any characters until we see the next role or end of string
-            crew_pattern = re.compile(
-                r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+"
-                r"(?P<crew_id>\d{8})"
-                r"(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)"
-            )
+            # Now parse the remainder with the crew_pattern
+            all_crews_found = crew_pattern.findall(remainder)
+            if not all_crews_found:
+                logger.warning("Line %d: no valid crew segments found in remainder -> %r", line_num, remainder)
 
             for match in crew_pattern.finditer(remainder):
-                role = match.group("role")
+                role   = match.group("role")
                 crew_id = match.group("crew_id")
-                name = match.group("name").strip()
+                name   = match.group("name").strip()
 
-                # Skip roles that are not CP or FO
                 if role not in valid_roles:
+                    logger.debug("Line %d skipping role=%r because not in %r", line_num, role, valid_roles)
                     continue
 
-                # Append to our data list
-                parsed_data.append({
+                # Build the data record
+                data_record = {
                     **flight_context,
                     "role": role,
                     "crew_id": crew_id,
                     "name": name,
-                })
+                }
+                parsed_data.append(data_record)
+                logger.debug("Line %d extracted -> %r", line_num, data_record)
 
-        # Convert parsed data to DataFrame (optional, but convenient)
-        crew_df = pd.DataFrame(parsed_data)
-        if crew_df.empty:
-            print("No valid (CP/FO) data extracted.")
+        # If nothing parsed, bail out
+        if not parsed_data:
+            logger.info("No valid (CP/FO) data extracted from file.")
             return
 
-        # Step 4: Save results to the DB
-        for _, row in crew_df.iterrows():
+        # Convert to DataFrame
+        crew_df = pd.DataFrame(parsed_data)
+
+        # Save to DB
+        for idx, row in crew_df.iterrows():
             try:
                 CrewMember.objects.update_or_create(
                     crew_id=row["crew_id"],
@@ -1083,12 +1095,13 @@ def process_crew_details_file(attachment):
                     }
                 )
             except Exception as db_err:
-                print(f"Database error for {row['crew_id']}: {db_err}")
+                logger.error("Database error for crew_id=%r: %s", row["crew_id"], db_err)
 
-        print("Crew details file (CP/FO only) processed successfully.")
+        logger.info("Crew details file processed successfully. CP/FO count: %d", len(crew_df))
 
     except Exception as e:
-        print(f"Error processing crew details file: {e}")
+        logger.exception("Error processing crew details file: %s", e)
+
 
 
 
