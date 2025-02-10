@@ -986,64 +986,68 @@ from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
-    Parse crew details from an unstructured file, but only for CP and FO.
-    Each line has:
-      [flight_no] [date+origin] [destination] [remainder...]
-    Where remainder contains segments like:
-      CP  00001404DOMINIK HODEL   FO  00003110JESSE Ruvebana
+    Parse crew details for CP and FO only, extracting exactly 8 digits
+    as crew_id, and including any trailing letters in the name.
     """
     raw_lines = attachment.content.decode("utf-8").splitlines()
-    rows = [line.strip() for line in raw_lines if line.strip()]  # remove blank lines
+    rows = [line.strip() for line in raw_lines if line.strip()]
 
+    # This list will hold dicts for each parsed crew member (CP/FO).
     parsed_data = []
 
-    # Regex capturing only CP or FO, then the ID, then the name
+    # Regex capturing CP or FO, then 8 digits for ID,
+    # optional trailing letters, then the rest of the name up
+    # to the next role boundary or the end of the line.
     crew_pattern = re.compile(
-        r"(?P<role>\b(?:CP|FO)\b)\s+"      # CP or FO
-        r"(?P<crew_id>[A-Za-z0-9]+)"       # allow letter(s)+digits or just digits
-        r"(?P<name>.+?)(?=\b(?:CP|FO)\b|$)" # name up to next CP/FO or line end
+        r"(?P<role>\b(?:CP|FO)\b)\s+"           # CP or FO
+        r"(?P<crew_id>\d{8})"                   # exactly 8 digits
+        r"(?P<extra_letters>[A-Za-z]*)?"        # optional trailing letters right after the digits
+        r"(?P<rest_of_name>.*?)(?=\b(?:CP|FO|FP|FA|SA|FE|AC)\b|$)"
     )
 
     for line_num, line in enumerate(rows, start=1):
-        # Split line into exactly 4 parts: flight_no, date_origin, destination, remainder
         parts = line.split(maxsplit=3)
         if len(parts) < 4:
             print(f"[Line {line_num}] Skipping: Not enough parts -> {parts}")
             continue
 
-        # Strip each part to remove leading/trailing spaces
         flight_no = parts[0].strip()
         date_origin = parts[1].strip()
         destination = parts[2].strip()
         remainder = parts[3].strip()
 
-        # date_origin should be 8 digits + origin code
+        # Extract date and origin from date_origin
         date_str = date_origin[:8].strip()
         origin = date_origin[8:].strip()
 
-        # Validate date_str is exactly 8 digits
+        # Validate date is 8 digits
         if len(date_str) != 8 or not date_str.isdigit():
-            print(f"[Line {line_num}] Skipping: Date/origin malformed -> {date_origin}")
+            print(f"[Line {line_num}] Skipping: Invalid date/origin -> {date_origin}")
             continue
 
-        # Parse date
         try:
             sd_date_utc = datetime.strptime(date_str, "%d%m%Y").date()
-        except ValueError as e:
-            print(f"[Line {line_num}] Skipping: Invalid date string '{date_str}' -> {e}")
+        except ValueError as ve:
+            print(f"[Line {line_num}] Skipping: date parse error '{date_str}' -> {ve}")
             continue
 
         # Find CP/FO segments
         matches = list(crew_pattern.finditer(remainder))
         if not matches:
-            print(f"[Line {line_num}] WARNING: No CP/FO segments found in remainder -> {remainder!r}")
+            print(f"[Line {line_num}] WARNING: No CP/FO segments found -> {remainder!r}")
             continue
 
         for match in matches:
-            # Strip role, crew_id, and name
             role = match.group("role").strip()
             crew_id = match.group("crew_id").strip()
-            name = match.group("name").strip()
+            extra_letters = (match.group("extra_letters") or "").strip()
+            rest_of_name = (match.group("rest_of_name") or "").strip()
+
+            # Combine the trailing letters + rest_of_name into a full name
+            if extra_letters:
+                name = (extra_letters + " " + rest_of_name).strip()
+            else:
+                name = rest_of_name.strip()
 
             parsed_data.append({
                 "flight_no": flight_no,
@@ -1055,34 +1059,36 @@ def process_crew_details_file(attachment):
                 "name": name,
             })
 
+    # Convert to DataFrame (optional)
     crew_df = pd.DataFrame(parsed_data)
     if crew_df.empty:
         print("No valid CP/FO data extracted.")
         return
 
+    # Save to DB
     for _, row in crew_df.iterrows():
         try:
             print("=======================================================")
             print(
-                f"\nFlight Number: {row['flight_no']}"
-                f"\nDate: {row['sd_date_utc']}"
-                f"\nOrigin: {row['origin']}"
-                f"\nDestination: {row['destination']}"
-                f"\nRole: {row['role']}"
-                f"\nCrew ID: {row['crew_id']}"
-                f"\nName: {row['name']}"
+                f"Flight Number: {row['flight_no']}\n"
+                f"Date: {row['sd_date_utc']}\n"
+                f"Origin: {row['origin']}\n"
+                f"Destination: {row['destination']}\n"
+                f"Role: {row['role']}\n"
+                f"Crew ID: {row['crew_id']}\n"
+                f"Name: {row['name']}"
             )
             print("=======================================================\n")
 
             CrewMember.objects.update_or_create(
                 crew_id=row["crew_id"],
                 defaults={
-                    "flight_no": row["flight_no"].strip(),
-                    "sd_date_utc": row["sd_date_utc"],  # already a date, no leading/trailing space
-                    "origin": row["origin"].strip(),
-                    "destination": row["destination"].strip(),
-                    "role": row["role"].strip(),
-                    "name": row["name"].strip(),
+                    "flight_no": row["flight_no"],
+                    "sd_date_utc": row["sd_date_utc"],
+                    "origin": row["origin"],
+                    "destination": row["destination"],
+                    "role": row["role"],
+                    "name": row["name"],
                 },
             )
         except Exception as db_err:
