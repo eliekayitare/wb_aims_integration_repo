@@ -989,23 +989,28 @@ def process_crew_details_file(attachment):
     The expected format per line:
       [flight_no] [date+origin] [destination] [crew details...]
     Example:
-      464 31012025EBB NBO CP 00001404DOMINIK HODEL FO 00003110JESSE Ruvebana
+      464 31012025EBB NBO CP 00001404 DOMINIK HODEL FO 00003110 JESSE Ruvebana
     """
 
     # Read file content
     raw_text = attachment.content.decode("utf-8")
+    
+    # Cleanup text: Remove unwanted characters and normalize spaces
     cleaned_text = re.sub(r"[@#]", "", raw_text)  # Remove OCR artifacts
+    cleaned_text = re.sub(r"\s{2,}", " ", cleaned_text)  # Replace multiple spaces with single space
     raw_lines = cleaned_text.splitlines()
     rows = [line.strip() for line in raw_lines if line.strip()]  # Remove empty lines
 
     parsed_data = []
 
-    # Flight details regex
-    flight_pattern = re.compile(r"(?P<flight_no>\d{3,4})\s+(?P<date>\d{8})(?P<origin>[A-Z]{3})\s+(?P<destination>[A-Z]{3})")
+    # **Flight details regex** (Handles variations)
+    flight_pattern = re.compile(
+        r"(?P<flight_no>\d{1,4})\s+(?P<date>\d{8})(?P<origin>[A-Z]{3})\s+(?P<destination>[A-Z]{3})"
+    )
 
-    # Improved crew regex (handles "D" before crew ID, spaces before name)
+    # **Improved crew regex** (Handles "D" before crew ID & spaces in names)
     crew_pattern = re.compile(
-        r"(?P<role>CP|FO)\s+D?(?P<crew_id>\d{8})\s*(?P<name>[A-Z][A-Z\s]+?)(?=\s+CP|\s+FO|$)"
+        r"(?P<role>CP|FO)\s+D?(?P<crew_id>\d{8})\s+(?P<name>[A-Z][A-Z\s]+?)(?=\s+CP|\s+FO|$|FP|FA|FE|AC)"
     )
 
     for line_num, line in enumerate(rows, start=1):
@@ -1069,11 +1074,11 @@ def process_crew_details_file(attachment):
                     "name": row["name"].strip(),
                 },
             )
-            print(f"Saved crew: {row['crew_id']} - {row['name']}")
+            print(f"✅ Saved crew: {row['crew_id']} - {row['name']}")
         except Exception as db_err:
-            print(f"Database error for crew_id={row['crew_id']}: {db_err}")
+            print(f"❌ Database error for crew_id={row['crew_id']}: {db_err}")
 
-    print(f"File processed successfully: {len(crew_df)} CP/FO entries saved.")
+    print(f"🎉 File processed successfully: {len(crew_df)} CP/FO entries saved.")
 
 
 
