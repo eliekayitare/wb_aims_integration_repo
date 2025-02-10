@@ -992,40 +992,36 @@ def process_crew_details_file(attachment):
     Where remainder contains segments like:
       CP  00001404DOMINIK HODEL   FO  00003110JESSE Ruvebana
     """
-    # Read and strip each line (ignoring blank lines)
     raw_lines = attachment.content.decode("utf-8").splitlines()
-    rows = [line.strip() for line in raw_lines if line.strip()]
+    rows = [line.strip() for line in raw_lines if line.strip()]  # remove blank lines
 
-    # This list will hold dicts for each parsed crew member (CP/FO).
     parsed_data = []
 
     # Regex capturing only CP or FO, then the ID, then the name
-    # e.g. "CP  00001404DOMINIK HODEL" => role=CP, crew_id=00001404, name="DOMINIK HODEL"
-    # \s+ after role allows for variable spaces, \d+ for the numeric portion,
-    # then name is everything until next role or line end.
     crew_pattern = re.compile(
         r"(?P<role>\b(?:CP|FO)\b)\s+"      # CP or FO
-        r"(?P<crew_id>\d+)"                # one or more digits (allow 8, 9, or any length)
-        r"(?P<name>.+?)(?=\b(?:CP|FO)\b|$)" # name: all chars up to next CP/FO or end
+        r"(?P<crew_id>[A-Za-z0-9]+)"       # allow letter(s)+digits or just digits
+        r"(?P<name>.+?)(?=\b(?:CP|FO)\b|$)" # name up to next CP/FO or line end
     )
 
     for line_num, line in enumerate(rows, start=1):
-
-        # Split line into exactly 4 parts:
-        #   flight_no, date_origin, destination, remainder
+        # Split line into exactly 4 parts: flight_no, date_origin, destination, remainder
         parts = line.split(maxsplit=3)
         if len(parts) < 4:
             print(f"[Line {line_num}] Skipping: Not enough parts -> {parts}")
             continue
 
-        flight_no, date_origin, destination, remainder = parts
+        # Strip each part to remove leading/trailing spaces
+        flight_no = parts[0].strip()
+        date_origin = parts[1].strip()
+        destination = parts[2].strip()
+        remainder = parts[3].strip()
 
-        # date_origin should be 8 digits + the origin code (e.g. "31012025EBB")
-        # so we take first 8 as date_str, the rest as origin
-        date_str = date_origin[:8]   # e.g. "31012025"
-        origin = date_origin[8:]     # e.g. "EBB"
+        # date_origin should be 8 digits + origin code
+        date_str = date_origin[:8].strip()
+        origin = date_origin[8:].strip()
 
-        # Check if we actually got 8 digits for date
+        # Validate date_str is exactly 8 digits
         if len(date_str) != 8 or not date_str.isdigit():
             print(f"[Line {line_num}] Skipping: Date/origin malformed -> {date_origin}")
             continue
@@ -1034,22 +1030,21 @@ def process_crew_details_file(attachment):
         try:
             sd_date_utc = datetime.strptime(date_str, "%d%m%Y").date()
         except ValueError as e:
-            print(f"[Line {line_num}] Skipping: Invalid date string {date_str} -> {e}")
+            print(f"[Line {line_num}] Skipping: Invalid date string '{date_str}' -> {e}")
             continue
 
-        # Now find all CP/FO segments in the remainder
+        # Find CP/FO segments
         matches = list(crew_pattern.finditer(remainder))
         if not matches:
             print(f"[Line {line_num}] WARNING: No CP/FO segments found in remainder -> {remainder!r}")
             continue
 
-        # For each match, build a record
         for match in matches:
-            role = match.group("role")
-            crew_id = match.group("crew_id")
-            name = match.group("name").strip()  # remove trailing spaces
+            # Strip role, crew_id, and name
+            role = match.group("role").strip()
+            crew_id = match.group("crew_id").strip()
+            name = match.group("name").strip()
 
-            # Save to our list
             parsed_data.append({
                 "flight_no": flight_no,
                 "sd_date_utc": sd_date_utc,
@@ -1060,27 +1055,34 @@ def process_crew_details_file(attachment):
                 "name": name,
             })
 
-    # Convert to a DataFrame (optional, but convenient)
     crew_df = pd.DataFrame(parsed_data)
     if crew_df.empty:
         print("No valid CP/FO data extracted.")
         return
 
-    # Save each row to the database
     for _, row in crew_df.iterrows():
         try:
+            print("=======================================================")
+            print(
+                f"\nFlight Number: {row['flight_no']}"
+                f"\nDate: {row['sd_date_utc']}"
+                f"\nOrigin: {row['origin']}"
+                f"\nDestination: {row['destination']}"
+                f"\nRole: {row['role']}"
+                f"\nCrew ID: {row['crew_id']}"
+                f"\nName: {row['name']}"
+            )
             print("=======================================================\n")
-            print(f"Flight Number: {row['flight_no']}\nDate: {row['sd_date_utc']}\nOrigin: {row['origin']}\nDestination: {row['destination']} \nRole: {row['role']}\nCrew ID: {row['crew_id']}\nName: {row['name']}")
-            print("=======================================================\n")
+
             CrewMember.objects.update_or_create(
                 crew_id=row["crew_id"],
                 defaults={
-                    "flight_no": row["flight_no"],
-                    "sd_date_utc": row["sd_date_utc"],
-                    "origin": row["origin"],
-                    "destination": row["destination"],
-                    "role": row["role"],
-                    "name": row["name"],
+                    "flight_no": row["flight_no"].strip(),
+                    "sd_date_utc": row["sd_date_utc"],  # already a date, no leading/trailing space
+                    "origin": row["origin"].strip(),
+                    "destination": row["destination"].strip(),
+                    "role": row["role"].strip(),
+                    "name": row["name"].strip(),
                 },
             )
         except Exception as db_err:
