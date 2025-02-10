@@ -1069,6 +1069,9 @@ def process_crew_details_file(attachment):
     # Save each row to the database
     for _, row in crew_df.iterrows():
         try:
+            print("=======================================================\n")
+            print(f"Flight Number: {row['flight_no']}\nDate: {row['sd_date_utc']}\nOrigin: {row['origin']}\nDestination: {row['destination']} \nRole: {row['role']}\nCrew ID: {row['crew_id']}\nName: {row['name']}")
+            print("=======================================================\n")
             CrewMember.objects.update_or_create(
                 crew_id=row["crew_id"],
                 defaults={
