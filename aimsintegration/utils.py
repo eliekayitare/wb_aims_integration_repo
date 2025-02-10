@@ -978,7 +978,6 @@ def process_fdm_email_attachment(item, process_function):
 #         print(f"Error processing crew details file: {e}")
 
 
-
 import re
 import pandas as pd
 from datetime import datetime
@@ -987,13 +986,13 @@ from .models import CrewMember
 def process_crew_details_file(attachment):
     """
     Parses crew details from an unstructured file, but only for CP and FO.
-    Each line contains:
-      [flight_no] [date+origin] [destination] [remainder...]
-    Where remainder contains segments like:
-      CP  00001404DOMINIK HODEL   FO  00003110JESSE Ruvebana
+    The expected format per line:
+      [flight_no] [date+origin] [destination] [crew details...]
+    Example:
+      464 31012025EBB NBO CP 00001404DOMINIK HODEL FO 00003110JESSE Ruvebana
     """
 
-    # Read file content and clean it up
+    # Read file content
     raw_text = attachment.content.decode("utf-8")
     cleaned_text = re.sub(r"[@#]", "", raw_text)  # Remove OCR artifacts
     raw_lines = cleaned_text.splitlines()
@@ -1001,9 +1000,13 @@ def process_crew_details_file(attachment):
 
     parsed_data = []
 
-    # Regex patterns
+    # Flight details regex
     flight_pattern = re.compile(r"(?P<flight_no>\d{3,4})\s+(?P<date>\d{8})(?P<origin>[A-Z]{3})\s+(?P<destination>[A-Z]{3})")
-    crew_pattern = re.compile(r"(?P<role>CP|FO)\s+(?P<crew_id>\d{8})\s*(?P<name>[A-Z][A-Z\s]+)(?=\s+CP|\s+FO|$)")
+
+    # Improved crew regex (handles "D" before crew ID, spaces before name)
+    crew_pattern = re.compile(
+        r"(?P<role>CP|FO)\s+D?(?P<crew_id>\d{8})\s*(?P<name>[A-Z][A-Z\s]+?)(?=\s+CP|\s+FO|$)"
+    )
 
     for line_num, line in enumerate(rows, start=1):
         # Match flight details
@@ -1025,7 +1028,7 @@ def process_crew_details_file(attachment):
             continue
 
         # Extract crew details (CP & FO only)
-        remainder = line[flight_match.end():].strip()  # Get remaining part of the line
+        remainder = line[flight_match.end():].strip()  # Extract remaining part of the line
         matches = list(crew_pattern.finditer(remainder))
 
         if not matches:
@@ -1071,6 +1074,7 @@ def process_crew_details_file(attachment):
             print(f"Database error for crew_id={row['crew_id']}: {db_err}")
 
     print(f"File processed successfully: {len(crew_df)} CP/FO entries saved.")
+
 
 
 
