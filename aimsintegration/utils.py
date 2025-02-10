@@ -841,8 +841,150 @@ def process_fdm_email_attachment(item, process_function):
         logger.error(f"Error processing fdm email attachment: {e}")
 
 
+# from datetime import datetime
+# from .models import CrewMember
+# def preprocess_crew_file(content):
+#     """
+#     Preprocess the crew file to ensure each flight's data is on a single row.
+#     Rows should start with the flight number.
+#     """
+#     formatted_lines = []
+#     current_line = ""
+
+#     for line in content.splitlines():
+#         stripped_line = line.strip()
+
+#         # Check if the line starts with a flight number (numeric)
+#         if stripped_line[:3].isdigit():  # Assuming flight numbers are at least 3 digits
+#             if current_line:
+#                 formatted_lines.append(current_line.strip())  # Add the previous line
+#             current_line = stripped_line  # Start a new record
+#         else:
+#             current_line += f" {stripped_line}"  # Append to the current line
+
+#     if current_line:
+#         formatted_lines.append(current_line.strip())  # Add the last record
+
+#     return formatted_lines
+
+
+
+
+
+# import re
+# import pandas as pd
+# from datetime import datetime
+# from .models import CrewMember
+
+
+
+# def process_crew_details_file(attachment):
+#     """
+#     Parse and process crew details from an unstructured file.
+#     """
+#     try:
+#         # Read file content
+#         raw_content = attachment.content.decode('utf-8').splitlines()
+#         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
+
+#         parsed_data = []
+#         valid_roles = {'CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC'}  # Valid roles
+#         flight_context = {}
+
+#         for line_num, line in enumerate(rows, start=1):
+#             try:
+#                 # Detect flight header
+#                 flight_no = line[:4].strip()
+#                 flight_date_str = line[4:13].strip()
+#                 origin = line[13:17].strip()
+#                 destination = line[17:20].strip()
+
+#                 print("\n=======================================================")
+#                 print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
+#                 print("\n=======================================================\n")
+
+#                 # Convert date
+#                 try:
+#                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
+#                 except ValueError:
+#                     raise ValueError(f"Invalid date format: {flight_date_str}")
+
+#                 # Update flight context
+#                 flight_context = {
+#                     "flight_no": flight_no,
+#                     "sd_date_utc": sd_date_utc,
+#                     "origin": origin,
+#                     "destination": destination,
+#                 }
+
+#                 # Crew data starts after position 20
+#                 crew_data = line[20:].strip()
+
+#                 # Regex to match role, crew ID, and name
+#                 crew_pattern = re.compile(r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)")
+
+#                 for match in crew_pattern.finditer(crew_data):
+#                     role = match.group("role")
+#                     crew_id = match.group("crew_id")
+#                     name = match.group("name").strip()
+
+#                     if not role or not crew_id or not name:
+#                         print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
+#                         continue
+
+#                     # Append parsed data
+#                     parsed_data.append({
+#                         **flight_context,
+#                         "role": role,
+#                         "crew_id": crew_id,
+#                         "name": name,
+#                     })
+
+#                     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+#                     print(f"\nCrew ID: {crew_id}\nRole: {role}\nName: {name}")
+#                     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+
+#             except ValueError as ve:
+#                 print(f"Error in crew data on line {line_num}: {ve}")
+#             except Exception as e:
+#                 print(f"Error processing line {line_num}: {e}")
+
+#         # Convert parsed data to DataFrame
+#         crew_df = pd.DataFrame(parsed_data)
+#         if crew_df.empty:
+#             print("No valid data extracted.")
+#             return
+
+#         # Save to the database
+#         for _, row in crew_df.iterrows():
+#             try:
+#                 CrewMember.objects.update_or_create(
+#                     crew_id=row["crew_id"],
+#                     defaults={
+#                         "flight_no": row["flight_no"],
+#                         "sd_date_utc": row["sd_date_utc"],
+#                         "origin": row["origin"],
+#                         "destination": row["destination"],
+#                         "role": row["role"],
+#                         "name": row["name"],
+#                     }
+#                 )
+#             except Exception as db_err:
+#                 print(f"Database error for {row['crew_id']}: {db_err}")
+
+#         print("Crew details file processed successfully.")
+
+#     except Exception as e:
+#         print(f"Error processing crew details file: {e}")
+
+
+
+
+import re
+import pandas as pd
 from datetime import datetime
 from .models import CrewMember
+
 def preprocess_crew_file(content):
     """
     Preprocess the crew file to ensure each flight's data is on a single row.
@@ -854,8 +996,8 @@ def preprocess_crew_file(content):
     for line in content.splitlines():
         stripped_line = line.strip()
 
-        # Check if the line starts with a flight number (numeric)
-        if stripped_line[:3].isdigit():  # Assuming flight numbers are at least 3 digits
+        # Check if the line starts with a flight number (3 or 4 digits)
+        if stripped_line[:3].isdigit():  
             if current_line:
                 formatted_lines.append(current_line.strip())  # Add the previous line
             current_line = stripped_line  # Start a new record
@@ -867,31 +1009,21 @@ def preprocess_crew_file(content):
 
     return formatted_lines
 
-
-
-
-
-import re
-import pandas as pd
-from datetime import datetime
-from .models import CrewMember
-
-
-
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file.
+    Extracts only CP and FO roles.
     """
     try:
         # Read file content
-        raw_content = attachment.content.decode('utf-8').splitlines()
-        rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
-
+        raw_content = attachment.content.decode('utf-8')
+        formatted_lines = preprocess_crew_file(raw_content)  # Preprocess data
         parsed_data = []
-        valid_roles = {'CP', 'FO', 'FP', 'SA', 'FA', 'FE', 'AC'}  # Valid roles
+
+        valid_roles = {'CP', 'FO'}  # Only CP and FO
         flight_context = {}
 
-        for line_num, line in enumerate(rows, start=1):
+        for line_num, line in enumerate(formatted_lines, start=1):
             try:
                 # Detect flight header
                 flight_no = line[:4].strip()
@@ -920,17 +1052,16 @@ def process_crew_details_file(attachment):
                 # Crew data starts after position 20
                 crew_data = line[20:].strip()
 
-                # Regex to match role, crew ID, and name
-                crew_pattern = re.compile(r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)")
+                # Regex to match only CP and FO crew members
+                crew_pattern = re.compile(r"(?P<role>CP|FO)\s+D?(?P<crew_id>\d{8})\s+(?P<name>[A-Z][A-Z\s]+?)(?=\s+CP|\s+FO|$|FP|FA|FE|AC)")
 
                 for match in crew_pattern.finditer(crew_data):
                     role = match.group("role")
                     crew_id = match.group("crew_id")
                     name = match.group("name").strip()
 
-                    if not role or not crew_id or not name:
-                        print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
-                        continue
+                    if role not in valid_roles:
+                        continue  # Skip roles that are not CP or FO
 
                     # Append parsed data
                     parsed_data.append({
@@ -952,7 +1083,7 @@ def process_crew_details_file(attachment):
         # Convert parsed data to DataFrame
         crew_df = pd.DataFrame(parsed_data)
         if crew_df.empty:
-            print("No valid data extracted.")
+            print("No valid CP/FO data extracted.")
             return
 
         # Save to the database
@@ -972,12 +1103,10 @@ def process_crew_details_file(attachment):
             except Exception as db_err:
                 print(f"Database error for {row['crew_id']}: {db_err}")
 
-        print("Crew details file processed successfully.")
+        print("✅ Crew details file processed successfully.")
 
     except Exception as e:
-        print(f"Error processing crew details file: {e}")
-
-
+        print(f"❌ Error processing crew details file: {e}")
 
 
 
