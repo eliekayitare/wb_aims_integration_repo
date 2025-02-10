@@ -986,65 +986,55 @@ from .models import CrewMember
 
 def process_crew_details_file(attachment):
     """
-    Parse crew details from an unstructured file, but only for CP and FO.
-    Each line has:
+    Parses crew details from an unstructured file, but only for CP and FO.
+    Each line contains:
       [flight_no] [date+origin] [destination] [remainder...]
     Where remainder contains segments like:
       CP  00001404DOMINIK HODEL   FO  00003110JESSE Ruvebana
     """
 
-    # Read, strip each line, ignoring blanks
-    raw_lines = attachment.content.decode("utf-8").splitlines()
-    rows = [line.strip() for line in raw_lines if line.strip()]
+    # Read file content and clean it up
+    raw_text = attachment.content.decode("utf-8")
+    cleaned_text = re.sub(r"[@#]", "", raw_text)  # Remove OCR artifacts
+    raw_lines = cleaned_text.splitlines()
+    rows = [line.strip() for line in raw_lines if line.strip()]  # Remove empty lines
 
     parsed_data = []
 
-    # Regex for CP or FO segments
-    crew_pattern = re.compile(
-        r"(?P<role>\b(?:CP|FO)\b)\s+"      # CP or FO
-        r"(?P<crew_id>\d+)"                # numeric ID (any length)
-        r"(?P<name>.+?)(?=\b(?:CP|FO)\b|$)" # name until next CP/FO or end
-    )
+    # Regex patterns
+    flight_pattern = re.compile(r"(?P<flight_no>\d{3,4})\s+(?P<date>\d{8})(?P<origin>[A-Z]{3})\s+(?P<destination>[A-Z]{3})")
+    crew_pattern = re.compile(r"(?P<role>CP|FO)\s+(?P<crew_id>\d{8})\s*(?P<name>[A-Z][A-Z\s]+)(?=\s+CP|\s+FO|$)")
 
     for line_num, line in enumerate(rows, start=1):
-        # Split line into 4 parts: flight_no, date_origin, destination, remainder
-        parts = line.split(maxsplit=3)
-        if len(parts) < 4:
-            print(f"[Line {line_num}] Skipping: Not enough parts -> {parts}")
+        # Match flight details
+        flight_match = flight_pattern.search(line)
+        if not flight_match:
+            print(f"[Line {line_num}] Skipping: Flight details not found -> {line}")
             continue
 
-        # Strip each part
-        flight_no = parts[0].strip()
-        date_origin = parts[1].strip()
-        destination = parts[2].strip()
-        remainder = parts[3].strip()
+        flight_no = flight_match.group("flight_no")
+        date_str = flight_match.group("date")
+        origin = flight_match.group("origin")
+        destination = flight_match.group("destination")
 
-        # Extract date (first 8 chars) + origin (rest), stripping each
-        date_str = date_origin[:8].strip()
-        origin = date_origin[8:].strip()
-
-        # Check valid date substring
-        if len(date_str) != 8 or not date_str.isdigit():
-            print(f"[Line {line_num}] Skipping: Date/origin malformed -> {date_origin!r}")
-            continue
-
-        # Parse date
+        # Validate and parse date
         try:
             sd_date_utc = datetime.strptime(date_str, "%d%m%Y").date()
         except ValueError as e:
-            print(f"[Line {line_num}] Skipping: Invalid date string {date_str!r} -> {e}")
+            print(f"[Line {line_num}] Skipping: Invalid date format -> {date_str} | {e}")
             continue
 
-        # Find CP/FO matches in remainder
+        # Extract crew details (CP & FO only)
+        remainder = line[flight_match.end():].strip()  # Get remaining part of the line
         matches = list(crew_pattern.finditer(remainder))
+
         if not matches:
-            print(f"[Line {line_num}] WARNING: No CP/FO segments found in remainder -> {remainder!r}")
+            print(f"[Line {line_num}] WARNING: No CP/FO crew found -> {remainder}")
             continue
 
-        # Build a record for each match
         for match in matches:
-            role = match.group("role").strip()
-            crew_id = match.group("crew_id").strip()
+            role = match.group("role")
+            crew_id = match.group("crew_id")
             name = match.group("name").strip()
 
             parsed_data.append({
@@ -1062,38 +1052,26 @@ def process_crew_details_file(attachment):
         print("No valid CP/FO data extracted.")
         return
 
-    # Save each row to DB
+    # Save to the database
     for _, row in crew_df.iterrows():
         try:
-            # Print debug info
-            print("=======================================================")
-            print(
-                f"\nFlight Number: {row['flight_no']}"
-                f"\nDate: {row['sd_date_utc']}"
-                f"\nOrigin: {row['origin']}"
-                f"\nDestination: {row['destination']}"
-                f"\nRole: {row['role']}"
-                f"\nCrew ID: {row['crew_id']}"
-                f"\nName: {row['name']}"
-            )
-            print("=======================================================\n")
-
-            # Strip again on save (extra safety)
             CrewMember.objects.update_or_create(
                 crew_id=row["crew_id"].strip(),
                 defaults={
                     "flight_no": row["flight_no"].strip(),
-                    "sd_date_utc": row["sd_date_utc"],  # already a date
+                    "sd_date_utc": row["sd_date_utc"],  # already a date object
                     "origin": row["origin"].strip(),
                     "destination": row["destination"].strip(),
                     "role": row["role"].strip(),
                     "name": row["name"].strip(),
                 },
             )
+            print(f"Saved crew: {row['crew_id']} - {row['name']}")
         except Exception as db_err:
             print(f"Database error for crew_id={row['crew_id']}: {db_err}")
 
     print(f"File processed successfully: {len(crew_df)} CP/FO entries saved.")
+
 
 
 
