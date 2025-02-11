@@ -1035,13 +1035,13 @@ def process_crew_details_file(attachment):
                 flight_date_str = line[4:13].strip()
                 origin = line[13:17].strip()
                 destination = line[17:20].strip()
-                print("======================================================")
+                print("\n======================================================\n")
                 # Print what we got for debugging
                 print(f"\nLine {line_num} FLIGHT NO: {flight_no}")
                 print(f"\nLine {line_num} DATE STR: '{flight_date_str}'")   # <-- The important debug
                 print(f"\nLine {line_num} ORIGIN: '{origin}'")
                 print(f"\nLine {line_num} DEST: '{destination}'")
-                print("======================================================")
+                print("\n======================================================\n")
                 # Attempt to parse the date
                 try:
                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
