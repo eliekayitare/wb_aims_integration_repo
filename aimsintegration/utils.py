@@ -898,12 +898,13 @@ def process_crew_details_file(attachment):
         # )
 
         crew_pattern = re.compile(
-            r'(?P<role>(?:CP|FO))\s+'      # e.g. "CP" plus spaces
-            r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
-            r'(?P<name>.*?)'                              # non-greedy for name
-            r'(?=(?:CP|FO)|$)',             # next role or end-of-line
-            re.DOTALL
-        )
+                r'(?P<role>\s(CP|FO|FP|SA|FA|FE|AC)\s+)'  # Role must have a space before and after
+                r'(?P<crew_id>D?\d{8})'                   # Crew ID: optional 'D' + 8 digits
+                r'(?P<name>(?:\s+\S.*?))'                 # Name starts with a space and goes to the next role or end
+                r'(?=\s(CP|FO|FP|SA|FA|FE|AC)\s|$)',       # Stop capturing at next role or end of string
+                re.DOTALL
+            )
+
 
         for line_num, line in enumerate(rows, start=1):
             try:
