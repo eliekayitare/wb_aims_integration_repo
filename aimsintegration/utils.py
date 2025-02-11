@@ -1015,7 +1015,7 @@ from .models import CrewMember
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file,
-    but ONLY store records for CP and FO (including IDs like D00003456).
+    but ONLY store records for CP and FO (including 'D'-prefixed IDs).
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -1024,26 +1024,23 @@ def process_crew_details_file(attachment):
         parsed_data = []
         roles_we_care_about = {'CP', 'FO'}
 
-        # This regex will find ANY role token (CP|FO|FP|SA|FA|FE|AC),
-        # then optional spaces, then an optional leading 'D', then 8 digits,
-        # then "the name" up until the next role token OR the end of the line.
+        # Regex: find any role + optional 'D' + 8 digits + name, up until the next role or end of line
         crew_pattern = re.compile(
-            r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" + spaces
-            r'(?P<crew_id>D?\d{8})'                       # optional 'D' + 8 digits
-            r'(?P<name>.*?)'                              # non-greedy for the name
-            r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # look ahead for next role or end-of-line
+            r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
+            r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
+            r'(?P<name>.*?)'                              # non-greedy for name
+            r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
             re.DOTALL
         )
 
         for line_num, line in enumerate(rows, start=1):
             try:
-                # 1) Extract flight details from the fixed columns
+                # 1) Extract flight details
                 flight_no       = line[:4].strip()
                 flight_date_str = line[4:13].strip()
                 origin          = line[13:17].strip()
                 destination     = line[17:20].strip()
 
-                # Attempt to parse the date
                 try:
                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
                 except ValueError:
@@ -1056,14 +1053,17 @@ def process_crew_details_file(attachment):
                     "destination": destination,
                 }
 
-                # 2) The remainder is crew data
+                # 2) Get crew data
                 crew_data = line[20:].strip()
 
-                # Find all matches of "role + ID + name" in this line
+                # -- HERE is the key fix: remove consecutive repeated roles like 'CP CP' --
+                crew_data = re.sub(r'\b(CP|FO|FP|SA|FA|FE|AC)\b\s+\1', r'\1', crew_data)
+
+                # 3) Find all matches
                 for m in crew_pattern.finditer(crew_data):
-                    role = m.group("role")
+                    role    = m.group("role")
                     crew_id = m.group("crew_id")
-                    name = m.group("name").strip()
+                    name    = m.group("name").strip()
 
                     if role in roles_we_care_about:
                         parsed_data.append({
@@ -1086,7 +1086,7 @@ def process_crew_details_file(attachment):
 
         crew_df = pd.DataFrame(parsed_data)
 
-        # 3) Save only CP and FO to the database
+        # 4) Save only CP and FO
         for _, row in crew_df.iterrows():
             try:
                 CrewMember.objects.update_or_create(
