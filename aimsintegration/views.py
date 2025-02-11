@@ -272,7 +272,7 @@ from django.http import JsonResponse
 from .models import CrewMember
 from datetime import datetime
 import logging
-
+from django.db.models import Case, When, Value, IntegerField
 logger = logging.getLogger(__name__)
 
 def get_crew_details(request):
@@ -292,12 +292,27 @@ def get_crew_details(request):
         return JsonResponse({"error": "Invalid date format. Use 'YYYY-MM-DD'."}, status=400)
 
     # Fetch all matching crew members
+    # crew_members = CrewMember.objects.filter(
+    #     flight_no=flight_no,
+    #     origin=origin,
+    #     destination=destination,
+    #     sd_date_utc=date_obj
+    # ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
+    
+
     crew_members = CrewMember.objects.filter(
         flight_no=flight_no,
         origin=origin,
         destination=destination,
         sd_date_utc=date_obj
-    ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id')
+    ).values('name', 'role', 'flight_no', 'origin', 'destination', 'crew_id').order_by(
+        Case(
+            When(role='CP', then=Value(1)),  # Assign priority 1 to CP (Captain)
+            default=Value(2),  # Assign priority 2 to all other roles
+            output_field=IntegerField()
+        )
+    )
+
 
     # Log the query results
     logger.info(f"Crew members found: {list(crew_members)}")
