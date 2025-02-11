@@ -165,28 +165,23 @@ class CrewMember(models.Model):
         ('AC', 'Air Crew'),
     ]
 
-     
-
-    flight_no = models.CharField(max_length=6, null=False, blank=False)  # To associate with the flight indirectly
-    sd_date_utc = models.DateField(null=False, blank=False)  # Scheduled departure date
-    origin = models.CharField(max_length=10, null=False, blank=False)  # IATA or ICAO code for origin
-    destination = models.CharField(max_length=10, null=False, blank=False)  # IATA or ICAO code for destination
-    crew_id = models.CharField(max_length=10, unique=True, null=False, blank=False)
-    name = models.CharField(max_length=100, null=False, blank=False)
-    role = models.CharField(max_length=2, choices=ROLE_CHOICES, null=False, blank=False)
-    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
-    updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
-
-    def __str__(self):
-        return f"{self.name} ({self.get_role_display()}) on Flight {self.flight_no} ({self.origin} to {self.destination}) on {self.sd_date_utc}"
+    flight_no = models.CharField(max_length=6)
+    sd_date_utc = models.DateField()
+    origin = models.CharField(max_length=10)
+    destination = models.CharField(max_length=10)
+    crew_id = models.CharField(max_length=10)  # <-- remove `unique=True` here
+    name = models.CharField(max_length=100)
+    role = models.CharField(max_length=2, choices=ROLE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'crew_member'
+        # Keep the combined uniqueness:
         unique_together = ('flight_no', 'crew_id')
         indexes = [
             models.Index(fields=['flight_no', 'crew_id']),
         ]
-
 
 
 # Tableau Project models
