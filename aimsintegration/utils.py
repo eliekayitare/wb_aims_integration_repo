@@ -890,12 +890,22 @@ def process_crew_details_file(attachment):
 
         # Regex: find any role + optional 'D' + 8 digits + name, up until the next role or end of line
         crew_pattern = re.compile(
-            r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
-            r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
-            r'(?P<name>.*?)'                              # non-greedy for name
-            r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
+            # Group "role": Only match if it is a standalone token (negative lookbehind & lookahead)
+            r'(?P<role>(?<!\S)(?:CP|FO|FP|SA|FA|FE|AC)(?!\S))\s+'
+            r'(?P<crew_id>D?\d{8})'  # optional 'D' plus 8 digits
+            r'(?P<name>.*?)'        # non-greedy for name
+            # Look ahead for another standalone role OR end of string
+            r'(?=(?<!\S)(?:CP|FO|FP|SA|FA|FE|AC)(?!\S)|$)',
             re.DOTALL
         )
+
+        # crew_pattern = re.compile(
+        #     r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
+        #     r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
+        #     r'(?P<name>.*?)'                              # non-greedy for name
+        #     r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
+        #     re.DOTALL
+        # )
 
 
 
