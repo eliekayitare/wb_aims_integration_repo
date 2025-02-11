@@ -1072,7 +1072,9 @@ def process_crew_details_file(attachment):
                             "crew_id": crew_id,
                             "name": name,
                         })
-                        print(f"Line {line_num}: Found {role} {crew_id} {name}")
+                        print("\n=======================================================")
+                        print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}\nRole: {role}\nCrew ID: {crew_id}\nName: {name}")
+                        print("\n=======================================================\n")
 
             except ValueError as ve:
                 print(f"Error in crew data on line {line_num}: {ve}")
