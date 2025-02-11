@@ -544,7 +544,7 @@ def fetch_fdm_crew_data():
     logger.info("Fetching the most recent fdm crew data...")
 
     emails = account.inbox.filter(
-        subject__contains="AIMS JOB : #16.A Download List of flight legs with crew names to FDM + ' file attached"
+        subject__contains="AIMS JOB : #16.A Job 16.A: Download List of flight legs with crew names to FDM + ' file attached"
     ).order_by('-datetime_received')
     
     email = emails[0] if emails else None
