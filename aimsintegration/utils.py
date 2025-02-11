@@ -1092,16 +1092,18 @@ def process_crew_details_file(attachment):
         for _, row in crew_df.iterrows():
             try:
                 CrewMember.objects.update_or_create(
-                    crew_id=row["crew_id"],
-                    defaults={
-                        "flight_no": row["flight_no"],
-                        "sd_date_utc": row["sd_date_utc"],
-                        "origin": row["origin"],
-                        "destination": row["destination"],
-                        "role": row["role"],
-                        "name": row["name"],
-                    }
-                )
+                        flight_no=row["flight_no"],
+                        sd_date_utc=row["sd_date_utc"],
+                        origin=row["origin"],
+                        destination=row["destination"],
+                        crew_id=row["crew_id"],
+                        defaults={
+                            "role": row["role"],
+                            "name": row["name"],
+                            # ... etc.
+                        }
+                    )
+
             except Exception as db_err:
                 print(f"Database error for {row['crew_id']}: {db_err}")
 
