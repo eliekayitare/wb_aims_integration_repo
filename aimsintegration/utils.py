@@ -1015,7 +1015,7 @@ from .models import CrewMember
 def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file,
-    but ONLY store records for CP and FO.
+    but ONLY store records for CP and FO (including IDs like D00003456).
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -1024,25 +1024,28 @@ def process_crew_details_file(attachment):
         parsed_data = []
         roles_we_care_about = {'CP', 'FO'}
 
+        # This regex will find ANY role token (CP|FO|FP|SA|FA|FE|AC),
+        # then optional spaces, then an optional leading 'D', then 8 digits,
+        # then "the name" up until the next role token OR the end of the line.
+        crew_pattern = re.compile(
+            r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" + spaces
+            r'(?P<crew_id>D?\d{8})'                       # optional 'D' + 8 digits
+            r'(?P<name>.*?)'                              # non-greedy for the name
+            r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # look ahead for next role or end-of-line
+            re.DOTALL
+        )
+
         for line_num, line in enumerate(rows, start=1):
             try:
-                # 1) Extract flight details from the line
-                #    Adjust these slice indexes if needed to match your file format:
-                flight_no        = line[:4].strip()
-                flight_date_str  = line[4:13].strip()
-                origin           = line[13:17].strip()
-                destination      = line[17:20].strip()
+                # 1) Extract flight details from the fixed columns
+                flight_no       = line[:4].strip()
+                flight_date_str = line[4:13].strip()
+                origin          = line[13:17].strip()
+                destination     = line[17:20].strip()
 
-                print(f"\n--- Line {line_num} RAW ---")
-                print(f"flight_no = {repr(flight_no)}")
-                print(f"flight_date_str = {repr(flight_date_str)}")
-                print(f"origin = {repr(origin)}")
-                print(f"destination = {repr(destination)}\n")
-
-                # Parse the date
+                # Attempt to parse the date
                 try:
                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
-                    print(f"Parsed date: {sd_date_utc}")
                 except ValueError:
                     raise ValueError(f"Invalid date format: '{flight_date_str}'")
 
@@ -1053,90 +1056,37 @@ def process_crew_details_file(attachment):
                     "destination": destination,
                 }
 
-                # 2) Parse crew data from position 20 onward
+                # 2) The remainder is crew data
                 crew_data = line[20:].strip()
-                print(f"Crew data substring: {repr(crew_data)}")
 
-                # Split on each role token, *keeping* the delimiter in the results
-                # So if crew_data = "CP  00003459KARAA CAMIL   CP  00003405SERGE"
-                # we want a list like: ["", "CP", "  00003459KARAA CAMIL   ", "CP", "  00003405SERGE"]
-                crew_roles_regex = re.compile(r'(?=(CP|FO|FP|SA|FA|FE|AC)\b)')
-                chunks = re.split(crew_roles_regex, crew_data)
+                # Find all matches of "role + ID + name" in this line
+                for m in crew_pattern.finditer(crew_data):
+                    role = m.group("role")
+                    crew_id = m.group("crew_id")
+                    name = m.group("name").strip()
 
-                # Combine each role token with its following text
-                combined = []
-                skip_next = False
-                for i, chunk in enumerate(chunks):
-                    if skip_next:
-                        # We already consumed this chunk
-                        skip_next = False
-                        continue
-
-                    # If this chunk is exactly a recognized role (CP, FO, etc.)...
-                    if chunk in ['CP','FO','FP','SA','FA','FE','AC']:
-                        # Combine with the next chunk if it exists
-                        if i + 1 < len(chunks):
-                            # e.g. "CP" + "  00003459KARAA CAMIL..."
-                            combined.append(chunk + ' ' + chunks[i+1])
-                            skip_next = True
-                        else:
-                            # Last chunk was just a role with no data
-                            combined.append(chunk)
-                    else:
-                        # It's either leftover text or an empty string
-                        # Usually we can ignore it if it's blank,
-                        # but if not blank, keep it for debugging or further parsing
-                        chunk = chunk.strip()
-                        if chunk:
-                            combined.append(chunk)
-
-                # Now parse each "combined" piece. Example piece:
-                #   "CP  00003459KARAA CAMIL"
-                # We'll do a simple match: role + spaces + 8 digits + remainder
-                for piece in combined:
-                    piece = piece.strip()
-                    print(f"  >> Parsing piece: {repr(piece)}")
-
-                    # Regex for one chunk: role, 8-digit ID, then name
-                    # You can loosen \d{8} to \d{7,8} if IDs sometimes are 7 digits
-                    match = re.match(
-                        r'^(?P<role>CP|FO|FP|SA|FA|FE|AC)\s+(?P<crew_id>\d{8})(?P<name>.*)$',
-                        piece
-                    )
-                    if not match:
-                        print(f"    Skipping: does not match 'role + 8-digit + name'.")
-                        continue
-
-                    role = match.group("role")
-                    crew_id = match.group("crew_id")
-                    name = match.group("name").strip()
-
-                    # Only store if CP or FO
-                    if role not in roles_we_care_about:
-                        continue
-
-                    # At this point, we have a valid CP or FO record
-                    parsed_data.append({
-                        **flight_context,
-                        "role": role,
-                        "crew_id": crew_id,
-                        "name": name,
-                    })
-                    print(f"    => Found {role} {crew_id} {name}")
+                    if role in roles_we_care_about:
+                        parsed_data.append({
+                            **flight_context,
+                            "role": role,
+                            "crew_id": crew_id,
+                            "name": name,
+                        })
+                        print(f"Line {line_num}: Found {role} {crew_id} {name}")
 
             except ValueError as ve:
                 print(f"Error in crew data on line {line_num}: {ve}")
             except Exception as e:
                 print(f"Error processing line {line_num}: {e}")
 
-        # Convert all parsed items to a DataFrame
+        # Convert to DataFrame
         if not parsed_data:
             print("No valid data extracted.")
             return
 
         crew_df = pd.DataFrame(parsed_data)
 
-        # Save each record to the database
+        # 3) Save only CP and FO to the database
         for _, row in crew_df.iterrows():
             try:
                 CrewMember.objects.update_or_create(
@@ -1157,6 +1107,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 
 
