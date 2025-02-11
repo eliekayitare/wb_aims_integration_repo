@@ -1018,36 +1018,38 @@ def process_crew_details_file(attachment):
     but ONLY store records for CP and FO.
     """
     try:
-        # Read file content
         raw_content = attachment.content.decode('utf-8').splitlines()
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
         parsed_data = []
-        
-        # Only CP and FO will be stored:
         roles_we_care_about = {'CP', 'FO'}
-
         flight_context = {}
 
         for line_num, line in enumerate(rows, start=1):
             try:
-                # Detect flight header
+                # Print the full line, for debugging
+                print(f"Line {line_num} RAW: {repr(line)}")
+
+                # Extract columns
                 flight_no = line[:4].strip()
                 flight_date_str = line[4:13].strip()
                 origin = line[13:17].strip()
                 destination = line[17:20].strip()
 
-                print("\n=======================================================")
-                print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
-                print("\n=======================================================\n")
+                # Print what we got for debugging
+                print(f"Line {line_num} FLIGHT NO: {flight_no}")
+                print(f"Line {line_num} DATE STR: '{flight_date_str}'")   # <-- The important debug
+                print(f"Line {line_num} ORIGIN: '{origin}'")
+                print(f"Line {line_num} DEST: '{destination}'")
 
-                # Convert date
+                # Attempt to parse the date
                 try:
                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
+                    print(f"Line {line_num} PARSED DATE: {sd_date_utc}")  # Another debug
                 except ValueError:
-                    raise ValueError(f"Invalid date format: {flight_date_str}")
+                    raise ValueError(f"Invalid date format: '{flight_date_str}'")
 
-                # Update flight context
+                # Save flight context
                 flight_context = {
                     "flight_no": flight_no,
                     "sd_date_utc": sd_date_utc,
@@ -1057,8 +1059,6 @@ def process_crew_details_file(attachment):
 
                 # Crew data starts after position 20
                 crew_data = line[20:].strip()
-
-                # Regex to match role, crew ID, and name
                 crew_pattern = re.compile(
                     r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+"
                     r"(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)"
@@ -1069,15 +1069,14 @@ def process_crew_details_file(attachment):
                     crew_id = match.group("crew_id")
                     name = match.group("name").strip()
 
-                    # Skip unless CP or FO
+                    # Only store if CP or FO
                     if role not in roles_we_care_about:
                         continue
 
                     if not role or not crew_id or not name:
-                        print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
+                        print(f"Skipping malformed entry on line {line_num}: role={role}, crew_id={crew_id}, name={name}")
                         continue
 
-                    # Append parsed data ONLY for CP and FO
                     parsed_data.append({
                         **flight_context,
                         "role": role,
@@ -1085,22 +1084,21 @@ def process_crew_details_file(attachment):
                         "name": name,
                     })
 
-                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                    print(f"\nCrew ID: {crew_id}\nRole: {role}\nName: {name}")
-                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+                    print(f">>> Found {role} {crew_id} {name} on line {line_num}")
 
             except ValueError as ve:
                 print(f"Error in crew data on line {line_num}: {ve}")
             except Exception as e:
                 print(f"Error processing line {line_num}: {e}")
 
-        # Convert parsed data to DataFrame
-        crew_df = pd.DataFrame(parsed_data)
-        if crew_df.empty:
+        # Once done, convert to DataFrame
+        if not parsed_data:
             print("No valid data extracted.")
             return
 
-        # Save to the database (CP and FO only)
+        crew_df = pd.DataFrame(parsed_data)
+
+        # Save to database
         for _, row in crew_df.iterrows():
             try:
                 CrewMember.objects.update_or_create(
@@ -1121,6 +1119,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 
 
