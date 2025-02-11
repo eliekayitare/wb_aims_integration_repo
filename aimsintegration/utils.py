@@ -1045,7 +1045,9 @@ def process_crew_details_file(attachment):
                 # Attempt to parse the date
                 try:
                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
+                    print("==============================================================")
                     print(f"Line {line_num} PARSED DATE: {sd_date_utc}")  # Another debug
+                    print("==============================================================")
                 except ValueError:
                     raise ValueError(f"Invalid date format: '{flight_date_str}'")
 
@@ -1060,9 +1062,12 @@ def process_crew_details_file(attachment):
                 # Crew data starts after position 20
                 crew_data = line[20:].strip()
                 crew_pattern = re.compile(
-                    r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+"
-                    r"(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)"
-                )
+                    r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+"        # e.g. "CP" plus at least one space
+                    r"(?P<crew_id>\d{8})"                               # exactly 8 digits
+                    r"(?P<name>.*?)"                                    # a non-greedy grab for the name
+                    r"(?=(?:\s+\b(?:CP|FO|FP|SA|FA|FE|AC)\b)|$)"         # stop as soon as we see a space + next role OR end of line
+                 )
+
 
                 for match in crew_pattern.finditer(crew_data):
                     role = match.group("role")
