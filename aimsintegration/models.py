@@ -178,7 +178,7 @@ class CrewMember(models.Model):
     class Meta:
         db_table = 'crew_member'
         # Keep the combined uniqueness:
-        unique_together = ('flight_no', 'crew_id')
+        unique_together = ('flight_no', 'sd_date_utc', 'crew_id')
         indexes = [
             models.Index(fields=['flight_no', 'crew_id']),
         ]
