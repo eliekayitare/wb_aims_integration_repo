@@ -979,8 +979,6 @@ def process_fdm_email_attachment(item, process_function):
 
 
 
-import re
-import pandas as pd
 from datetime import datetime
 from .models import CrewMember
 
@@ -995,44 +993,53 @@ def preprocess_crew_file(content):
     for line in content.splitlines():
         stripped_line = line.strip()
 
-        # Check if the line starts with a flight number (3 or 4 digits)
-        if re.match(r"^\d{3,4}\s+\d{8}[A-Z]{3}", stripped_line):  
+        # Check if the line starts with a flight number (numeric)
+        if stripped_line[:3].isdigit():  # Assuming flight numbers are at least 3 digits
             if current_line:
-                formatted_lines.append(current_line.strip())  # Save the previous line
+                formatted_lines.append(current_line.strip())  # Add the previous line
             current_line = stripped_line  # Start a new record
         else:
             current_line += f" {stripped_line}"  # Append to the current line
 
     if current_line:
-        formatted_lines.append(current_line.strip())  # Save the last record
+        formatted_lines.append(current_line.strip())  # Add the last record
 
     return formatted_lines
 
+
+import re
+import pandas as pd
+from datetime import datetime
+from .models import CrewMember
+
 def process_crew_details_file(attachment):
     """
-    Parse and process crew details from an unstructured file.
-    Extracts only CP and FO roles.
+    Parse and process crew details from an unstructured file,
+    but ONLY store records for CP and FO.
     """
     try:
         # Read file content
-        raw_content = attachment.content.decode('utf-8')
-        formatted_lines = preprocess_crew_file(raw_content)  # Preprocess data
-        parsed_data = []
+        raw_content = attachment.content.decode('utf-8').splitlines()
+        rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
 
-        valid_roles = {'CP', 'FO'}  # Only extract CP and FO
+        parsed_data = []
+        
+        # Only CP and FO will be stored:
+        roles_we_care_about = {'CP', 'FO'}
+
         flight_context = {}
 
-        for line_num, line in enumerate(formatted_lines, start=1):
+        for line_num, line in enumerate(rows, start=1):
             try:
                 # Detect flight header
                 flight_no = line[:4].strip()
-                flight_date_str = line[4:12].strip()
-                origin = line[12:15].strip()
-                destination = line[15:18].strip()
+                flight_date_str = line[4:13].strip()
+                origin = line[13:17].strip()
+                destination = line[17:20].strip()
 
                 print("\n=======================================================")
-                print(f"📌 Processing Line {line_num} -> Flight {flight_no} | {flight_date_str} | {origin} → {destination}")
-                print("=======================================================\n")
+                print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}")
+                print("\n=======================================================\n")
 
                 # Convert date
                 try:
@@ -1048,27 +1055,29 @@ def process_crew_details_file(attachment):
                     "destination": destination,
                 }
 
-                # Crew data starts after position 18
-                crew_data = line[18:].strip()
+                # Crew data starts after position 20
+                crew_data = line[20:].strip()
 
-                # **Improved Regex for CP/FO crew members**  
-                # ✅ Captures roles CP or FO  
-                # ✅ Allows for flexible spacing between role, ID, and name  
-                # ✅ Ignores other roles (FA, FE, etc.)  
+                # Regex to match role, crew ID, and name
                 crew_pattern = re.compile(
-                    r"\b(?P<role>CP|FO)\s+D?(?P<crew_id>\d{8})\s+(?P<name>[A-Z][A-Z\s]+?)(?=\s+(?:CP|FO|\b|$))"
+                    r"(?P<role>\b(?:CP|FO|FP|SA|FA|FE|AC)\b)\s+"
+                    r"(?P<crew_id>\d{8})(?P<name>.+?)(?=\b(?:CP|FO|FP|SA|FA|FE|AC)\b|$)"
                 )
-
-                crew_found = False  # Track if any CP/FO crew is found
 
                 for match in crew_pattern.finditer(crew_data):
                     role = match.group("role")
                     crew_id = match.group("crew_id")
                     name = match.group("name").strip()
 
-                    if role not in valid_roles:
-                        continue  # Skip non-CP/FO roles
+                    # Skip unless CP or FO
+                    if role not in roles_we_care_about:
+                        continue
 
+                    if not role or not crew_id or not name:
+                        print(f"Skipping malformed entry in line {line_num}: Role={role}, Crew ID={crew_id}, Name={name}")
+                        continue
+
+                    # Append parsed data ONLY for CP and FO
                     parsed_data.append({
                         **flight_context,
                         "role": role,
@@ -1076,27 +1085,22 @@ def process_crew_details_file(attachment):
                         "name": name,
                     })
 
-                    crew_found = True  # At least one CP/FO crew found
-
                     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                    print(f"✅ Crew Found! ID: {crew_id} | Role: {role} | Name: {name}")
-                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-
-                if not crew_found:
-                    print(f"⚠️ WARNING [Line {line_num}]: No CP/FO crew found in -> {crew_data}")
+                    print(f"\nCrew ID: {crew_id}\nRole: {role}\nName: {name}")
+                    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
             except ValueError as ve:
-                print(f"❌ Error in crew data on line {line_num}: {ve}")
+                print(f"Error in crew data on line {line_num}: {ve}")
             except Exception as e:
-                print(f"❌ Error processing line {line_num}: {e}")
+                print(f"Error processing line {line_num}: {e}")
 
         # Convert parsed data to DataFrame
         crew_df = pd.DataFrame(parsed_data)
         if crew_df.empty:
-            print("❌ No valid CP/FO data extracted.")
+            print("No valid data extracted.")
             return
 
-        # Save to the database
+        # Save to the database (CP and FO only)
         for _, row in crew_df.iterrows():
             try:
                 CrewMember.objects.update_or_create(
@@ -1111,15 +1115,12 @@ def process_crew_details_file(attachment):
                     }
                 )
             except Exception as db_err:
-                print(f"❌ Database error for {row['crew_id']}: {db_err}")
+                print(f"Database error for {row['crew_id']}: {db_err}")
 
-        print("✅ Crew details file processed successfully!")
+        print("Crew details file processed successfully.")
 
     except Exception as e:
-        print(f"❌ Error processing crew details file: {e}")
-
-
-
+        print(f"Error processing crew details file: {e}")
 
 
 
