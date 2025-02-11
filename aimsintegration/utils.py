@@ -884,29 +884,19 @@ def process_crew_details_file(attachment):
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
-        print("🔍 RAW CONTENT BEFORE PROCESSING:")
-        for line in rows:
-            print(repr(line))
 
         parsed_data = []
         roles_we_care_about = {'CP', 'FO'}
 
         # Regex: find any role + optional 'D' + 8 digits + name, up until the next role or end of line
-        # crew_pattern = re.compile(
-        #     r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
-        #     r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
-        #     r'(?P<name>.*?)'                              # non-greedy for name
-        #     r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
-        #     re.DOTALL
-        # )
-
         crew_pattern = re.compile(
-            r'(?P<role>\s(CP|FO|FP|SA|FA|FE|AC)\s+)'  # Role must have spaces before and after
-            r'(?P<crew_id>D?\d{8})'                   # Crew ID: optional 'D' + 8 digits
-            r'(?P<name>.*?)'                          # Capture full name (non-greedy)
-            r'(?=\s(CP|FO|FP|SA|FA|FE|AC)\s|$)',      # Stop at the next valid role (with spaces) or end of the line
+            r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
+            r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
+            r'(?P<name>.*?)'                              # non-greedy for name
+            r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
             re.DOTALL
         )
+
 
 
 
