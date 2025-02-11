@@ -889,21 +889,22 @@ def process_crew_details_file(attachment):
         roles_we_care_about = {'CP', 'FO'}
 
         # Regex: find any role + optional 'D' + 8 digits + name, up until the next role or end of line
+        # crew_pattern = re.compile(
+        #     r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
+        #     r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
+        #     r'(?P<name>.*?)'                              # non-greedy for name
+        #     r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
+        #     re.DOTALL
+        # )
+
         crew_pattern = re.compile(
-            r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
-            r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
-            r'(?P<name>.*?)'                              # non-greedy for name
-            r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
+            r'(?P<role>\s(CP|FO|FP|SA|FA|FE|AC)\s+)'  # Role must have spaces before and after
+            r'(?P<crew_id>D?\d{8})'                   # Crew ID: optional 'D' + 8 digits
+            r'(?P<name>.*?)'                          # Capture full name (non-greedy)
+            r'(?=\s(CP|FO|FP|SA|FA|FE|AC)\s|$)',      # Stop at the next valid role (with spaces) or end of the line
             re.DOTALL
         )
 
-        # crew_pattern = re.compile(
-        #     r'(?P<role>\s(CP|FO|FP|SA|FA|FE|AC)\s+)'  # Role must have a space before and after
-        #     r'(?P<crew_id>D?\d{8})'                   # Crew ID: optional 'D' + 8 digits
-        #     r'(?P<name>(?:\s+\S.*?))'                 # Name starts with a space and goes to the next role or end
-        #     r'(?=\s(CP|FO|FP|SA|FA|FE|AC)\s|$)',       # Stop capturing at next role or end of string
-        #     re.DOTALL
-        # )
 
 
         for line_num, line in enumerate(rows, start=1):
