@@ -884,6 +884,9 @@ def process_crew_details_file(attachment):
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
+        print("🔍 RAW CONTENT BEFORE PROCESSING:")
+        for line in rows:
+            print(repr(line))
 
         parsed_data = []
         roles_we_care_about = {'CP', 'FO'}
