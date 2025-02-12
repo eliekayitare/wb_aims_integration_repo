@@ -871,6 +871,114 @@ def preprocess_crew_file(content):
     return formatted_lines
 
 
+# import re
+# import pandas as pd
+# from datetime import datetime
+# from .models import CrewMember
+
+# def process_crew_details_file(attachment):
+#     """
+#     Parse and process crew details from an unstructured file,
+#     but ONLY store records for CP and FO (including 'D'-prefixed IDs).
+#     """
+#     try:
+#         raw_content = attachment.content.decode('utf-8').splitlines()
+#         rows = [line.strip() for line in raw_content if line.strip()]  # Remove empty lines
+
+#         parsed_data = []
+#         roles_we_care_about = {'CP', 'FO'}
+
+#         # Regex: find any role + optional 'D' + 8 digits + name, up until the next role or end of line
+#         crew_pattern = re.compile(
+#             # Group "role": Only match if it is a standalone token (negative lookbehind & lookahead)
+#             r'(?P<role>(?<!\S)(?:CP|FO|FP|SA|FA|FE|AC)(?!\S))\s+'
+#             r'(?P<crew_id>D?\d{8})'  # optional 'D' plus 8 digits
+#             r'(?P<name>.*?)'        # non-greedy for name
+#             # Look ahead for another standalone role OR end of string
+#             r'(?=(?<!\S)(?:CP|FO|FP|SA|FA|FE|AC)(?!\S)|$)',
+#             re.DOTALL
+#         )
+
+#         for line_num, line in enumerate(rows, start=1):
+#             try:
+#                 # 1) Extract flight details
+#                 flight_no       = line[:4].strip()
+#                 flight_date_str = line[4:13].strip()
+#                 origin          = line[13:17].strip()
+#                 destination     = line[17:20].strip()
+
+#                 try:
+#                     sd_date_utc = datetime.strptime(flight_date_str, "%d%m%Y").date()
+#                 except ValueError:
+#                     raise ValueError(f"Invalid date format: '{flight_date_str}'")
+
+#                 flight_context = {
+#                     "flight_no": flight_no,
+#                     "sd_date_utc": sd_date_utc,
+#                     "origin": origin,
+#                     "destination": destination,
+#                 }
+
+#                 # 2) Get crew data
+#                 crew_data = line[20:].strip()
+
+#                 # -- HERE is the key fix: remove consecutive repeated roles like 'CP CP' --
+#                 crew_data = re.sub(r'\b(CP|FO|FP|SA|FA|FE|AC)\b\s+\1', r'\1', crew_data)
+
+#                 # 3) Find all matches
+#                 for m in crew_pattern.finditer(crew_data):
+#                     role    = m.group("role")
+#                     crew_id = m.group("crew_id")
+#                     name    = m.group("name").strip()
+
+#                     if role in roles_we_care_about:
+#                         parsed_data.append({
+#                             **flight_context,
+#                             "role": role,
+#                             "crew_id": crew_id,
+#                             "name": name,
+#                         })
+#                         print("\n=======================================================")
+#                         print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}\nRole: {role}\nCrew ID: {crew_id}\nName: {name}")
+#                         print("\n=======================================================\n")
+
+#             except ValueError as ve:
+#                 print(f"Error in crew data on line {line_num}: {ve}")
+#             except Exception as e:
+#                 print(f"Error processing line {line_num}: {e}")
+
+#         # Convert to DataFrame
+#         if not parsed_data:
+#             print("No valid data extracted.")
+#             return
+
+#         crew_df = pd.DataFrame(parsed_data)
+
+#         # 4) Save only CP and FO
+#         for _, row in crew_df.iterrows():
+#             try:
+#                 CrewMember.objects.update_or_create(
+#                         flight_no=row["flight_no"],
+#                         sd_date_utc=row["sd_date_utc"],
+#                         origin=row["origin"],
+#                         destination=row["destination"],
+#                         crew_id=row["crew_id"],
+#                         defaults={
+#                             "role": row["role"],
+#                             "name": row["name"],
+#                             # ... etc.
+#                         }
+#                     )
+
+#             except Exception as db_err:
+#                 print(f"Database error for {row['crew_id']}: {db_err}")
+
+#         print("Crew details file processed successfully.")
+
+#     except Exception as e:
+#         print(f"Error processing crew details file: {e}")
+
+
 import re
 import pandas as pd
 from datetime import datetime
@@ -880,6 +988,7 @@ def process_crew_details_file(attachment):
     """
     Parse and process crew details from an unstructured file,
     but ONLY store records for CP and FO (including 'D'-prefixed IDs).
+    Overwrites any existing matching records instead of updating.
     """
     try:
         raw_content = attachment.content.decode('utf-8').splitlines()
@@ -898,17 +1007,6 @@ def process_crew_details_file(attachment):
             r'(?=(?<!\S)(?:CP|FO|FP|SA|FA|FE|AC)(?!\S)|$)',
             re.DOTALL
         )
-
-        # crew_pattern = re.compile(
-        #     r'(?P<role>(?:CP|FO|FP|SA|FA|FE|AC))\s+'      # e.g. "CP" plus spaces
-        #     r'(?P<crew_id>D?\d{8})'                       # optional 'D' plus 8 digits
-        #     r'(?P<name>.*?)'                              # non-greedy for name
-        #     r'(?=(?:CP|FO|FP|SA|FA|FE|AC)|$)',             # next role or end-of-line
-        #     re.DOTALL
-        # )
-
-
-
 
         for line_num, line in enumerate(rows, start=1):
             try:
@@ -933,7 +1031,7 @@ def process_crew_details_file(attachment):
                 # 2) Get crew data
                 crew_data = line[20:].strip()
 
-                # -- HERE is the key fix: remove consecutive repeated roles like 'CP CP' --
+                # -- Key fix: remove consecutive repeated roles like 'CP CP' --
                 crew_data = re.sub(r'\b(CP|FO|FP|SA|FA|FE|AC)\b\s+\1', r'\1', crew_data)
 
                 # 3) Find all matches
@@ -950,8 +1048,14 @@ def process_crew_details_file(attachment):
                             "name": name,
                         })
                         print("\n=======================================================")
-                        print(f"\nFlight Number: {flight_no}\nDate: {flight_date_str}\nOrigin: {origin}\nDestination: {destination}\nRole: {role}\nCrew ID: {crew_id}\nName: {name}")
-                        print("\n=======================================================\n")
+                        print(f"Flight Number: {flight_no}\n"
+                              f"Date: {flight_date_str}\n"
+                              f"Origin: {origin}\n"
+                              f"Destination: {destination}\n"
+                              f"Role: {role}\n"
+                              f"Crew ID: {crew_id}\n"
+                              f"Name: {name}")
+                        print("=======================================================\n")
 
             except ValueError as ve:
                 print(f"Error in crew data on line {line_num}: {ve}")
@@ -965,21 +1069,29 @@ def process_crew_details_file(attachment):
 
         crew_df = pd.DataFrame(parsed_data)
 
-        # 4) Save only CP and FO
+        # 4) Overwrite (delete+create) only CP and FO records
         for _, row in crew_df.iterrows():
             try:
-                CrewMember.objects.update_or_create(
-                        flight_no=row["flight_no"],
-                        sd_date_utc=row["sd_date_utc"],
-                        origin=row["origin"],
-                        destination=row["destination"],
-                        crew_id=row["crew_id"],
-                        defaults={
-                            "role": row["role"],
-                            "name": row["name"],
-                            # ... etc.
-                        }
-                    )
+                # Delete any existing entry with the same identifying fields
+                CrewMember.objects.filter(
+                    flight_no      = row["flight_no"],
+                    sd_date_utc    = row["sd_date_utc"],
+                    origin         = row["origin"],
+                    destination    = row["destination"],
+                    crew_id        = row["crew_id"]
+                ).delete()
+
+                # Create a new record with updated data
+                CrewMember.objects.create(
+                    flight_no   = row["flight_no"],
+                    sd_date_utc = row["sd_date_utc"],
+                    origin      = row["origin"],
+                    destination = row["destination"],
+                    crew_id     = row["crew_id"],
+                    role        = row["role"],
+                    name        = row["name"],
+                    # Add any other fields you need to persist here
+                )
 
             except Exception as db_err:
                 print(f"Database error for {row['crew_id']}: {db_err}")
@@ -988,8 +1100,6 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
-
-
 
 
 
