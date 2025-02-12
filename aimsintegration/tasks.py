@@ -560,87 +560,86 @@ def fetch_fdm_crew_data():
 
 
 
-# FDM project tasks
+# # FDM project tasks
 
 
-#Fetch flight and crew data modified within the last hour
-from django.utils.timezone import now, timedelta
-from django.db.models import F
-from .models import FdmFlightData, CrewMember
-# Calculate time range
-one_hour_ago = now() - timedelta(hours=1)
+# #Fetch flight and crew data modified within the last hour
+# from django.utils.timezone import now, timedelta
+# from django.db.models import F
+# from .models import FdmFlightData, CrewMember
+# # Calculate time range
+# one_hour_ago = now() - timedelta(hours=1)
 
-# Fetch flights updated in the last hour
-flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+# # Fetch flights updated in the last hour
+# flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
 
-# Fetch crew details for those flights
-crew_data = CrewMember.objects.filter(
-    flight_no__in=flight_data.values_list('flight_no', flat=True),
-    sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
-)
+# # Fetch crew details for those flights
+# crew_data = CrewMember.objects.filter(
+#     flight_no__in=flight_data.values_list('flight_no', flat=True),
+#     sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True)
+# )
 
 
 
-import csv
-import os
-import paramiko
-import logging
-from django.utils.timezone import now
-from django.conf import settings
-from paramiko.ssh_exception import SSHException, NoValidConnectionsError
+# import csv
+# import os
+# import paramiko
+# import logging
+# from django.utils.timezone import now
+# from django.conf import settings
+# from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 
-# Initialize logger
-logger = logging.getLogger(__name__)
+# # Initialize logger
+# logger = logging.getLogger(__name__)
 
-def generate_csv_for_fdm(flight_data):
-    """
-    Generate a CSV file for flight data without crew details.
-    """
-    file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
-    file_path = os.path.join(settings.MEDIA_ROOT, file_name)
+# def generate_csv_for_fdm(flight_data):
+#     """
+#     Generate a CSV file for flight data without crew details.
+#     """
+#     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
+#     file_path = os.path.join(settings.MEDIA_ROOT, file_name)
 
-    # Header row
-    header = [
-        "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
-        "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA","ATD","OFF","ON","ATA"
-    ]
+#     # Header row
+#     header = [
+#         "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA",
+#         "TKOF", "TDOWN", "BLOF", "BLON", "ETD", "ETA","ATD","OFF","ON","ATA"
+#     ]
 
-    # Create the CSV file
-    with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(header)  # Write header row
+#     # Create the CSV file
+#     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+#         writer = csv.writer(csvfile)
+#         writer.writerow(header)  # Write header row
 
-        # Write flight data rows
-        for flight in flight_data:
-            # Format times as HH:MM
-            format_time = lambda t: t.strftime("%H:%M") if t else None
+#         # Write flight data rows
+#         for flight in flight_data:
+#             # Format times as HH:MM
+#             format_time = lambda t: t.strftime("%H:%M") if t else None
 
-            # Flight data row
-            flight_row = [
-                flight.sd_date_utc,  # DAY
-                flight.flight_no,  # FLT
-                flight.flight_type,  # FLTYPE
-                flight.tail_no,  # REG
-                flight.dep_code_icao,  # DEP
-                flight.arr_code_icao,  # ARR
-                format_time(flight.std_utc),  # STD
-                format_time(flight.sta_utc),  # STA
-                format_time(flight.takeoff_utc),  # TKOF
-                format_time(flight.touchdown_utc),  # TDOWN
-                format_time(flight.atd_utc),  # BLOF
-                format_time(flight.ata_utc),  # BLON
-                format_time(flight.etd_utc),  # ETD
-                format_time(flight.eta_utc),  # ETA
-                format_time(flight.atd_utc),  # ATD
-                format_time(flight.takeoff_utc),  # OFF
-                format_time(flight.touchdown_utc),  # ON
-                format_time(flight.ata_utc),  # ATA
-            ]
-            writer.writerow(flight_row)
+#             # Flight data row
+#             flight_row = [
+#                 flight.sd_date_utc,  # DAY
+#                 flight.flight_no,  # FLT
+#                 flight.flight_type,  # FLTYPE
+#                 flight.tail_no,  # REG
+#                 flight.dep_code_icao,  # DEP
+#                 flight.arr_code_icao,  # ARR
+#                 format_time(flight.std_utc),  # STD
+#                 format_time(flight.sta_utc),  # STA
+#                 format_time(flight.takeoff_utc),  # TKOF
+#                 format_time(flight.touchdown_utc),  # TDOWN
+#                 format_time(flight.atd_utc),  # BLOF
+#                 format_time(flight.ata_utc),  # BLON
+#                 format_time(flight.etd_utc),  # ETD
+#                 format_time(flight.eta_utc),  # ETA
+#                 format_time(flight.atd_utc),  # ATD
+#                 format_time(flight.takeoff_utc),  # OFF
+#                 format_time(flight.touchdown_utc),  # ON
+#                 format_time(flight.ata_utc),  # ATA
+#             ]
+#             writer.writerow(flight_row)
 
-    logger.info(f"CSV file generated at: {file_path}")
-    return file_path
-
+#     logger.info(f"CSV file generated at: {file_path}")
+#     return file_path
 
 
 
@@ -652,6 +651,7 @@ def generate_csv_for_fdm(flight_data):
 # from django.conf import settings
 # from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 # from celery import shared_task
+# from .models import FdmFlightData
 
 # # Initialize logger
 # logger = logging.getLogger(__name__)
@@ -659,13 +659,25 @@ def generate_csv_for_fdm(flight_data):
 # @shared_task
 # def hourly_upload_csv_to_fdm():
 #     """
-#     Celery task to generate, upload CSV to FDM server, and clean up old files except the current one.
+#     Celery task to generate and upload CSV to FDM server, 
+#     focusing only on records with complete actual timings,
+#     and clean up old files except the current one.
 #     """
 #     # Calculate the time range
 #     one_hour_ago = now() - timedelta(hours=1)
 
-#     # Fetch flight data
-#     flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+#     # Fetch only flight data with complete actual timings
+#     flight_data = FdmFlightData.objects.filter(
+#         updated_at__gte=one_hour_ago,
+#         atd_utc__isnull=False,
+#         takeoff_utc__isnull=False,
+#         touchdown_utc__isnull=False,
+#         ata_utc__isnull=False
+#     )
+
+#     if not flight_data.exists():
+#         logger.info("No flight records with complete actual timings to process. Skipping upload.")
+#         return
 
 #     # Generate CSV file (new version: without crew data)
 #     local_file_path = generate_csv_for_fdm(flight_data)
@@ -718,6 +730,127 @@ def generate_csv_for_fdm(flight_data):
 #         logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
 
 
+import csv
+import os
+import logging
+from django.conf import settings
+from django.utils.timezone import now, timedelta
+from .models import FdmFlightData, CrewMember
+
+logger = logging.getLogger(__name__)
+
+def fetch_recent_flights_and_crew():
+    """
+    Fetch flights updated within the last hour 
+    and corresponding crew data, matched on (flight_no, sd_date_utc, origin, destination).
+    """
+    one_hour_ago = now() - timedelta(hours=1)
+    
+    # 1) Flights updated in the last hour
+    flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
+    
+    # 2) Crew for those flights
+    crew_data = CrewMember.objects.filter(
+        flight_no__in=flight_data.values_list('flight_no', flat=True),
+        sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True),
+        origin__in=flight_data.values_list('dep_code_icao', flat=True),
+        destination__in=flight_data.values_list('arr_code_icao', flat=True)
+    )
+    
+    return flight_data, crew_data
+
+
+def generate_csv_for_fdm(flight_data, crew_data):
+    """
+    Generate a CSV with columns:
+      DAY, FLT, FLTYPE, REG, DEP, ARR, STD, STA, TKOF, TDOWN, BLOF, BLON,
+      ETD, ETA, ATD, OFF, ON, ATA, CP, FO
+    The 'CP' and 'FO' columns will contain comma-separated crew IDs if multiple exist.
+    """
+    file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
+    file_path = os.path.join(settings.MEDIA_ROOT, file_name)
+
+    #
+    # 1) Build a lookup: flight_key -> { "CP": [...], "FO": [...] }
+    #
+    #    flight_key = (flight_no, sd_date_utc, origin, destination)
+    #
+    flight_crew_lookup = {}
+    for c in crew_data:
+        key = (c.flight_no, c.sd_date_utc, c.origin, c.destination)
+        if key not in flight_crew_lookup:
+            flight_crew_lookup[key] = {"CP": [], "FO": []}
+        
+        # Only store CP/FO
+        if c.role == "CP":
+            flight_crew_lookup[key]["CP"].append(str(c.crew_id))
+        elif c.role == "FO":
+            flight_crew_lookup[key]["FO"].append(str(c.crew_id))
+
+    #
+    # 2) Define the fixed header (base flight columns plus CP, FO)
+    #
+    header = [
+        "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR",
+        "STD", "STA", "TKOF", "TDOWN", "BLOF", "BLON",
+        "ETD", "ETA", "ATD", "OFF", "ON", "ATA",
+        "CP",
+        "FO"
+    ]
+
+    #
+    # 3) Write the CSV
+    #
+    with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(header)  # Header row
+
+        def format_time(t):
+            return t.strftime("%H:%M") if t else ""
+
+        for flight in flight_data:
+            # Build the lookup key
+            key = (
+                flight.flight_no,
+                flight.sd_date_utc,
+                flight.dep_code_icao,
+                flight.arr_code_icao
+            )
+
+            # Get any CP/FO crew for this flight
+            crew_dict = flight_crew_lookup.get(key, {"CP": [], "FO": []})
+            cp_str = ",".join(crew_dict["CP"])
+            fo_str = ",".join(crew_dict["FO"])
+
+            # Build row
+            row = [
+                flight.sd_date_utc,                 # DAY
+                flight.flight_no,                   # FLT
+                flight.flight_type,                 # FLTYPE
+                flight.tail_no,                     # REG
+                flight.dep_code_icao,               # DEP
+                flight.arr_code_icao,               # ARR
+                format_time(flight.std_utc),        # STD
+                format_time(flight.sta_utc),        # STA
+                format_time(flight.takeoff_utc),    # TKOF
+                format_time(flight.touchdown_utc),  # TDOWN
+                format_time(flight.atd_utc),        # BLOF
+                format_time(flight.ata_utc),        # BLON
+                format_time(flight.etd_utc),        # ETD
+                format_time(flight.eta_utc),        # ETA
+                format_time(flight.atd_utc),        # ATD
+                format_time(flight.takeoff_utc),    # OFF
+                format_time(flight.touchdown_utc),  # ON
+                format_time(flight.ata_utc),        # ATA
+                cp_str,                              # CP
+                fo_str                               # FO
+            ]
+            writer.writerow(row)
+
+    logger.info(f"CSV file generated at: {file_path}")
+    return file_path
+
+
 
 import os
 import paramiko
@@ -727,23 +860,24 @@ from django.conf import settings
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 from celery import shared_task
 from .models import FdmFlightData
+from .utils import fetch_recent_flights_and_crew, generate_csv_for_fdm
 
-# Initialize logger
 logger = logging.getLogger(__name__)
 
 @shared_task
 def hourly_upload_csv_to_fdm():
     """
-    Celery task to generate and upload CSV to FDM server, 
-    focusing only on records with complete actual timings,
-    and clean up old files except the current one.
+    1) Fetch flights & crew updated in the last hour.
+    2) Filter only those flights with complete actual timings.
+    3) Generate CSV (with CP, FO columns).
+    4) SFTP to remote server.
+    5) Clean up old CSV files.
     """
-    # Calculate the time range
-    one_hour_ago = now() - timedelta(hours=1)
+    # 1) Fetch flight + crew
+    flight_data, crew_data = fetch_recent_flights_and_crew()
 
-    # Fetch only flight data with complete actual timings
-    flight_data = FdmFlightData.objects.filter(
-        updated_at__gte=one_hour_ago,
+    # 2) Filter down to flights with complete timings
+    flight_data = flight_data.filter(
         atd_utc__isnull=False,
         takeoff_utc__isnull=False,
         touchdown_utc__isnull=False,
@@ -751,58 +885,61 @@ def hourly_upload_csv_to_fdm():
     )
 
     if not flight_data.exists():
-        logger.info("No flight records with complete actual timings to process. Skipping upload.")
+        logger.info("No flights with complete actual timings. Skipping upload.")
         return
 
-    # Generate CSV file (new version: without crew data)
-    local_file_path = generate_csv_for_fdm(flight_data)
+    # 3) Generate the CSV
+    local_file_path = generate_csv_for_fdm(flight_data, crew_data)
 
-    # Fetch server details from settings
+    if not os.path.exists(local_file_path):
+        logger.error(f"File not found: {local_file_path}. Skipping upload.")
+        return
+
+    # 4) Upload file
     fdm_host = settings.FDM_HOST
     fdm_port = int(settings.FDM_PORT)
     fdm_username = settings.FDM_USERNAME
     fdm_password = settings.FDM_PASSWORD
     fdm_destination_dir = settings.FDM_DESTINATION_DIR
 
-    # Ensure the file exists
-    if not os.path.exists(local_file_path):
-        logger.error(f"File {local_file_path} does not exist. Skipping upload.")
-        return
-
     try:
-        # SFTP Upload Logic
         transport = paramiko.Transport((fdm_host, fdm_port))
         transport.connect(username=fdm_username, password=fdm_password)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
-        # Define remote path
         remote_path = os.path.join(fdm_destination_dir, os.path.basename(local_file_path))
-        logger.info(f"Uploading file to {remote_path}...")
+        logger.info(f"Uploading {local_file_path} to {remote_path}...")
 
-        # Upload file
         sftp.put(local_file_path, remote_path)
-        logger.info(f"File successfully uploaded to {remote_path}.")
+        logger.info("File uploaded successfully.")
 
         # Close connections
         sftp.close()
         transport.close()
 
-        # Clean up local files, excluding the current file
+        # 5) Clean up older CSV files
         local_dir = os.path.dirname(local_file_path)
-        for file in os.listdir(local_dir):
-            file_path = os.path.join(local_dir, file)
-            # Skip the currently uploaded file
-            if file_path != local_file_path and file.startswith("aims_") and file.endswith(".csv"):
+        for file_name in os.listdir(local_dir):
+            file_path = os.path.join(local_dir, file_name)
+            # Only remove older aims_*.csv files, skipping the current one
+            if (file_path != local_file_path
+                and file_name.startswith("aims_")
+                and file_name.endswith(".csv")):
                 try:
                     os.remove(file_path)
-                    logger.info(f"Deleted old local file: {file_path}")
+                    logger.info(f"Deleted old file: {file_path}")
                 except Exception as e:
-                    logger.error(f"Failed to delete old file {file_path}: {e}")
+                    logger.error(f"Failed deleting {file_path}: {e}")
 
     except (SSHException, NoValidConnectionsError) as e:
         logger.error(f"SFTP upload failed: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
+        logger.error(f"Unexpected error uploading CSV: {e}", exc_info=True)
+
+
+
+
+
 
 
 
