@@ -1221,25 +1221,47 @@ def generate_others_payslip(request):
 #     response['Content-Disposition'] = f'attachment; filename="{filename}"'
 #     return response
 
-
 def generate_payslip_for_bank(request):
     # 1) Read ?month=YYYY-MM and ?bank_name
     month_str = request.GET.get('month')
     bank_name = request.GET.get('bank_name')
-    if not month_str or not bank_name:
-        return HttpResponse("Month and bank name are required parameters.", status=400)
 
-    # Parse the month
-    year, mo = map(int, month_str.split('-'))
-    filter_month = date(year, mo, 1)
+    # If bank_name is missing, return an error
+    if not bank_name:
+        return HttpResponse("Bank name is a required parameter.", status=400)
 
-    # 2) Fetch invoices for the specific bank
+    # If month_str is None, empty, or literally the string 'null',
+    # handle it like a missing month and use the latest in Invoice table.
+    if not month_str or month_str.lower() == 'null':
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        # Otherwise, parse the user-provided month
+        try:
+            year, mo = map(int, month_str.split('-'))
+            filter_month = date(year, mo, 1)
+        except ValueError:
+            return HttpResponse(
+                f"Invalid month format: '{month_str}'. Expected YYYY-MM or use 'null'.",
+                status=400
+            )
+
+    # 2) Fetch invoices for the specific bank (must be non-zero total_amount)
     invoices = (
         Invoice.objects
         .filter(month=filter_month, total_amount__gt=0)
         .select_related('crew')
         .order_by('crew__crew_id')
     )
+
+    if not invoices.exists():
+        return HttpResponse(f"No nonzero invoices found for month {filter_month}.", status=404)
 
     # 3) Connect to MSSQL to get the exchange rate
     with connections['mssql'].cursor() as cursor:
@@ -1260,7 +1282,7 @@ def generate_payslip_for_bank(request):
 
     exchange_rate = Decimal(str(row[0]))
 
-    # 4) Fetch bank details for these crew IDs
+    # 4) Gather Crew IDs, then fetch their bank details
     crew_ids = list({inv.crew.crew_id for inv in invoices})
     wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
     employee_bank_data = {}
@@ -1283,7 +1305,7 @@ def generate_payslip_for_bank(request):
                 'account_no': account_no.strip() if account_no else '',
             }
 
-    # 5) Filter invoices for the given bank name, compute RWF using the fetched exchange rate
+    # 5) Filter invoices for the given bank name, compute amounts
     items = []
     for inv in invoices:
         wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
@@ -1309,10 +1331,9 @@ def generate_payslip_for_bank(request):
 
     # 6) Calculate totals
     total_usd = sum([Decimal(item['usd_amount']) for item in items])
-    # Convert item['rwf_amount'] back to Decimal (removing commas) to sum
     total_rwf = sum([Decimal(item['rwf_amount'].replace(',', '')) for item in items])
 
-    # 7) Prepare context for the template
+    # 7) Prepare context
     context = {
         'items': items,
         'filter_month': filter_month,
