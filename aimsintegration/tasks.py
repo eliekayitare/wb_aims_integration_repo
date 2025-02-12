@@ -860,7 +860,6 @@ from django.conf import settings
 from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 from celery import shared_task
 from .models import FdmFlightData
-from .utils import fetch_recent_flights_and_crew, generate_csv_for_fdm
 
 logger = logging.getLogger(__name__)
 
