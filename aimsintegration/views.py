@@ -1221,6 +1221,8 @@ def generate_others_payslip(request):
 #     response['Content-Disposition'] = f'attachment; filename="{filename}"'
 #     return response
 
+
+
 def generate_payslip_for_bank(request):
     # 1) Read ?month=YYYY-MM and ?bank_name
     month_str = request.GET.get('month')
