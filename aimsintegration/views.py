@@ -1030,7 +1030,6 @@ def generate_others_payslip(request):
         return HttpResponse("No invoices found for others.", status=404)
 
     # 3) Connect to MSSQL to get the exchange rate
-    exchange_rate = Decimal('1.00')
     with connections['mssql'].cursor() as cursor:
         cursor.execute("""
             SELECT [Relational Exch_ Rate Amount]
@@ -1043,9 +1042,11 @@ def generate_others_payslip(request):
               );
         """)
         row = cursor.fetchone()
-        if not row:
-            return HttpResponse("No exchange rate found.", status=400)
-        exchange_rate = Decimal(str(row[0]))
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
 
     # 4a) Gather all unique crew WB numbers and format them
     crew_ids = list({inv.crew.crew_id for inv in other_invoices})
@@ -1127,6 +1128,100 @@ def generate_others_payslip(request):
 
 
 
+# def generate_payslip_for_bank(request):
+#     # 1) Read ?month=YYYY-MM and ?bank_name
+#     month_str = request.GET.get('month')
+#     bank_name = request.GET.get('bank_name')
+#     if not month_str or not bank_name:
+#         return HttpResponse("Month and bank name are required parameters.", status=400)
+
+#     # Parse the month
+#     year, mo = map(int, month_str.split('-'))
+#     filter_month = date(year, mo, 1)
+
+#     # 2) Fetch invoices for the specific bank
+#     invoices = (
+#         Invoice.objects
+#         .filter(month=filter_month, total_amount__gt=0)
+#         .select_related('crew')
+#         .order_by('crew__crew_id')
+#     )
+
+#     # Fetch bank details
+#     crew_ids = list({inv.crew.crew_id for inv in invoices})
+#     wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+#     employee_bank_data = {}
+
+#     if wb_formatted_ids:
+#         placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+#         query = f"""
+#             SELECT [No_], [Bank Name], [Bank Account No]
+#             FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+#             WHERE [No_] IN ({placeholders})
+#         """
+#         with connections['mssql'].cursor() as cursor:
+#             cursor.execute(query, wb_formatted_ids)
+#             rows = cursor.fetchall()
+
+#         for no_, b_name, account_no in rows:
+#             formatted_no = no_.strip()
+#             employee_bank_data[formatted_no] = {
+#                 'bank_name': b_name.strip() if b_name else '',
+#                 'account_no': account_no.strip() if account_no else '',
+#             }
+
+#     # Filter invoices for the given bank name
+#     items = []
+#     for inv in invoices:
+#         wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+#         bank_data = employee_bank_data.get(wb_formatted, {'bank_name': '', 'account_no': '-'})
+#         if bank_data['bank_name'] != bank_name:
+#             continue
+
+#         usd_amount = inv.total_amount
+#         rwf_amount = (usd_amount * Decimal(1.0)).quantize(Decimal('0.00'))
+
+#         items.append({
+#             'wb_no': inv.crew.crew_id,
+#             'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+#             'position': inv.crew.position,
+#             'usd_amount': usd_amount,
+#             'rwf_amount': f"{rwf_amount:,.2f}",
+#             'bank_name': bank_data['bank_name'],
+#             'account_no': bank_data['account_no'],
+#         })
+
+#     if not items:
+#         return HttpResponse(f"No invoices found for bank: {bank_name}", status=404)
+
+#     # Calculate totals
+#     total_usd = sum([Decimal(item['usd_amount']) for item in items])
+#     total_rwf = sum([Decimal(item['rwf_amount'].replace(',', '')) for item in items])
+
+#     # Prepare context for the template
+#     context = {
+#         'items': items,
+#         'filter_month': filter_month,
+#         'exchange_rate': 1.0,  # Assuming exchange rate is already applied
+#         'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
+#         'total_usd': f"{total_usd:,.2f}",
+#         'total_rwf': f"{total_rwf:,.2f}",
+#         'current_date': datetime.now().strftime("%B %d, %Y"),
+#     }
+
+#     # Render and generate the PDF
+#     html_string = render_to_string('aimsintegration/payslip_template.html', context)
+#     pdf_file = convert_html_to_pdf(html_string)
+#     if not pdf_file:
+#         return HttpResponse(f"Error generating payslip for bank: {bank_name}", status=500)
+
+#     # Return the PDF response
+#     response = HttpResponse(pdf_file, content_type='application/pdf')
+#     filename = f"{bank_name.replace(' ', '_')}_Crew Allowance Slip_{filter_month.strftime('%Y-%m')}.pdf"
+#     response['Content-Disposition'] = f'attachment; filename="{filename}"'
+#     return response
+
+
 def generate_payslip_for_bank(request):
     # 1) Read ?month=YYYY-MM and ?bank_name
     month_str = request.GET.get('month')
@@ -1146,7 +1241,26 @@ def generate_payslip_for_bank(request):
         .order_by('crew__crew_id')
     )
 
-    # Fetch bank details
+    # 3) Connect to MSSQL to get the exchange rate
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = 'USD'
+              AND [Starting Date] = (
+                  SELECT MAX([Starting Date])
+                  FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                  WHERE [Currency Code] = 'USD'
+              );
+        """)
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    # 4) Fetch bank details for these crew IDs
     crew_ids = list({inv.crew.crew_id for inv in invoices})
     wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
     employee_bank_data = {}
@@ -1169,7 +1283,7 @@ def generate_payslip_for_bank(request):
                 'account_no': account_no.strip() if account_no else '',
             }
 
-    # Filter invoices for the given bank name
+    # 5) Filter invoices for the given bank name, compute RWF using the fetched exchange rate
     items = []
     for inv in invoices:
         wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
@@ -1178,7 +1292,7 @@ def generate_payslip_for_bank(request):
             continue
 
         usd_amount = inv.total_amount
-        rwf_amount = (usd_amount * Decimal(1.0)).quantize(Decimal('0.00'))
+        rwf_amount = (usd_amount * exchange_rate).quantize(Decimal('0.00'))
 
         items.append({
             'wb_no': inv.crew.crew_id,
@@ -1193,32 +1307,34 @@ def generate_payslip_for_bank(request):
     if not items:
         return HttpResponse(f"No invoices found for bank: {bank_name}", status=404)
 
-    # Calculate totals
+    # 6) Calculate totals
     total_usd = sum([Decimal(item['usd_amount']) for item in items])
+    # Convert item['rwf_amount'] back to Decimal (removing commas) to sum
     total_rwf = sum([Decimal(item['rwf_amount'].replace(',', '')) for item in items])
 
-    # Prepare context for the template
+    # 7) Prepare context for the template
     context = {
         'items': items,
         'filter_month': filter_month,
-        'exchange_rate': 1.0,  # Assuming exchange rate is already applied
+        'exchange_rate': exchange_rate,
         'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
         'total_usd': f"{total_usd:,.2f}",
         'total_rwf': f"{total_rwf:,.2f}",
         'current_date': datetime.now().strftime("%B %d, %Y"),
     }
 
-    # Render and generate the PDF
+    # 8) Render and generate the PDF
     html_string = render_to_string('aimsintegration/payslip_template.html', context)
     pdf_file = convert_html_to_pdf(html_string)
     if not pdf_file:
         return HttpResponse(f"Error generating payslip for bank: {bank_name}", status=500)
 
-    # Return the PDF response
+    # 9) Return the PDF response
     response = HttpResponse(pdf_file, content_type='application/pdf')
-    filename = f"{bank_name.replace(' ', '_')}_Crew Allowance Slip_{filter_month.strftime('%Y-%m')}.pdf"
+    filename = f"{bank_name.replace(' ', '_')}_Crew_Allowance_Slip_{filter_month.strftime('%Y-%m')}.pdf"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
 
 
 from django.http import JsonResponse
