@@ -170,42 +170,6 @@ def fetch_acars_messages(self):
 
 
 
-
-# @shared_task
-# def fetch_acars_messages():
-#     account = get_exchange_account()
-#     logger.info("Fetching and processing ACARS messages...")
-
-#     # Fetch the oldest unread email safely
-#     emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
-#     email = next(iter(emails), None)  # Use `next` to get the first email or `None` if empty
-
-#     while email:
-#         # Check if the email contains "M16" in the body
-#         if "M16" in email.body:
-#             logger.info(f"Skipping 'M16' ACARS message: {email.subject}")
-#             email.is_read = True
-#             email.save(update_fields=['is_read'])
-#             logger.info("Marked 'M16' message as read. Proceeding to the next message.")
-#         else:
-#             # Log and process the ACARS message
-#             logger.info(f"Processing ACARS email with subject: {email.subject}")
-#             process_acars_message(email)
-
-#             # Mark as read to avoid reprocessing
-#             email.is_read = True
-#             email.save(update_fields=['is_read'])
-
-#             logger.info("Processed an ACARS message. Exiting after handling one message.")
-#             break  # Exit after processing one non-"M16" message
-
-#         # Fetch the next oldest unread email
-#         emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
-#         email = next(iter(emails), None)  # Get the next email or `None` if no more emails
-
-#     if not email:
-#         logger.info("No more unread ACARS messages or only 'M16' messages left. Task will run again at the next schedule.")
-
 import os
 import paramiko
 import time

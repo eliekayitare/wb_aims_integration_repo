@@ -1031,7 +1031,7 @@ def process_crew_details_file(attachment):
                 # 2) Get crew data
                 crew_data = line[20:].strip()
 
-                # -- Key fix: remove consecutive repeated roles like 'CP CP' --
+                # Remove consecutive repeated roles like 'CP CP'
                 crew_data = re.sub(r'\b(CP|FO|FP|SA|FA|FE|AC)\b\s+\1', r'\1', crew_data)
 
                 # 3) Find all matches
@@ -1062,7 +1062,7 @@ def process_crew_details_file(attachment):
             except Exception as e:
                 print(f"Error processing line {line_num}: {e}")
 
-        # Convert to DataFrame
+        # Convert parsed data to DataFrame
         if not parsed_data:
             print("No valid data extracted.")
             return
@@ -1100,6 +1100,7 @@ def process_crew_details_file(attachment):
 
     except Exception as e:
         print(f"Error processing crew details file: {e}")
+
 
 
 
