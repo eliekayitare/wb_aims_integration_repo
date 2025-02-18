@@ -1072,26 +1072,46 @@ def process_crew_details_file(attachment):
         # 4) Overwrite (delete+create) only CP and FO records
         for _, row in crew_df.iterrows():
             try:
-                # Delete any existing entry with the same identifying fields
+                # # Delete any existing entry with the same identifying fields
+                # CrewMember.objects.filter(
+                #     flight_no      = row["flight_no"],
+                #     sd_date_utc    = row["sd_date_utc"],
+                #     origin         = row["origin"],
+                #     destination    = row["destination"],
+                #     crew_id        = row["crew_id"]
+                # ).delete()
+
+                # # Create a new record with updated data
+                # CrewMember.objects.create(
+                #     flight_no   = row["flight_no"],
+                #     sd_date_utc = row["sd_date_utc"],
+                #     origin      = row["origin"],
+                #     destination = row["destination"],
+                #     crew_id     = row["crew_id"],
+                #     role        = row["role"],
+                #     name        = row["name"],
+                #     # Add any other fields you need to persist here
+                # )
+                # For each flight group (flight_no, sd_date_utc, origin, destination) in your parsed DataFrame:
                 CrewMember.objects.filter(
-                    flight_no      = row["flight_no"],
-                    sd_date_utc    = row["sd_date_utc"],
-                    origin         = row["origin"],
-                    destination    = row["destination"],
-                    crew_id        = row["crew_id"]
+                    flight_no=flight_no,
+                    sd_date_utc=sd_date_utc,
+                    origin=origin,
+                    destination=destination
                 ).delete()
 
-                # Create a new record with updated data
+                # Then insert whatever CP/FO entries you extracted for that flight:
                 CrewMember.objects.create(
-                    flight_no   = row["flight_no"],
-                    sd_date_utc = row["sd_date_utc"],
-                    origin      = row["origin"],
-                    destination = row["destination"],
-                    crew_id     = row["crew_id"],
-                    role        = row["role"],
-                    name        = row["name"],
-                    # Add any other fields you need to persist here
+                    flight_no=flight_no,
+                    sd_date_utc=sd_date_utc,
+                    origin=origin,
+                    destination=destination,
+                    crew_id=row["crew_id"],
+                    role=row["role"],
+                    name=row["name"],
+                    # ...
                 )
+
 
             except Exception as db_err:
                 print(f"Database error for {row['crew_id']}: {db_err}")
