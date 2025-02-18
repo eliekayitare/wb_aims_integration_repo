@@ -951,7 +951,6 @@ def generate_csv_for_fdm(flight_data, crew_data):
 #     return file_path
 
 
-
 import os
 import paramiko
 import logging
@@ -961,22 +960,22 @@ from paramiko.ssh_exception import SSHException, NoValidConnectionsError
 from celery import shared_task
 from .models import FdmFlightData
 
+# Initialize logger
 logger = logging.getLogger(__name__)
 
 @shared_task
 def hourly_upload_csv_to_fdm():
     """
-    1) Fetch flights & crew updated in the last hour.
-    2) Filter only those flights with complete actual timings.
-    3) Generate CSV (with CP, FO columns).
-    4) SFTP to remote server.
-    5) Clean up old CSV files.
+    Celery task to generate and upload CSV to FDM server, 
+    focusing only on records with complete actual timings,
+    and clean up old files except the current one.
     """
-    # 1) Fetch flight + crew
-    flight_data, crew_data = fetch_recent_flights_and_crew()
+    # Calculate the time range
+    one_hour_ago = now() - timedelta(hours=1)
 
-    # 2) Filter down to flights with complete timings
-    flight_data = flight_data.filter(
+    # Fetch only flight data with complete actual timings
+    flight_data = FdmFlightData.objects.filter(
+        updated_at__gte=one_hour_ago,
         atd_utc__isnull=False,
         takeoff_utc__isnull=False,
         touchdown_utc__isnull=False,
@@ -984,56 +983,59 @@ def hourly_upload_csv_to_fdm():
     )
 
     if not flight_data.exists():
-        logger.info("No flights with complete actual timings. Skipping upload.")
+        logger.info("No flight records with complete actual timings to process. Skipping upload.")
         return
 
-    # 3) Generate the CSV
-    local_file_path = generate_csv_for_fdm(flight_data, crew_data)
+    # Generate CSV file (new version: without crew data)
+    local_file_path = generate_csv_for_fdm(flight_data)
 
-    if not os.path.exists(local_file_path):
-        logger.error(f"File not found: {local_file_path}. Skipping upload.")
-        return
-
-    # 4) Upload file
+    # Fetch server details from settings
     fdm_host = settings.FDM_HOST
     fdm_port = int(settings.FDM_PORT)
     fdm_username = settings.FDM_USERNAME
     fdm_password = settings.FDM_PASSWORD
     fdm_destination_dir = settings.FDM_DESTINATION_DIR
 
+    # Ensure the file exists
+    if not os.path.exists(local_file_path):
+        logger.error(f"File {local_file_path} does not exist. Skipping upload.")
+        return
+
     try:
+        # SFTP Upload Logic
         transport = paramiko.Transport((fdm_host, fdm_port))
         transport.connect(username=fdm_username, password=fdm_password)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
+        # Define remote path
         remote_path = os.path.join(fdm_destination_dir, os.path.basename(local_file_path))
-        logger.info(f"Uploading {local_file_path} to {remote_path}...")
+        logger.info(f"Uploading file to {remote_path}...")
 
+        # Upload file
         sftp.put(local_file_path, remote_path)
-        logger.info("File uploaded successfully.")
+        logger.info(f"File successfully uploaded to {remote_path}.")
 
         # Close connections
         sftp.close()
         transport.close()
 
-        # 5) Clean up older CSV files
+        # Clean up local files, excluding the current file
         local_dir = os.path.dirname(local_file_path)
-        for file_name in os.listdir(local_dir):
-            file_path = os.path.join(local_dir, file_name)
-            # Only remove older aims_*.csv files, skipping the current one
-            if (file_path != local_file_path
-                and file_name.startswith("aims_")
-                and file_name.endswith(".csv")):
+        for file in os.listdir(local_dir):
+            file_path = os.path.join(local_dir, file)
+            # Skip the currently uploaded file
+            if file_path != local_file_path and file.startswith("aims_") and file.endswith(".csv"):
                 try:
                     os.remove(file_path)
-                    logger.info(f"Deleted old file: {file_path}")
+                    logger.info(f"Deleted old local file: {file_path}")
                 except Exception as e:
-                    logger.error(f"Failed deleting {file_path}: {e}")
+                    logger.error(f"Failed to delete old file {file_path}: {e}")
 
     except (SSHException, NoValidConnectionsError) as e:
         logger.error(f"SFTP upload failed: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"Unexpected error uploading CSV: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred during file upload: {e}", exc_info=True)
+
 
 
 
