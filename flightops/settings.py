@@ -286,14 +286,14 @@ CELERY_BEAT_SCHEDULE = {
     #Fetch Crew Data - Runs every 15 minutes
     'fetch-crew-data-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-        'schedule': crontab(minute='*/2'),  # Every 15 minutes
+        'schedule': crontab(minute='*/16'),  # Every 16 minutes
         'options': {'run_immediately': False}
     },
 
     # UPload FDM Data - runs every 1 hour
     'upload-fdm-data-every-hour': {
         'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
-        'schedule': crontab(minute='*/3'),  # Every 1 hour
+        'schedule': crontab(minute='*/60'),  # Every 1 hour
         'options': {'run_immediately': False}
         
     },
