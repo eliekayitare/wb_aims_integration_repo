@@ -293,7 +293,7 @@ CELERY_BEAT_SCHEDULE = {
     # UPload FDM Data - runs every 1 hour
     'upload-fdm-data-every-hour': {
         'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
-        'schedule': crontab(minute='*/60'),  # Every 1 hour
+        'schedule': crontab(minute='*/3'),  # Every 1 hour
         'options': {'run_immediately': False}
         
     },
