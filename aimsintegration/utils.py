@@ -1078,7 +1078,7 @@ def process_crew_details_file(attachment):
                     sd_date_utc    = row["sd_date_utc"],
                     origin         = row["origin"],
                     destination    = row["destination"],
-                    crew_id        = row["crew_id"]
+                    # crew_id        = row["crew_id"]
                 ).delete()
 
                 # Create a new record with updated data
