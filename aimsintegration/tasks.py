@@ -761,8 +761,8 @@ def generate_csv_for_fdm(flight_data, crew_data):
         "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR",
         "STD", "STA", "TKOF", "TDOWN", "BLOF", "BLON",
         "ETD", "ETA", "ATD", "OFF", "ON", "ATA",
-        "CP1", "CP2", "CP3",
-        "FO1", "FO2"
+        "CP", "CP", "CP",
+        "FO", "FO"
     ]
 
     #
