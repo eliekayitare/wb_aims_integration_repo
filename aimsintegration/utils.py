@@ -1196,6 +1196,9 @@ def process_tableau_data_file(attachment):
         for line_num, line in enumerate(content, start=1):
             if not line.strip():
                 continue
+            # Skip the header line that starts with "ACCONFIG,DAY,DEP"
+            if line.startswith("ACCONFIG,DAY,DEP"):
+                continue
 
             try:
                 # Extract the first field (aircraft_config) before the 4th comma
