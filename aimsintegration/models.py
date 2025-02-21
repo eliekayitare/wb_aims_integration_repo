@@ -186,75 +186,75 @@ class CrewMember(models.Model):
 
 # Tableau Project models
 
-class TableauData(models.Model):
-    operation_day = models.DateField(null=False, blank=False)
-    departure_station = models.CharField(max_length=25, null=False, blank=False)
-    flight_no = models.CharField(max_length=25, null=False, blank=False)
-    flight_leg_code = models.CharField(max_length=25, null=False, blank=False)
-    cancelled_deleted = models.BooleanField(default=0)
-    arrival_station = models.CharField(max_length=25, null=False, blank=False)
-    aircraft_reg_id = models.CharField(max_length=25, null=True, blank=True)
-    aircraft_type_index = models.CharField(max_length=25, null=True, blank=True)
-    aircraft_category = models.CharField(max_length=25, null=True, blank=True)
-    flight_service_type = models.CharField(max_length=25, null=True, blank=True)
-    std = models.TimeField(null=True, blank=True)
-    sta = models.TimeField(null=True, blank=True)
-    original_operation_day = models.DateField(null=True, blank=True)
-    original_std = models.TimeField(null=True, blank=True)
-    original_sta = models.TimeField(null=True, blank=True)
-    departure_delay_time = models.IntegerField(null=True, blank=True)  # Removed max_length
-    delay_code_kind = models.CharField(max_length=25, null=True, blank=True)
-    delay_number = models.CharField(max_length=25, null=True, blank=True)
-    aircraft_config = models.CharField(max_length=25, null=True, blank=True)
-    seat_type_config = models.CharField(max_length=25, null=True, blank=True)
-    atd = models.TimeField(null=True, blank=True)
-    takeoff = models.TimeField(null=True, blank=True)
-    touchdown = models.TimeField(null=True, blank=True)
-    ata = models.TimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
-    updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
-
-    class Meta:
-        db_table = 'tableau_data'
-
-        indexes = [
-            models.Index(fields=['updated_at']),  # Optimize queries based on this field
-        ]
-
-
 # class TableauData(models.Model):
 #     operation_day = models.DateField(null=False, blank=False)
-#     departure_station = models.CharField(max_length=100, null=False, blank=False)
-#     flight_no = models.CharField(max_length=100, null=False, blank=False)
-#     flight_leg_code = models.CharField(max_length=100, null=False, blank=False)
+#     departure_station = models.CharField(max_length=25, null=False, blank=False)
+#     flight_no = models.CharField(max_length=25, null=False, blank=False)
+#     flight_leg_code = models.CharField(max_length=25, null=False, blank=False)
 #     cancelled_deleted = models.BooleanField(default=0)
-#     arrival_station = models.CharField(max_length=100, null=False, blank=False)
-#     aircraft_reg_id = models.CharField(max_length=100, null=True, blank=True)
-#     aircraft_type_index = models.CharField(max_length=100, null=True, blank=True)
-#     aircraft_category = models.CharField(max_length=100, null=True, blank=True)
-#     flight_service_type = models.CharField(max_length=100, null=True, blank=True)
+#     arrival_station = models.CharField(max_length=25, null=False, blank=False)
+#     aircraft_reg_id = models.CharField(max_length=25, null=True, blank=True)
+#     aircraft_type_index = models.CharField(max_length=25, null=True, blank=True)
+#     aircraft_category = models.CharField(max_length=25, null=True, blank=True)
+#     flight_service_type = models.CharField(max_length=25, null=True, blank=True)
 #     std = models.TimeField(null=True, blank=True)
 #     sta = models.TimeField(null=True, blank=True)
 #     original_operation_day = models.DateField(null=True, blank=True)
 #     original_std = models.TimeField(null=True, blank=True)
 #     original_sta = models.TimeField(null=True, blank=True)
 #     departure_delay_time = models.IntegerField(null=True, blank=True)  # Removed max_length
-#     delay_code_kind = models.CharField(max_length=100, null=True, blank=True)
-#     delay_number = models.CharField(max_length=100, null=True, blank=True)
-#     aircraft_config = models.CharField(max_length=100, null=True, blank=True)
-#     seat_type_config = models.CharField(max_length=100, null=True, blank=True)
+#     delay_code_kind = models.CharField(max_length=25, null=True, blank=True)
+#     delay_number = models.CharField(max_length=25, null=True, blank=True)
+#     aircraft_config = models.CharField(max_length=25, null=True, blank=True)
+#     seat_type_config = models.CharField(max_length=25, null=True, blank=True)
 #     atd = models.TimeField(null=True, blank=True)
 #     takeoff = models.TimeField(null=True, blank=True)
 #     touchdown = models.TimeField(null=True, blank=True)
 #     ata = models.TimeField(null=True, blank=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+#     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the record is added
+#     updated_at = models.DateTimeField(auto_now=True)  # Timestamp for when the record is updated
 
 #     class Meta:
 #         db_table = 'tableau_data'
+
 #         indexes = [
-#             models.Index(fields=['updated_at']),
+#             models.Index(fields=['updated_at']),  # Optimize queries based on this field
 #         ]
+
+
+class TableauData(models.Model):
+    operation_day = models.DateField(null=False, blank=False)
+    departure_station = models.CharField(max_length=100, null=False, blank=False)
+    flight_no = models.CharField(max_length=100, null=False, blank=False)
+    flight_leg_code = models.CharField(max_length=100, null=False, blank=False)
+    cancelled_deleted = models.BooleanField(default=0)
+    arrival_station = models.CharField(max_length=100, null=False, blank=False)
+    aircraft_reg_id = models.CharField(max_length=100, null=True, blank=True)
+    aircraft_type_index = models.CharField(max_length=100, null=True, blank=True)
+    aircraft_category = models.CharField(max_length=100, null=True, blank=True)
+    flight_service_type = models.CharField(max_length=100, null=True, blank=True)
+    std = models.TimeField(null=True, blank=True)
+    sta = models.TimeField(null=True, blank=True)
+    original_operation_day = models.DateField(null=True, blank=True)
+    original_std = models.TimeField(null=True, blank=True)
+    original_sta = models.TimeField(null=True, blank=True)
+    departure_delay_time = models.IntegerField(null=True, blank=True)  # Removed max_length
+    delay_code_kind = models.CharField(max_length=100, null=True, blank=True)
+    delay_number = models.CharField(max_length=100, null=True, blank=True)
+    aircraft_config = models.CharField(max_length=100, null=True, blank=True)
+    seat_type_config = models.CharField(max_length=100, null=True, blank=True)
+    atd = models.TimeField(null=True, blank=True)
+    takeoff = models.TimeField(null=True, blank=True)
+    touchdown = models.TimeField(null=True, blank=True)
+    ata = models.TimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tableau_data'
+        indexes = [
+            models.Index(fields=['updated_at']),
+        ]
 
 
 
