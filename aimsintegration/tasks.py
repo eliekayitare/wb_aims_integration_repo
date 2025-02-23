@@ -955,25 +955,20 @@ def fetch_tableau():
 
 
 @shared_task
+@shared_task
 def delete_old_emails():
-    """
-    Deletes all emails that are older than 10 days in the inbox.
-    """
     account = get_exchange_account()
-
-    # Calculate the datetime threshold (UTC-based)
     days_to_keep = 10
-    utc_zone = EWSTimeZone('UTC')
-    threshold_datetime = utc_zone.localize(datetime.utcnow() - timedelta(days=days_to_keep))
 
-    # Filter emails older than the threshold
+    # Use exchangelib's EWSDateTime with the UTC timezone
+    threshold_datetime = EWSDateTime.now(EWSTimeZone.utc) - timedelta(days=days_to_keep)
+
     logger.info(f"Searching for emails older than {days_to_keep} days (before {threshold_datetime})...")
     old_emails = account.inbox.filter(datetime_received__lt=threshold_datetime)
 
     count_old = old_emails.count()
     logger.info(f"Found {count_old} email(s) older than {days_to_keep} days. Proceeding to delete them...")
 
-    # Delete all matching emails
     if count_old > 0:
         old_emails.delete()
         logger.info(f"Deleted {count_old} old email(s).")
