@@ -952,7 +952,7 @@ def fetch_tableau():
 
 
 
-
+from datetime import datetime, timedelta, timezone
 
 @shared_task
 def delete_old_emails():
