@@ -959,8 +959,10 @@ def delete_old_emails():
     account = get_exchange_account()
     days_to_keep = 10
 
-    # Use exchangelib's EWSDateTime with the UTC timezone
-    threshold_datetime = EWSDateTime.now(EWSTimeZone.utc) - timedelta(days=days_to_keep)
+    # Create a Python datetime in UTC and convert to EWSDateTime
+    cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+    cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)  
+    threshold_datetime = EWSDateTime.from_datetime(cutoff_date)
 
     logger.info(f"Searching for emails older than {days_to_keep} days (before {threshold_datetime})...")
     old_emails = account.inbox.filter(datetime_received__lt=threshold_datetime)
