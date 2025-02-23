@@ -954,7 +954,7 @@ def fetch_tableau():
 
 from datetime import datetime, timedelta, timezone
 from exchangelib.errors import ErrorServerBusy
-@shared_task
+
 @shared_task(bind=True, max_retries=5)
 def delete_old_emails(self):
     """
