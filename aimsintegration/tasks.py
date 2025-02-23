@@ -953,27 +953,44 @@ def fetch_tableau():
 
 
 from datetime import datetime, timedelta, timezone
-
+from exchangelib.errors import ErrorServerBusy
 @shared_task
-def delete_old_emails():
+@shared_task(bind=True, max_retries=5)
+def delete_old_emails(self):
+    """
+    Deletes all emails that are older than 10 days in the inbox,
+    with a retry strategy to handle ErrorServerBusy.
+    """
     account = get_exchange_account()
     days_to_keep = 10
 
     # Create a Python datetime in UTC and convert to EWSDateTime
     cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
-    cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)  
+    cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
     threshold_datetime = EWSDateTime.from_datetime(cutoff_date)
 
-    logger.info(f"Searching for emails older than {days_to_keep} days (before {threshold_datetime})...")
-    old_emails = account.inbox.filter(datetime_received__lt=threshold_datetime)
+    try:
+        logger.info(f"Filtering emails older than {days_to_keep} days (before {threshold_datetime})...")
+        old_emails = account.inbox.filter(datetime_received__lt=threshold_datetime)
+        
+        count_old = old_emails.count()
+        logger.info(f"Found {count_old} email(s) older than {days_to_keep} days. Proceeding to delete them...")
 
-    count_old = old_emails.count()
-    logger.info(f"Found {count_old} email(s) older than {days_to_keep} days. Proceeding to delete them...")
+        if count_old > 0:
+            old_emails.delete()
+            logger.info(f"Deleted {count_old} old email(s).")
+        else:
+            logger.info("No old emails to delete.")
 
-    if count_old > 0:
-        old_emails.delete()
-        logger.info(f"Deleted {count_old} old email(s).")
-    else:
-        logger.info("No old emails to delete.")
+        return f"Purged {count_old} email(s) older than {days_to_keep} days."
 
-    return f"Purged {count_old} email(s) older than {days_to_keep} days."
+    except ErrorServerBusy as e:
+        # If the Exchange server is busy, wait and retry
+        wait_time = 2 ** self.request.retries * 5  # Exponential backoff
+        logger.warning(
+            f"Server is busy (attempt {self.request.retries + 1}/{self.max_retries}). "
+            f"Retrying in {wait_time} seconds..."
+        )
+
+        # Retry the task after `wait_time` seconds
+        raise self.retry(exc=e, countdown=wait_time)
