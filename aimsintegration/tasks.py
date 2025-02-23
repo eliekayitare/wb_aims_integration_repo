@@ -962,7 +962,7 @@ def delete_old_emails(self):
     with a retry strategy to handle ErrorServerBusy.
     """
     account = get_exchange_account()
-    days_to_keep = 10
+    days_to_keep = 7
 
     # Create a Python datetime in UTC and convert to EWSDateTime
     cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
