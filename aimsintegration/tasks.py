@@ -955,7 +955,6 @@ def fetch_tableau():
 
 
 @shared_task
-@shared_task
 def delete_old_emails():
     account = get_exchange_account()
     days_to_keep = 10
