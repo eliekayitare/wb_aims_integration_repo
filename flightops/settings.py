@@ -308,7 +308,7 @@ CELERY_BEAT_SCHEDULE = {
 
     'delete-old-emails-every-hour': {
         'task': 'aimsintegration.tasks.delete_old_emails',
-        'schedule': crontab(minute=0, minues='*/3'),  # Every hour
+        'schedule': crontab(minute='*/3'),  # Every hour
     },
     
 }
