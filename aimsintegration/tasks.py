@@ -690,7 +690,9 @@ def fetch_recent_flights_and_crew():
         sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True),
         origin__in=flight_data.values_list('dep_code_icao', flat=True),
         destination__in=flight_data.values_list('arr_code_icao', flat=True)
-    ).order_by("id")  # Order by insertion order
+    ).order_by("id")  # Ensure crew members are ordered by insertion order
+
+    return flight_data, crew_data
 
     return flight_data, crew_data
 
@@ -702,14 +704,14 @@ def generate_csv_for_fdm(flight_data, crew_data):
     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
     file_path = os.path.join(settings.MEDIA_ROOT, file_name)
 
-    # Build a lookup: flight_key -> { "CP": [...], "FO": [...] }, preserving order
+    # Build a lookup: flight_key -> { "CP": [...], "FO": [...] }
     flight_crew_lookup = {}
     for c in crew_data:
         key = (c.flight_no, c.sd_date_utc, c.origin, c.destination)
         if key not in flight_crew_lookup:
             flight_crew_lookup[key] = {"CP": [], "FO": []}
         
-        # Append CPs and FOs in their original order
+        # Only store CP/FO
         if c.role == "CP":
             flight_crew_lookup[key]["CP"].append(str(c.crew_id))
         elif c.role == "FO":
@@ -737,19 +739,23 @@ def generate_csv_for_fdm(flight_data, crew_data):
                 flight.dep_code_icao,
                 flight.arr_code_icao
             )
+            
 
-            # Get any CP/FO crew for this flight, preserving insertion order
+            # Get any CP/FO crew for this flight
             crew_dict = flight_crew_lookup.get(key, {"CP": [], "FO": []})
             
-            # Select only the first CP and first FO based on insertion order
-            cp = crew_dict["CP"][0] if len(crew_dict["CP"]) > 0 else ""
-            fo = crew_dict["FO"][0] if len(crew_dict["FO"]) > 0 else ""
+            # cp_list = crew_dict["CP"]
+            # fo_list = crew_dict["FO"]
+            cp_list = crew_dict["CP"][:2]  # Consider only the first two CPs
+            fo_list = crew_dict["FO"][:2]  # Consider only the first two FOs
 
-            # Special case: If no FO but two CPs exist, assign second CP to FO
-            if not fo and len(crew_dict["CP"]) > 1:
-                fo = crew_dict["CP"][1]
-
-            # Ignore any extra CPs or FOs beyond the first one
+            # Assign CP and FO values based on the specified cases
+            cp = cp_list[0] if cp_list else ""
+            fo = fo_list[0] if fo_list else ""
+            
+            # Special case: If no FO but two CPs, assign second CP to FO
+            if not fo and len(cp_list) > 1:
+                fo = cp_list[1]
 
             # Build row
             row = [
@@ -771,14 +777,13 @@ def generate_csv_for_fdm(flight_data, crew_data):
                 format_time(flight.takeoff_utc),    # OFF
                 format_time(flight.touchdown_utc),  # ON
                 format_time(flight.ata_utc),        # ATA
-                cp,                                 # CP (first CP in order of insertion)
-                fo                                  # FO (first FO in order of insertion)
+                cp,                                 # CP
+                fo                                  # FO
             ]
             writer.writerow(row)
 
     logger.info(f"CSV file generated at: {file_path}")
     return file_path
-
 
 
 
