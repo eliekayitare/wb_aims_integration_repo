@@ -737,12 +737,15 @@ def generate_csv_for_fdm(flight_data, crew_data):
                 flight.dep_code_icao,
                 flight.arr_code_icao
             )
+            
 
             # Get any CP/FO crew for this flight
             crew_dict = flight_crew_lookup.get(key, {"CP": [], "FO": []})
             
-            cp_list = crew_dict["CP"]
-            fo_list = crew_dict["FO"]
+            # cp_list = crew_dict["CP"]
+            # fo_list = crew_dict["FO"]
+            cp_list = crew_dict["CP"][:2]  # Consider only the first two CPs
+            fo_list = crew_dict["FO"][:2]  # Consider only the first two FOs
 
             # Assign CP and FO values based on the specified cases
             cp = cp_list[0] if cp_list else ""
@@ -805,7 +808,7 @@ def hourly_upload_csv_to_fdm():
     Then clean up old files except the one just uploaded.
     """
     # Calculate the time range
-    one_hour_ago = now() - timedelta(hours=1)
+    one_hour_ago = now() - timedelta(hours=3)
 
     # Fetch flights with complete actual timings, updated in the last hour
     flight_data = FdmFlightData.objects.filter(
