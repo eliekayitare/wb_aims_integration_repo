@@ -91,3 +91,115 @@ def logout_view(request):
     logout(request)
     messages.success(request, "You have been logged out successfully.")
     return redirect('login')
+
+
+# from django.shortcuts import render
+# from django.core.paginator import Paginator
+
+# def systems_list(request):
+#     # Example data (add more items to see pagination)
+#     systems = [
+#         {"title": "Accounting",
+#          "description": "Manage financial transactions and reports.",
+#          "icon": "img/accounting-icon.png",
+#          "url": "https://accounting.example.com"},
+#         {"title": "CRM",
+#          "description": "Manage customer relations and pipelines.",
+#          "icon": "img/crm-icon.png",
+#          "url": "https://crm.example.com"},
+#         {"title": "Subscriptions",
+#          "description": "Manage recurring subscriptions and invoicing.",
+#          "icon": "img/subscriptions-icon.png",
+#          "url": "https://subscriptions.example.com"},
+#         {"title": "Purchase",
+#          "description": "Streamline purchase orders and vendor management.",
+#          "icon": "img/purchase-icon.png",
+#          "url": "https://purchase.example.com"},
+
+         
+        
+#     ]
+
+#     # Create a paginator for 8 items per page
+#     paginator = Paginator(systems, 8)
+#     page_number = request.GET.get('page')  # e.g. ?page=2
+#     page_obj = paginator.get_page(page_number)
+
+#     context = {
+#         "page_obj": page_obj,  # pass the page object to template
+#     }
+#     return render(request, 'authentications/systems_list.html', context)
+
+
+
+from django.shortcuts import render
+from django.core.paginator import Paginator
+
+def systems_list(request):
+    # Example data (only "title", "description", and "url" now)
+    systems = [
+        {
+            "title": "Memo",
+            "description": "A portal to create and track internal memos.",
+            "url": "https://memo.rwandair.com"
+        },
+        {
+            "title": "ESS",
+            "description": "Manage Internal Staff files.",
+            "url": "https://ess.rwandair.com"
+        },
+        {
+            "title": "Service Desk",
+            "description": "A portal to raise issues to support team.",
+            "url": "https://servicedesk.rwandair.com"
+        },
+        {
+            "title": "MyId travel",
+            "description": "A portal to book a new ticket for internal staff.",
+            "url": "https://security.rwandair.com"
+        },
+        {
+            "title": "Biodata",
+            "description": "A portal to fill out staff information.",
+            "url": "https://security.rwandair.com"
+        },
+
+        {
+            "title": "E-Recruitment",
+            "description": "A portal to apply for a new job position.",
+            "url": "https://erecruitment.rwandair.com"
+        },
+
+        {
+            "title": "XYZ",
+            "description": "XYZ description.",
+            "url": "https://security.rwandair.com"
+        },
+
+        {
+            "title": "MNO",
+            "description": "MNO description.",
+            "url": "https://erecruitment.rwandair.com"
+        },
+
+        {
+            "title": "ABC",
+            "description": "ABC description.",
+            "url": "https://erecruitment.rwandair.com"
+        },
+        
+    ]
+
+    # Show 8 items per page
+    paginator = Paginator(systems, 8)
+    page_number = request.GET.get('page')  # e.g. ?page=2
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        "page_obj": page_obj,
+    }
+    return render(request, 'authentications/systems_list.html', context)
+
+
+
+

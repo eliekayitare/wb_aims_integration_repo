@@ -1,0 +1,57 @@
+/* Basic resets */
+html, body {
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* The body is controlled by Bootstrap classes in the template:
+     .d-flex.flex-column.min-vh-100
+     so no need to set height or display again here. */
+  
+  body {
+    font-family: Arial, sans-serif;
+  }
+  
+  /* Navbar brand logo sizing */
+  .navbar-brand img {
+    max-height: 40px;
+  }
+  
+  /* Card styling */
+  .card {
+    border-radius: 6px;
+  }
+  
+  /* Subtle shadow example */
+  .card.shadow-sm {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  /* Make icons nicely contained */
+  .card img {
+    object-fit: contain;
+    max-width: 100px; /* or 64px – adjust as needed */
+    max-height: 100px;
+  }
+  
+  /* Ensure pagination links stand out on a white background */
+  .pagination .page-link {
+    color: #00529b;
+  }
+  .pagination .page-link:hover {
+    background-color: #00529b;
+    color: #fff;
+  }
+  
+  /* Footer background color – fallback if needed
+     (but we do inline style in the template for demonstration).
+     You could do .bg-primary or override .bg-primary if you want. */
+  footer {
+    background-color: #00529b;
+  }
+  
+  /* Make footer text a bit smaller, if you want */
+  footer {
+    font-size: 0.95rem;
+  }
+  
