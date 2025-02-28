@@ -809,7 +809,7 @@ def hourly_upload_csv_to_fdm():
     Then clean up old files except the one just uploaded.
     """
     # Calculate the time range
-    one_hour_ago = now() - timedelta(hours=3)
+    one_hour_ago = now() - timedelta(hours=1)
 
     # Fetch flights with complete actual timings, updated in the last hour
     flight_data = FdmFlightData.objects.filter(
