@@ -512,6 +512,14 @@ def process_acars_message(item, file_path):
 
         event_time = datetime.strptime(event_time_str, "%H:%M").time()
 
+        # flights = FlightData.objects.filter(
+        #     flight_no=flight_no,
+        #     tail_no=tail_number,
+        #     dep_code_iata=dep_code,
+        #     arr_code_iata=arr_code
+        # )
+
+        # First, try to get matching flights with flight number
         flights = FlightData.objects.filter(
             flight_no=flight_no,
             tail_no=tail_number,
@@ -519,15 +527,15 @@ def process_acars_message(item, file_path):
             arr_code_iata=arr_code
         )
 
-        # #FDM Project
-        # fdm_flights = FdmFlightData.objects.filter(
-        #     flight_no=flight_no,
-        #     tail_no=tail_number,
-        #     dep_code_iata=dep_code,
-        #     arr_code_iata=arr_code
-        # )
-        
+        # If no flights found, try matching without flight number
+        if not flights.exists():
+            flights = FlightData.objects.filter(
+                tail_no=tail_number,
+                dep_code_iata=dep_code,
+                arr_code_iata=arr_code
+            )
 
+        # If still no flights found, send an email and return
         if not flights.exists():
             logger.info(f"No matching flights found for flight number: {flight_no}")
             send_mail(
@@ -548,27 +556,6 @@ def process_acars_message(item, file_path):
                 fail_silently=False,
             )
             return
-        
-        # if not fdm_flights.exists():
-        #     logger.info(f"No matching FDM flights found for flight number: {flight_no}")
-        #     send_mail(
-        #         subject=f"No matching FDM flights found for flight number: {flight_no}",
-        #         message=(
-        #             f"Dear Team,\n\n"
-        #             f"The ACARS message for flight {flight_no} could not be matched.\n"
-        #             f"Message details:\n\n{message_body}\n\n"
-        #             f"Please review and update manually.\n\n"
-        #             f"Regards,\nFlightOps Team"
-        #         ),
-        #         from_email=settings.EMAIL_HOST_USER,
-        #         recipient_list=[
-        #             # settings.FIRST_EMAIL_RECEIVER,
-        #             # settings.SECOND_EMAIL_RECEIVER,
-        #             settings.THIRD_EMAIL_RECEIVER,
-        #         ],
-        #         fail_silently=False,
-        #     )
-        #     return
 
         closest_flight = min(
             flights,
@@ -1419,24 +1406,6 @@ def process_tableau_data_file(attachment):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def process_tableau_data_email_attachment(item, process_function):
     """
     Generalized function to handle processing of email attachments.
@@ -1450,3 +1419,8 @@ def process_tableau_data_email_attachment(item, process_function):
                     process_function(attachment)  # Call the relevant function for each attachment
     except Exception as e:
         logger.error(f"Error processing fdm email attachment: {e}")
+
+
+
+
+        

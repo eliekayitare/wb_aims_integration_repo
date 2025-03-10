@@ -950,3 +950,5 @@ def delete_old_emails(self):
 
         # Retry the task after `wait_time` seconds
         raise self.retry(exc=e, countdown=wait_time)
+
+
