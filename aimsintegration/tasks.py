@@ -694,7 +694,7 @@ def fetch_recent_flights_and_crew():
 def generate_csv_for_fdm(flight_data, crew_data):
     """
     Generate a CSV with columns: DAY, FLT, FLTYPE, REG, DEP, ARR, STD, STA, TKOF, TDOWN, BLOF, BLON,
-    ETD, ETA, ATD, OFF, ON, ATA, CP, FO
+    ETD, ETA, ATD, OFF, ON, ATA, CP, FO,3P
     """
     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
     file_path = os.path.join(settings.MEDIA_ROOT, file_name)
@@ -712,7 +712,7 @@ def generate_csv_for_fdm(flight_data, crew_data):
     # Define the header
     header = [
         "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR", "STD", "STA", "TKOF", "TDOWN", "BLOF", "BLON",
-        "ETD", "ETA", "ATD", "OFF", "ON", "ATA", "CP", "FO"
+        "ETD", "ETA", "ATD", "OFF", "ON", "ATA", "CP", "FO","3P"
     ]
 
     # Write the CSV
