@@ -778,7 +778,7 @@ def generate_csv_for_fdm(flight_data, crew_data):
                 format_time(flight.touchdown_utc),  # ON
                 format_time(flight.ata_utc),        # ATA
                 cp,                                 # CP
-                fo                                  # FO
+                fo,                                  # FO
             ]
             writer.writerow(row)
 
