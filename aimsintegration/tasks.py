@@ -528,140 +528,6 @@ def fetch_fdm_crew_data():
 
 
 
-# import csv
-# import os
-# import logging
-# from django.conf import settings
-# from django.utils.timezone import now, timedelta
-# from .models import FdmFlightData, CrewMember
-
-# logger = logging.getLogger(__name__)
-
-# def fetch_recent_flights_and_crew():
-#     """
-#     Fetch flights updated within the last hour 
-#     and corresponding crew data, matched on (flight_no, sd_date_utc, origin, destination).
-#     """
-#     one_hour_ago = now() - timedelta(hours=1)
-    
-#     # 1) Flights updated in the last hour
-#     flight_data = FdmFlightData.objects.filter(updated_at__gte=one_hour_ago)
-    
-#     # 2) Crew for those flights
-#     crew_data = CrewMember.objects.filter(
-#         flight_no__in=flight_data.values_list('flight_no', flat=True),
-#         sd_date_utc__in=flight_data.values_list('sd_date_utc', flat=True),
-#         origin__in=flight_data.values_list('dep_code_icao', flat=True),
-#         destination__in=flight_data.values_list('arr_code_icao', flat=True)
-#     )
-    
-#     return flight_data, crew_data
-
-
-# def generate_csv_for_fdm(flight_data, crew_data):
-#     """
-#     Generate a CSV with columns:
-#       DAY, FLT, FLTYPE, REG, DEP, ARR, STD, STA, TKOF, TDOWN, BLOF, BLON,
-#       ETD, ETA, ATD, OFF, ON, ATA, CP1, CP2, CP3, FO1, FO2
-
-#     Each of these columns will be filled with a single ID (or empty).
-#     If a flight has multiple CPs/FOs, they will be placed into CP1, CP2, CP3 or FO1, FO2
-#     (the excess are ignored).
-#     """
-#     file_name = f"aims_{now().strftime('%Y%m%d%H%M')}.csv"
-#     file_path = os.path.join(settings.MEDIA_ROOT, file_name)
-
-#     #
-#     # 1) Build a lookup: flight_key -> { "CP": [...], "FO": [...] }
-#     #
-#     #    flight_key = (flight_no, sd_date_utc, origin, destination)
-#     #
-#     flight_crew_lookup = {}
-#     for c in crew_data:
-#         key = (c.flight_no, c.sd_date_utc, c.origin, c.destination)
-#         if key not in flight_crew_lookup:
-#             flight_crew_lookup[key] = {"CP": [], "FO": []}
-        
-#         # Only store CP/FO
-#         if c.role == "CP":
-#             flight_crew_lookup[key]["CP"].append(str(c.crew_id))
-#         elif c.role == "FO":
-#             flight_crew_lookup[key]["FO"].append(str(c.crew_id))
-
-#     #
-#     # 2) Define the header (base flight columns plus CP1, CP2, CP3, FO1, FO2)
-#     #
-#     header = [
-#         "DAY", "FLT", "FLTYPE", "REG", "DEP", "ARR",
-#         "STD", "STA", "TKOF", "TDOWN", "BLOF", "BLON",
-#         "ETD", "ETA", "ATD", "OFF", "ON", "ATA",
-#         "CP", "CP", "CP",
-#         "FO", "FO"
-#     ]
-
-#     #
-#     # 3) Write the CSV
-#     #
-#     with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
-#         writer = csv.writer(csvfile)
-#         writer.writerow(header)  # Header row
-
-#         def format_time(t):
-#             return t.strftime("%H:%M") if t else ""
-
-#         for flight in flight_data:
-#             # Build the lookup key
-#             key = (
-#                 flight.flight_no,
-#                 flight.sd_date_utc,
-#                 flight.dep_code_icao,
-#                 flight.arr_code_icao
-#             )
-
-#             # Get any CP/FO crew for this flight
-#             crew_dict = flight_crew_lookup.get(key, {"CP": [], "FO": []})
-#             # Grab up to 3 captains and 2 FOs
-#             cp_list = crew_dict["CP"][:3]
-#             fo_list = crew_dict["FO"][:2]
-
-#             # Expand or fill empty if not enough
-#             cp1 = cp_list[0] if len(cp_list) > 0 else ""
-#             cp2 = cp_list[1] if len(cp_list) > 1 else ""
-#             cp3 = cp_list[2] if len(cp_list) > 2 else ""
-#             fo1 = fo_list[0] if len(fo_list) > 0 else ""
-#             fo2 = fo_list[1] if len(fo_list) > 1 else ""
-
-#             # Build row
-#             row = [
-#                 flight.sd_date_utc,                 # DAY
-#                 flight.flight_no,                   # FLT
-#                 flight.flight_type,                 # FLTYPE
-#                 flight.tail_no,                     # REG
-#                 flight.dep_code_icao,               # DEP
-#                 flight.arr_code_icao,               # ARR
-#                 format_time(flight.std_utc),        # STD
-#                 format_time(flight.sta_utc),        # STA
-#                 format_time(flight.takeoff_utc),    # TKOF
-#                 format_time(flight.touchdown_utc),  # TDOWN
-#                 format_time(flight.atd_utc),        # BLOF
-#                 format_time(flight.ata_utc),        # BLON
-#                 format_time(flight.etd_utc),        # ETD
-#                 format_time(flight.eta_utc),        # ETA
-#                 format_time(flight.atd_utc),        # ATD
-#                 format_time(flight.takeoff_utc),    # OFF
-#                 format_time(flight.touchdown_utc),  # ON
-#                 format_time(flight.ata_utc),        # ATA
-#                 cp1,                                # CP1
-#                 cp2,                                # CP2
-#                 cp3,                                # CP3
-#                 fo1,                                # FO1
-#                 fo2                                 # FO2
-#             ]
-#             writer.writerow(row)
-
-#     logger.info(f"CSV file generated at: {file_path}")
-#     return file_path
-
 import csv
 import os
 import logging
@@ -779,6 +645,7 @@ def generate_csv_for_fdm(flight_data, crew_data):
                 format_time(flight.ata_utc),        # ATA
                 cp,                                 # CP
                 fo,                                  # FO
+                 "" 
             ]
             writer.writerow(row)
 
