@@ -475,6 +475,93 @@ def upload_cpat_to_aims_server(local_file_path):
 
 
 
+# Send CPAT expiry notifications
+
+# aimsintegration/tasks.py
+
+from datetime import date
+from dateutil.relativedelta import relativedelta
+
+from celery import shared_task
+from django.core.mail import send_mail
+from django.conf import settings
+
+from .models import CompletionRecord
+from .tasks import VALIDITY_PERIODS, calculate_expiry_date
+
+@shared_task
+def send_cpat_expiry_notifications():
+    """
+    Runs daily. For each 24- or 36-month CPAT course whose expiry falls
+    in this calendar year, if today == (expiry_date - 2 months), send one email.
+    """
+    today = date.today()
+    notices = []
+
+    for rec in CompletionRecord.objects.all():
+        months = VALIDITY_PERIODS.get(rec.course_code, 0)
+        if months not in (24, 36):
+            continue
+
+        # calculate expiry as date
+        comp_str = rec.completion_date.strftime("%d%m%Y") if rec.completion_date else ""
+        expiry_str = calculate_expiry_date(comp_str, rec.course_code)
+        if not expiry_str:
+            continue
+
+        exp_day = int(expiry_str[:2])
+        exp_mon = int(expiry_str[2:4])
+        exp_yr  = int(expiry_str[4:])
+        expiry_date = date(exp_yr, exp_mon, exp_day)
+
+        # only courses expiring this year
+        if expiry_date.year != today.year:
+            continue
+
+        # send exactly 2 months prior
+        if expiry_date - relativedelta(months=2) == today:
+            notices.append((rec.employee_id, rec.course_code, rec.completion_date, expiry_date))
+
+    if not notices:
+        return f"No expiry notifications to send on {today}."
+
+    # Build professional email
+    lines = [
+        "Dear Training Record Team,",
+        "",
+        "**Please do not reply to this automated message.**",
+        "",
+        "The following CPAT courses (24- & 36-month validity) will expire in two months:",
+        ""
+    ]
+    for emp_id, code, comp_date, exp_date in notices:
+        lines.append(f"- Employee: {emp_id} | Course: {code} | Completed: {comp_date} → Expires: {exp_date}")
+    lines += [
+        "",
+        "Kindly arrange refresher training so that all records remain current.",
+        "",
+        "Best regards,",
+        "CPAT Automated Notification System"
+    ]
+
+    subject = "CPAT Expiry Reminder – Action Required"
+    message = "\n".join(lines)
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.EXCHANGE_EMAIL_USER,
+        recipient_list=[
+            settings.FIRST_EMAIL_RECEIVER,
+            settings.THIRD_EMAIL_RECEIVER,
+            settings.FOURTH_EMAIL_RECEIVER,
+        ],
+        fail_silently=False,
+    )
+
+    return f"Sent {len(notices)} CPAT expiry reminder(s) on {today}."
+
+
 
 
 

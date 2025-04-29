@@ -218,10 +218,12 @@ EMAIL_SSL_KEYFILE = None
 FIRST_EMAIL_RECEIVER = config('FIRST_EMAIL_RECEIVER')
 SECOND_EMAIL_RECEIVER = config('SECOND_EMAIL_RECEIVER')
 THIRD_EMAIL_RECEIVER = config('THIRD_EMAIL_RECEIVER')
+FOURTH_EMAIL_RECEIVER = config('FOURTH_EMAIL_RECEIVER')
 
 EXCHANGE_EMAIL_USER = config('EXCHANGE_EMAIL_USER')
 EXCHANGE_EMAIL_PASSWORD = config('EXCHANGE_EMAIL_PASSWORD')
 EXCHANGE_EMAIL_SERVER = config('EXCHANGE_EMAIL_SERVER')
+
 
 AIMS_SERVER_ADDRESS = config('AIMS_SERVER_ADDRESS')
 AIMS_SERVER_USER= config('AIMS_SERVER_USER')
@@ -272,6 +274,12 @@ CELERY_BEAT_SCHEDULE = {
     'fetch-cpat-data-every-hour': {
         'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
         'schedule': crontab(minute='*/100'),  # Every 1 hour 40 minutes
+    },
+
+    # Send Notification for expired records - Runs every 1 hour
+    'notify-cpat-expiry-daily': {
+        'task': 'aimsintegration.tasks.send_cpat_expiry_notifications',
+        'schedule': crontab(hour=9, minute=0),  # runs daily at 09:00 Kigali time
     },
 
     #FDM Project - Runs every 1 hour
