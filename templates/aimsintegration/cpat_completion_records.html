@@ -1,6 +1,7 @@
-{% extends 'base.html' %} {% load static %}
+{% extends 'base.html' %}
+{% load static %}
 
-<!-- Page-specific CSS for CPAT -->
+{# Page-specific CSS for CPAT + pagination styling #}
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
@@ -17,16 +18,46 @@
     right: 20px;
     z-index: 1000;
   }
+  .toast.success { background-color: green; }
+  .toast.error   { background-color: red; }
 
-  .toast.success {
-    background-color: green;
+  /* Pagination */
+  .pagination-container {
+    margin-top: 20px;
+    display: flex;
+    gap: 5px;
+    align-items: center;
   }
-
-  .toast.error {
-    background-color: red;
+  .pagination-container a,
+  .pagination-container span {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #007bff;
+  }
+  .pagination-container a:hover { background-color: #f1f1f1; }
+  .pagination-container .current {
+    background-color: #007bff;
+    color: #fff;
+    font-weight: bold;
+    border-color: #007bff;
+    cursor: default;
+  }
+  .pagination-container .disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .pagination-container .dots {
+    padding: 6px 10px;
+    background-color: #f9f9f9;
+    border: 1px solid #ccc;
+    border-radius: 4px;
   }
 </style>
-{% endblock %} {% block content %}
+{% endblock %}
+
+{% block content %}
 <div class="dashboard-container">
   <!-- Sidebar -->
   <aside class="sidebar">
@@ -36,27 +67,33 @@
       <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
       <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
       <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
-
     </ul>
   </aside>
 
   <!-- Main Content -->
   <div class="main-content">
+
+    <!-- Search & Filter -->
     <div class="search-filter-container">
       <input
         type="text"
-        placeholder="Search by Employee, Email, or Course Code"
-        class="search-input"
         id="search-input"
+        class="search-input"
+        placeholder="Search by Employee, Email, or Course Code"
+        value="{{ query }}"
       />
 
-      <select class="filter-select" id="filter-select">
-        <option value="none">Filter by</option>
-        <option value="date">Date</option>
+      <select id="filter-select" class="filter-select">
+        <option value="none" {% if not selected_date %}selected{% endif %}>Filter by</option>
+        <option value="date" {% if selected_date %}selected{% endif %}>Date</option>
       </select>
 
-      <!-- Date picker input (initially hidden, shown when "Date" is selected) -->
-      <input type="date" id="date-picker" style="display: none" />
+      <input
+        type="date"
+        id="date-picker"
+        style="display: {% if selected_date %}inline-block{% else %}none{% endif %}"
+        value="{{ selected_date }}"
+      />
     </div>
 
     <!-- Completion Records Table -->
@@ -71,7 +108,7 @@
             <th>Start Date</th>
             <th>End Date</th>
             <th>Completion Date</th>
-            <th>Validity Period(Months)</th>
+            <th>Validity (Months)</th>
             <th>Expiry Date</th>
           </tr>
         </thead>
@@ -82,113 +119,114 @@
             <td>{{ record.employee_email }}</td>
             <td>{{ record.course_code }}</td>
             <td>{{ record.score|default:"--" }}</td>
-            {% comment %}
-            <td>{{ record.time_in_seconds|default:"--" }}</td>
-            {% endcomment %}
             <td>{{ record.start_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.end_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.completion_date|date:"Y-m-d" }}</td>
-            <td>{{record.validity_period}}</td>
-            <td>{{record.expiry_date | default:"No expires"}}</td>
+            <td>{{ record.validity_period }}</td>
+            <td>{{ record.expiry_date|default:"--" }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-container">
+      {# First & Prev #}
+      {% if page_obj.has_previous %}
+        <a href="?page=1{% if query      %}&query={{ query }}{% endif %}{% if selected_date %}&date={{ selected_date }}{% endif %}">First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if query      %}&query={{ query }}{% endif %}{% if selected_date %}&date={{ selected_date }}{% endif %}">&laquo; Prev</a>
+      {% else %}
+        <span class="disabled">First</span>
+        <span class="disabled">&laquo; Prev</span>
+      {% endif %}
+
+      {# Windowed page links #}
+      {% for pg in display_pages %}
+        {% if pg == '...' %}
+          <span class="dots">…</span>
+        {% elif pg == page_obj.number %}
+          <span class="current">{{ pg }}</span>
+        {% else %}
+          <a href="?page={{ pg }}{% if query      %}&query={{ query }}{% endif %}{% if selected_date %}&date={{ selected_date }}{% endif %}">{{ pg }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {# Next & Last #}
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if query      %}&query={{ query }}{% endif %}{% if selected_date %}&date={{ selected_date }}{% endif %}">Next &raquo;</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if query      %}&query={{ query }}{% endif %}{% if selected_date %}&date={{ selected_date }}{% endif %}">Last</a>
+      {% else %}
+        <span class="disabled">Next &raquo;</span>
+        <span class="disabled">Last</span>
+      {% endif %}
+    </div>
+
   </div>
 </div>
 
-<!-- Toast Container for displaying messages -->
+<!-- Toast Container -->
 <div id="toast-container" class="toast-container"></div>
 
-<!-- WebSocket, Toast, and Search Script -->
+<!-- Search, AJAX refresh & Toast JS -->
 <script>
-  // Show or hide the date picker based on filter selection
-  document
-    .getElementById("filter-select")
-    .addEventListener("change", function () {
-      const datePicker = document.getElementById("date-picker");
-      if (this.value === "date") {
-        datePicker.style.display = "inline-block";
-      } else {
-        datePicker.style.display = "none";
-        datePicker.value = ""; // Clear date picker value when not used
-        searchRecords(); // Re-run the search if filter is cleared
-      }
-    });
+  // Toggle date-picker
+  document.getElementById("filter-select").addEventListener("change", function() {
+    const dp = document.getElementById("date-picker");
+    if (this.value === "date") {
+      dp.style.display = "inline-block";
+    } else {
+      dp.style.display = "none";
+      dp.value = "";
+      searchRecords();
+    }
+  });
 
-  // Listen for input events on the search bar and date picker
-  document
-    .getElementById("search-input")
-    .addEventListener("input", searchRecords);
-  document
-    .getElementById("date-picker")
-    .addEventListener("change", searchRecords);
+  // Listen for search & date changes
+  document.getElementById("search-input").addEventListener("input", searchRecords);
+  document.getElementById("date-picker" ).addEventListener("change", searchRecords);
 
   function searchRecords() {
-    const query = document.getElementById("search-input").value;
-    const selectedDate = document.getElementById("date-picker").value;
-
-    fetch(`/aims/cpat_completion_records/?query=${query}&date=${selectedDate}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+    const q = document.getElementById("search-input").value;
+    const d = document.getElementById("date-picker").value;
+    fetch(`?query=${q}&date=${d}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
     })
-      .then((response) => response.json())
-      .then((data) => {
-        updateCompletionTable(data); // Update the completion records table with the filtered results
+    .then(r => r.json())
+    .then(data => {
+      const tbody = document.getElementById("completion-data");
+      tbody.innerHTML = "";
+      data.forEach(rec => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${rec.employee_id}</td>
+          <td>${rec.employee_email}</td>
+          <td>${rec.course_code}</td>
+          <td>${rec.score   || "--"}</td>
+          <td>${rec.start_date || "--"}</td>
+          <td>${rec.end_date   || "--"}</td>
+          <td>${rec.completion_date}</td>
+          <td>${rec.validity_period}</td>
+          <td>${rec.expiry_date}</td>
+        `;
+        tbody.appendChild(tr);
       });
-  }
-
-  // Function to dynamically update the completion records table
-  function updateCompletionTable(completionData) {
-    const tableBody = document.getElementById("completion-data");
-    tableBody.innerHTML = ""; // Clear the current table content
-
-    completionData.forEach((record) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${record.employee_id}</td>
-        <td>${record.employee_email}</td>
-        <td>${record.course_code}</td>
-        <td>${record.score || "--"}</td>
-        <td>${record.start_date || "--"}</td>
-        <td>${record.end_date || "--"}</td>
-        <td>${record.completion_date}</td>
-        <td>${record.validity_period || "--"}</td>
-        <td>${record.expiry_date || "--"}</td>
-
-      `;
-      tableBody.appendChild(row);
     });
   }
 
-  // Function to show toast messages
-  function showToast(message, type = "info") {
-    const toastContainer = document.getElementById("toast-container");
-    if (!toastContainer) return;
-
-    const toast = document.createElement("div");
-    toast.classList.add("toast", type);
-    toast.innerText = message;
-
-    toastContainer.appendChild(toast);
-
-    setTimeout(() => {
-      toast.remove();
-    }, 5000);
+  // Toast helper
+  function showToast(msg, type) {
+    const c = document.getElementById("toast-container");
+    const t = document.createElement("div");
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(()=> t.remove(), 5000);
   }
-
-  // Handle displaying toast messages based on Django's messages framework
   {% if messages %}
-  {% for message in messages %}
-    {% if message.tags == 'success' %}
-      showToast("{{ message }}", "success");
-    {% elif message.tags == 'error' %}
-      showToast("{{ message }}", "error");
-    {% endif %}
-  {% endfor %}
+    {% for message in messages %}
+      showToast("{{ message }}", "{{ message.tags }}");
+    {% endfor %}
   {% endif %}
 </script>
-
 {% endblock %}

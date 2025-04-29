@@ -142,72 +142,147 @@ def calculate_expiry_date(completion_date_str, course_code):
     except ValueError:
         return "--"
 
+# def todays_completion_records_view(request):
+#     today = now().date()
+#     query = request.GET.get('query', '').strip()
+#     selected_date = request.GET.get('date', '').strip()
+
+#     # Base query to filter records
+#     records_query = CompletionRecord.objects.all()
+
+#     # Apply date filter if selected_date is provided
+#     if selected_date:
+#         try:
+#             date_object = datetime.strptime(selected_date, "%Y-%m-%d").date()
+#             records_query = records_query.filter(completion_date=date_object)
+#         except ValueError:
+#             records_query = records_query.none()
+
+#     # Apply search query
+#     if query:
+#         records_query = records_query.filter(
+#             employee_id__icontains=query
+#         ) | records_query.filter(
+#             employee_email__icontains=query
+#         ) | records_query.filter(
+#             course_code__icontains=query
+#         )
+
+#     # Order records
+#     records = records_query.order_by('completion_date')
+
+#     # If it's an AJAX request, return JSON response with expiry date and validity period
+#     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#         data = []
+#         for record in records:
+#             completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
+#             expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
+#             validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
+
+#             data.append({
+#                 'id': record.id,
+#                 'employee_id': record.employee_id,
+#                 'employee_email': record.employee_email,
+#                 'course_code': record.course_code,
+#                 'completion_date': completion_date_str,
+#                 'expiry_date': expiry_date,
+#                 'validity_period': validity_period,
+#                 'score': record.score or "--",
+#                 'time_in_seconds': record.time_in_seconds or "--",
+#                 'start_date': record.start_date.strftime("%Y-%m-%d") if record.start_date else "--",
+#                 'end_date': record.end_date.strftime("%Y-%m-%d") if record.end_date else "--",
+#             })
+#         return JsonResponse(data, safe=False)
+
+#     # Otherwise, render the template with expiry date and validity period
+#     enriched_records = []
+#     for record in records:
+#         completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
+#         record.expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
+#         record.validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
+#         enriched_records.append(record)
+
+#     return render(request, 'aimsintegration/cpat_completion_records.html', {
+#         'records': enriched_records,
+#         'today': today,
+#         'query': query,
+#     })
+
+
+
+
 def todays_completion_records_view(request):
-    today = now().date()
-    query = request.GET.get('query', '').strip()
+    today         = now().date()
+    query         = request.GET.get('query', '').strip()
     selected_date = request.GET.get('date', '').strip()
 
-    # Base query to filter records
-    records_query = CompletionRecord.objects.all()
+    # 1) Base queryset + filters
+    qs = CompletionRecord.objects.all()
 
-    # Apply date filter if selected_date is provided
     if selected_date:
         try:
-            date_object = datetime.strptime(selected_date, "%Y-%m-%d").date()
-            records_query = records_query.filter(completion_date=date_object)
+            d  = datetime.strptime(selected_date, "%Y-%m-%d").date()
+            qs = qs.filter(completion_date=d)
         except ValueError:
-            records_query = records_query.none()
+            qs = qs.none()
 
-    # Apply search query
     if query:
-        records_query = records_query.filter(
-            employee_id__icontains=query
-        ) | records_query.filter(
-            employee_email__icontains=query
-        ) | records_query.filter(
-            course_code__icontains=query
+        qs = (
+            qs.filter(employee_id__icontains=query) |
+            qs.filter(employee_email__icontains=query) |
+            qs.filter(course_code__icontains=query)
         )
 
-    # Order records
-    records = records_query.order_by('completion_date')
+    qs = qs.order_by("completion_date")
 
-    # If it's an AJAX request, return JSON response with expiry date and validity period
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+    # 2) Paginate
+    paginator   = Paginator(qs, 10)
+    page_number = request.GET.get("page", 1)
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    # 3) AJAX → JSON for just this page
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         data = []
-        for record in records:
-            completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
-            expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
-            validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
-
+        for rec in page_obj:
+            comp_str = rec.completion_date.strftime("%Y-%m-%d") if rec.completion_date else ""
             data.append({
-                'id': record.id,
-                'employee_id': record.employee_id,
-                'employee_email': record.employee_email,
-                'course_code': record.course_code,
-                'completion_date': completion_date_str,
-                'expiry_date': expiry_date,
-                'validity_period': validity_period,
-                'score': record.score or "--",
-                'time_in_seconds': record.time_in_seconds or "--",
-                'start_date': record.start_date.strftime("%Y-%m-%d") if record.start_date else "--",
-                'end_date': record.end_date.strftime("%Y-%m-%d") if record.end_date else "--",
+                "id":              rec.id,
+                "employee_id":     rec.employee_id,
+                "employee_email":  rec.employee_email,
+                "course_code":     rec.course_code,
+                "completion_date": comp_str,
+                "expiry_date":     calculate_expiry_date(comp_str, rec.course_code),
+                "validity_period": VALIDITY_PERIODS.get(rec.course_code, "--"),
+                "score":           rec.score or "--",
+                "time_in_seconds": rec.time_in_seconds or "--",
+                "start_date":      rec.start_date.strftime("%Y-%m-%d") if rec.start_date else "--",
+                "end_date":        rec.end_date.strftime("%Y-%m-%d")   if rec.end_date   else "--",
             })
         return JsonResponse(data, safe=False)
 
-    # Otherwise, render the template with expiry date and validity period
-    enriched_records = []
-    for record in records:
-        completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
-        record.expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
-        record.validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
-        enriched_records.append(record)
+    # 4) Non-AJAX → enrich & render
+    enriched = []
+    for rec in page_obj:
+        comp_str = rec.completion_date.strftime("%Y-%m-%d") if rec.completion_date else ""
+        rec.expiry_date     = calculate_expiry_date(comp_str, rec.course_code)
+        rec.validity_period = VALIDITY_PERIODS.get(rec.course_code, "--")
+        enriched.append(rec)
 
-    return render(request, 'aimsintegration/cpat_completion_records.html', {
-        'records': enriched_records,
-        'today': today,
-        'query': query,
+    display_pages = get_display_pages(page_obj, num_links=2)
+
+    return render(request, "aimsintegration/cpat_completion_records.html", {
+        "records":       enriched,
+        "page_obj":      page_obj,
+        "display_pages": display_pages,
+        "today":         today,
+        "query":         query,
+        "selected_date": selected_date,
     })
-
 
 
 
