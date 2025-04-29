@@ -1,27 +1,10 @@
 {% extends 'base.html' %}
 {% load static %}
 
+{# Page-specific CSS for CPAT + pagination styling #}
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
-  /* Sidebar fixed */
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 200px;
-    height: 100vh;
-    overflow-y: auto;
-    border-right: 1px solid #ddd;
-    background: #fff;
-    z-index: 100;
-  }
-  /* Shift main content over */
-  .main-content {
-    margin-left: 200px;
-    padding: 20px;
-  }
-
   /* Toast styling */
   .toast {
     padding: 15px;
@@ -38,7 +21,7 @@
   .toast.success { background-color: green; }
   .toast.error   { background-color: red; }
 
-  /* Pagination styling */
+  /* Pagination */
   .pagination-container {
     margin-top: 20px;
     display: flex;
@@ -83,10 +66,7 @@
       <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
       <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
       <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
-      <li>
-        <a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3"
-           target="_blank">OTP</a>
-      </li>
+      <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
     </ul>
   </aside>
 
@@ -102,10 +82,12 @@
         placeholder="Search by Employee, Email, or Course Code"
         value="{{ query }}"
       />
+
       <select id="filter-select" class="filter-select">
         <option value="none" {% if not selected_date %}selected{% endif %}>Filter by</option>
         <option value="date" {% if selected_date %}selected{% endif %}>Date</option>
       </select>
+
       <input
         type="date"
         id="date-picker"
@@ -186,8 +168,9 @@
 <!-- Toast Container -->
 <div id="toast-container" class="toast-container"></div>
 
-<!-- Search/AJAX & Toast JS -->
+<!-- Search, AJAX refresh & Toast JS -->
 <script>
+  // Toggle date-picker
   document.getElementById("filter-select").addEventListener("change", function() {
     const dp = document.getElementById("date-picker");
     if (this.value === "date") {
@@ -199,6 +182,7 @@
     }
   });
 
+  // Listen for search & date changes
   document.getElementById("search-input").addEventListener("input", searchRecords);
   document.getElementById("date-picker" ).addEventListener("change", searchRecords);
 
@@ -230,6 +214,7 @@
     });
   }
 
+  // Toast helper
   function showToast(msg, type) {
     const c = document.getElementById("toast-container");
     const t = document.createElement("div");
