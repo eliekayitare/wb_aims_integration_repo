@@ -88,7 +88,7 @@
             <td>{{ record.start_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.end_date|date:"Y-m-d"|default:"--" }}</td>
             <td>{{ record.completion_date|date:"Y-m-d" }}</td>
-            <td>{{record.validity_period | default:"0"}}</td>
+            <td>{{record.validity_period}}</td>
             <td>{{record.expiry_date | default:"No expires"}}</td>
           </tr>
           {% endfor %}
