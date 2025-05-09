@@ -362,7 +362,7 @@ import openpyxl
 from .models import Crew, Duty, Airport, Invoice, InvoiceItem
 from .forms import CSVUploadForm
 
-@login_required(login_url='login')
+# @login_required(login_url='login')
 def get_display_pages(page_obj, num_links=2):
     """
     Returns a list of page numbers around the current page,
