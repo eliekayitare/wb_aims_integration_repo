@@ -64,6 +64,7 @@ from .models import FlightData, CargoFlightData
 from .serializers import FlightDataSerializer
 from datetime import datetime
 
+@login_required(login_url='login')
 class FlightDataListView(APIView):
     def get(self, request, *args, **kwargs):
         # Extract query parameters
@@ -119,7 +120,7 @@ VALIDITY_PERIODS = {
     "ADW": 36,
     "PWS": 36,
 }
-
+@login_required(login_url='login')
 def calculate_expiry_date(completion_date_str, course_code):
     """
     Calculate expiry date based on completion date in DDMMYYYY format
@@ -360,7 +361,7 @@ import openpyxl
 from .models import Crew, Duty, Airport, Invoice, InvoiceItem
 from .forms import CSVUploadForm
 
-
+@login_required(login_url='login')
 def get_display_pages(page_obj, num_links=2):
     """
     Returns a list of page numbers around the current page,
@@ -417,7 +418,7 @@ def upload_callowance_file(request):
         'form': form,
     })
 
-
+@login_required(login_url='login')
 def handle_callowance_csv(csv_file):
     """
     1. Reads CSV/TXT rows.
@@ -660,7 +661,7 @@ def crew_allowance_list(request):
 
 
 
-
+@login_required(login_url='login')
 def compute_crew_allowance_for_month(crew, month_first_day):
     """
     On-the-fly calculation: sum each Duty's layover hours * arrival zone's rate.
@@ -770,7 +771,7 @@ def crew_allowance_details(request, crew_id, year, month):
 # somewhere in utils/pdf_utils.py
 import io
 from xhtml2pdf import pisa
-
+@login_required(login_url='login')
 def convert_html_to_pdf(html_content):
     """
     Returns a bytes object of the PDF, or None if there's an error.
@@ -826,17 +827,30 @@ def generate_overall_payslip(request):
         return HttpResponse("No nonzero invoices found for that month.", status=404)
 
     # 3) Connect to MSSQL to get the exchange rate
+    # with connections['mssql'].cursor() as cursor:
+    #     cursor.execute("""
+    #         SELECT [Relational Exch_ Rate Amount]
+    #         FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+    #         WHERE [Currency Code] = 'USD'
+    #           AND [Starting Date] = (
+    #               SELECT MAX([Starting Date])
+    #               FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+    #               WHERE [Currency Code] = 'USD'
+    #           );
+    #     """)
+    #     row = cursor.fetchone()
+
     with connections['mssql'].cursor() as cursor:
         cursor.execute("""
             SELECT [Relational Exch_ Rate Amount]
             FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-            WHERE [Currency Code] = 'USD'
-              AND [Starting Date] = (
-                  SELECT MAX([Starting Date])
-                  FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-                  WHERE [Currency Code] = 'USD'
-              );
-        """)
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
         row = cursor.fetchone()
 
     if not row:
@@ -1050,17 +1064,30 @@ def generate_others_payslip(request):
         return HttpResponse("No invoices found for others.", status=404)
 
     # 3) Connect to MSSQL to get the exchange rate
+    # with connections['mssql'].cursor() as cursor:
+    #     cursor.execute("""
+    #         SELECT [Relational Exch_ Rate Amount]
+    #         FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+    #         WHERE [Currency Code] = 'USD'
+    #           AND [Starting Date] = (
+    #               SELECT MAX([Starting Date])
+    #               FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+    #               WHERE [Currency Code] = 'USD'
+    #           );
+    #     """)
+    #     row = cursor.fetchone()
+
     with connections['mssql'].cursor() as cursor:
         cursor.execute("""
             SELECT [Relational Exch_ Rate Amount]
             FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-            WHERE [Currency Code] = 'USD'
-              AND [Starting Date] = (
-                  SELECT MAX([Starting Date])
-                  FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-                  WHERE [Currency Code] = 'USD'
-              );
-        """)
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
         row = cursor.fetchone()
 
     if not row:
@@ -1147,101 +1174,6 @@ def generate_others_payslip(request):
 
 
 
-
-# def generate_payslip_for_bank(request):
-#     # 1) Read ?month=YYYY-MM and ?bank_name
-#     month_str = request.GET.get('month')
-#     bank_name = request.GET.get('bank_name')
-#     if not month_str or not bank_name:
-#         return HttpResponse("Month and bank name are required parameters.", status=400)
-
-#     # Parse the month
-#     year, mo = map(int, month_str.split('-'))
-#     filter_month = date(year, mo, 1)
-
-#     # 2) Fetch invoices for the specific bank
-#     invoices = (
-#         Invoice.objects
-#         .filter(month=filter_month, total_amount__gt=0)
-#         .select_related('crew')
-#         .order_by('crew__crew_id')
-#     )
-
-#     # Fetch bank details
-#     crew_ids = list({inv.crew.crew_id for inv in invoices})
-#     wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
-#     employee_bank_data = {}
-
-#     if wb_formatted_ids:
-#         placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
-#         query = f"""
-#             SELECT [No_], [Bank Name], [Bank Account No]
-#             FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-#             WHERE [No_] IN ({placeholders})
-#         """
-#         with connections['mssql'].cursor() as cursor:
-#             cursor.execute(query, wb_formatted_ids)
-#             rows = cursor.fetchall()
-
-#         for no_, b_name, account_no in rows:
-#             formatted_no = no_.strip()
-#             employee_bank_data[formatted_no] = {
-#                 'bank_name': b_name.strip() if b_name else '',
-#                 'account_no': account_no.strip() if account_no else '',
-#             }
-
-#     # Filter invoices for the given bank name
-#     items = []
-#     for inv in invoices:
-#         wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
-#         bank_data = employee_bank_data.get(wb_formatted, {'bank_name': '', 'account_no': '-'})
-#         if bank_data['bank_name'] != bank_name:
-#             continue
-
-#         usd_amount = inv.total_amount
-#         rwf_amount = (usd_amount * Decimal(1.0)).quantize(Decimal('0.00'))
-
-#         items.append({
-#             'wb_no': inv.crew.crew_id,
-#             'name': f"{inv.crew.first_name} {inv.crew.last_name}",
-#             'position': inv.crew.position,
-#             'usd_amount': usd_amount,
-#             'rwf_amount': f"{rwf_amount:,.2f}",
-#             'bank_name': bank_data['bank_name'],
-#             'account_no': bank_data['account_no'],
-#         })
-
-#     if not items:
-#         return HttpResponse(f"No invoices found for bank: {bank_name}", status=404)
-
-#     # Calculate totals
-#     total_usd = sum([Decimal(item['usd_amount']) for item in items])
-#     total_rwf = sum([Decimal(item['rwf_amount'].replace(',', '')) for item in items])
-
-#     # Prepare context for the template
-#     context = {
-#         'items': items,
-#         'filter_month': filter_month,
-#         'exchange_rate': 1.0,  # Assuming exchange rate is already applied
-#         'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
-#         'total_usd': f"{total_usd:,.2f}",
-#         'total_rwf': f"{total_rwf:,.2f}",
-#         'current_date': datetime.now().strftime("%B %d, %Y"),
-#     }
-
-#     # Render and generate the PDF
-#     html_string = render_to_string('aimsintegration/payslip_template.html', context)
-#     pdf_file = convert_html_to_pdf(html_string)
-#     if not pdf_file:
-#         return HttpResponse(f"Error generating payslip for bank: {bank_name}", status=500)
-
-#     # Return the PDF response
-#     response = HttpResponse(pdf_file, content_type='application/pdf')
-#     filename = f"{bank_name.replace(' ', '_')}_Crew Allowance Slip_{filter_month.strftime('%Y-%m')}.pdf"
-#     response['Content-Disposition'] = f'attachment; filename="{filename}"'
-#     return response
-
-
 @login_required(login_url='login')
 def generate_payslip_for_bank(request):
     # 1) Read ?month=YYYY-MM and ?bank_name
@@ -1286,17 +1218,30 @@ def generate_payslip_for_bank(request):
         return HttpResponse(f"No nonzero invoices found for month {filter_month}.", status=404)
 
     # 3) Connect to MSSQL to get the exchange rate
+    # with connections['mssql'].cursor() as cursor:
+    #     cursor.execute("""
+    #         SELECT [Relational Exch_ Rate Amount]
+    #         FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+    #         WHERE [Currency Code] = 'USD'
+    #           AND [Starting Date] = (
+    #               SELECT MAX([Starting Date])
+    #               FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+    #               WHERE [Currency Code] = 'USD'
+    #           );
+    #     """)
+    #     row = cursor.fetchone()
+
     with connections['mssql'].cursor() as cursor:
         cursor.execute("""
             SELECT [Relational Exch_ Rate Amount]
             FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-            WHERE [Currency Code] = 'USD'
-              AND [Starting Date] = (
-                  SELECT MAX([Starting Date])
-                  FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
-                  WHERE [Currency Code] = 'USD'
-              );
-        """)
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
         row = cursor.fetchone()
 
     if not row:
@@ -1463,7 +1408,7 @@ import json
 from django.shortcuts import get_object_or_404
 from .models import Zone, Airport
 
-@csrf_exempt
+
 @login_required(login_url='login')
 def update_zone(request, zone_id):
     """
@@ -1532,7 +1477,7 @@ from django.http import JsonResponse
 import json
 from .models import Airport
 
-@csrf_exempt
+
 @login_required(login_url='login')
 def update_airport(request, airport_id):
     if request.method == "POST":
@@ -1547,7 +1492,7 @@ def update_airport(request, airport_id):
             return JsonResponse({"error": "Invalid JSON data"}, status=400)
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
-@csrf_exempt
+
 @login_required(login_url='login')
 def delete_airport(request, airport_id):
     if request.method == "POST":
@@ -1562,7 +1507,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from .models import Zone
 
-@csrf_exempt
+
 @login_required(login_url='login')
 def delete_zone(request, zone_id):
     if request.method == "POST":
@@ -1579,7 +1524,7 @@ from django.shortcuts import get_object_or_404
 import json
 from .models import Zone, Airport
 
-@csrf_exempt
+
 @login_required(login_url='login')
 def add_airport(request, zone_id):
     if request.method == "POST":

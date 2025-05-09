@@ -20,7 +20,7 @@ def login_view(request):
         try:
             response = requests.get(
                 settings.AD_AUTH_URL,
-                params={"key": "Nas!2015", "user": username, "pass": password},
+                params={"key": settings.AD_AUTH_KEY, "user": username, "pass": password},
                 verify=False,
                 timeout=10
             )
