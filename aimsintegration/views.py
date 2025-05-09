@@ -4,6 +4,9 @@ from django.http import JsonResponse
 from .models import FlightData,FdmFlightData
 from datetime import date, datetime
 from .models import *
+from django.contrib.auth.decorators import login_required
+
+@login_required(login_url='login')
 def dashboard_view(request):
     query = request.GET.get('query', '')
     selected_date = request.GET.get('date', '')
@@ -142,75 +145,7 @@ def calculate_expiry_date(completion_date_str, course_code):
     except ValueError:
         return "--"
 
-# def todays_completion_records_view(request):
-#     today = now().date()
-#     query = request.GET.get('query', '').strip()
-#     selected_date = request.GET.get('date', '').strip()
-
-#     # Base query to filter records
-#     records_query = CompletionRecord.objects.all()
-
-#     # Apply date filter if selected_date is provided
-#     if selected_date:
-#         try:
-#             date_object = datetime.strptime(selected_date, "%Y-%m-%d").date()
-#             records_query = records_query.filter(completion_date=date_object)
-#         except ValueError:
-#             records_query = records_query.none()
-
-#     # Apply search query
-#     if query:
-#         records_query = records_query.filter(
-#             employee_id__icontains=query
-#         ) | records_query.filter(
-#             employee_email__icontains=query
-#         ) | records_query.filter(
-#             course_code__icontains=query
-#         )
-
-#     # Order records
-#     records = records_query.order_by('completion_date')
-
-#     # If it's an AJAX request, return JSON response with expiry date and validity period
-#     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-#         data = []
-#         for record in records:
-#             completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
-#             expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
-#             validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
-
-#             data.append({
-#                 'id': record.id,
-#                 'employee_id': record.employee_id,
-#                 'employee_email': record.employee_email,
-#                 'course_code': record.course_code,
-#                 'completion_date': completion_date_str,
-#                 'expiry_date': expiry_date,
-#                 'validity_period': validity_period,
-#                 'score': record.score or "--",
-#                 'time_in_seconds': record.time_in_seconds or "--",
-#                 'start_date': record.start_date.strftime("%Y-%m-%d") if record.start_date else "--",
-#                 'end_date': record.end_date.strftime("%Y-%m-%d") if record.end_date else "--",
-#             })
-#         return JsonResponse(data, safe=False)
-
-#     # Otherwise, render the template with expiry date and validity period
-#     enriched_records = []
-#     for record in records:
-#         completion_date_str = record.completion_date.strftime("%Y-%m-%d") if record.completion_date else ""
-#         record.expiry_date = calculate_expiry_date(completion_date_str, record.course_code)
-#         record.validity_period = VALIDITY_PERIODS.get(record.course_code, "--")
-#         enriched_records.append(record)
-
-#     return render(request, 'aimsintegration/cpat_completion_records.html', {
-#         'records': enriched_records,
-#         'today': today,
-#         'query': query,
-#     })
-
-
-
-
+@login_required(login_url='login')
 def todays_completion_records_view(request):
     today         = now().date()
     query         = request.GET.get('query', '').strip()
@@ -298,6 +233,7 @@ from django.utils.timezone import make_aware
 
 logger = logging.getLogger(__name__)
 
+@login_required(login_url='login')
 def fdm_dashboard_view(request):
     query = request.GET.get('query', '').strip()  # Get the query string, remove leading/trailing spaces
     selected_date = request.GET.get('date', '').strip()  # Get the selected date, remove spaces
@@ -357,6 +293,7 @@ import logging
 from django.db.models import Case, When, Value, IntegerField
 logger = logging.getLogger(__name__)
 
+@login_required(login_url='login')
 def get_crew_details(request):
     # Get parameters from the frontend
     flight_no = request.GET.get('flight_no')
@@ -461,7 +398,7 @@ def get_display_pages(page_obj, num_links=2):
 
     return pages
 
-
+@login_required(login_url='login')
 def upload_callowance_file(request):
     """
     Allows user to upload a CSV or TXT file that may contain multiple months of data.
@@ -614,6 +551,7 @@ def handle_callowance_csv(csv_file):
 from django.db.models import Max
 from django.db.models import Q
 
+@login_required(login_url='login')
 def crew_allowance_list(request):
     """
     Shows a paginated table of only those Invoices for the selected month,
@@ -745,7 +683,7 @@ def compute_crew_allowance_for_month(crew, month_first_day):
 
 
 
-
+@login_required(login_url='login')
 def crew_allowance_details(request, crew_id, year, month):
     """
     Displays (or returns JSON) all duties for one crew in the chosen month.
@@ -857,7 +795,7 @@ from django.template.loader import render_to_string
 from django.templatetags.static import static
 from .models import Invoice
 
-
+@login_required(login_url='login')
 def generate_overall_payslip(request):
     # 1) Read ?month=YYYY-MM
     month_str = request.GET.get('month')
@@ -1002,7 +940,7 @@ def generate_overall_payslip(request):
 
 
 
-
+@login_required(login_url='login')
 def generate_usd_payslip(request):
     # Get the month parameter
     month_str = request.GET.get('month')
@@ -1090,7 +1028,7 @@ def generate_usd_payslip(request):
 
 
 
-
+@login_required(login_url='login')
 def generate_others_payslip(request):
     # 1) Get the month parameter
     month_str = request.GET.get('month')
@@ -1304,7 +1242,7 @@ def generate_others_payslip(request):
 #     return response
 
 
-
+@login_required(login_url='login')
 def generate_payslip_for_bank(request):
     # 1) Read ?month=YYYY-MM and ?bank_name
     month_str = request.GET.get('month')
@@ -1443,7 +1381,7 @@ def generate_payslip_for_bank(request):
 
 
 from django.http import JsonResponse
-
+@login_required(login_url='login')
 def get_bank_names(request):
     invoices = Invoice.objects.filter(total_amount__gt=0).select_related('crew')
     crew_ids = {inv.crew.crew_id for inv in invoices}
@@ -1468,7 +1406,7 @@ def get_bank_names(request):
 
 
 
-
+@login_required(login_url='login')
 def layover_setup(request):
     zones = Zone.objects.all().prefetch_related('airports')
     # Convert each zone’s airports into a list or handle in template
@@ -1484,6 +1422,7 @@ import json
 from .models import Zone, Airport
 
 @require_POST
+@login_required(login_url='login')
 def create_zone(request):
     try:
         data = json.loads(request.body.decode('utf-8'))
@@ -1525,6 +1464,7 @@ from django.shortcuts import get_object_or_404
 from .models import Zone, Airport
 
 @csrf_exempt
+@login_required(login_url='login')
 def update_zone(request, zone_id):
     """
     Update a zone's details including its name, hourly rate, and associated airports.
@@ -1576,6 +1516,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from .models import Zone
 
+@login_required(login_url='login')
 def get_zone_airports(request, zone_id):
     """
     Fetch all airports belonging to a specific zone.
@@ -1592,6 +1533,7 @@ import json
 from .models import Airport
 
 @csrf_exempt
+@login_required(login_url='login')
 def update_airport(request, airport_id):
     if request.method == "POST":
         try:
@@ -1606,6 +1548,7 @@ def update_airport(request, airport_id):
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
 @csrf_exempt
+@login_required(login_url='login')
 def delete_airport(request, airport_id):
     if request.method == "POST":
         airport = get_object_or_404(Airport, id=airport_id)
@@ -1620,6 +1563,7 @@ from django.shortcuts import get_object_or_404
 from .models import Zone
 
 @csrf_exempt
+@login_required(login_url='login')
 def delete_zone(request, zone_id):
     if request.method == "POST":
         zone = get_object_or_404(Zone, id=zone_id)
@@ -1636,6 +1580,7 @@ import json
 from .models import Zone, Airport
 
 @csrf_exempt
+@login_required(login_url='login')
 def add_airport(request, zone_id):
     if request.method == "POST":
         try:

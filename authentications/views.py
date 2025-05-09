@@ -92,49 +92,12 @@ def logout_view(request):
     messages.success(request, "You have been logged out successfully.")
     return redirect('login')
 
-
-# from django.shortcuts import render
-# from django.core.paginator import Paginator
-
-# def systems_list(request):
-#     # Example data (add more items to see pagination)
-#     systems = [
-#         {"title": "Accounting",
-#          "description": "Manage financial transactions and reports.",
-#          "icon": "img/accounting-icon.png",
-#          "url": "https://accounting.example.com"},
-#         {"title": "CRM",
-#          "description": "Manage customer relations and pipelines.",
-#          "icon": "img/crm-icon.png",
-#          "url": "https://crm.example.com"},
-#         {"title": "Subscriptions",
-#          "description": "Manage recurring subscriptions and invoicing.",
-#          "icon": "img/subscriptions-icon.png",
-#          "url": "https://subscriptions.example.com"},
-#         {"title": "Purchase",
-#          "description": "Streamline purchase orders and vendor management.",
-#          "icon": "img/purchase-icon.png",
-#          "url": "https://purchase.example.com"},
-
-         
-        
-#     ]
-
-#     # Create a paginator for 8 items per page
-#     paginator = Paginator(systems, 8)
-#     page_number = request.GET.get('page')  # e.g. ?page=2
-#     page_obj = paginator.get_page(page_number)
-
-#     context = {
-#         "page_obj": page_obj,  # pass the page object to template
-#     }
-#     return render(request, 'authentications/systems_list.html', context)
-
-
-
 from django.shortcuts import render
 from django.core.paginator import Paginator
+from django.contrib.auth.decorators import login_required
 
+
+@login_required(login_url='login')
 def systems_list(request):
     # Example data (only "title", "description", and "url" now)
     systems = [
