@@ -63,8 +63,9 @@ from django.utils.dateparse import parse_date
 from .models import FlightData, CargoFlightData
 from .serializers import FlightDataSerializer
 from datetime import datetime
+from django.utils.decorators import method_decorator
 
-@login_required(login_url='login')
+@method_decorator(login_required(login_url='login'), name='dispatch')
 class FlightDataListView(APIView):
     def get(self, request, *args, **kwargs):
         # Extract query parameters
