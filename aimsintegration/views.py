@@ -121,7 +121,7 @@ VALIDITY_PERIODS = {
     "ADW": 36,
     "PWS": 36,
 }
-@login_required(login_url='login')
+
 def calculate_expiry_date(completion_date_str, course_code):
     """
     Calculate expiry date based on completion date in DDMMYYYY format
