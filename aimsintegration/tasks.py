@@ -862,21 +862,87 @@ def fetch_tableau():
 
 
 
-from datetime import datetime, timedelta, timezone
-from exchangelib.errors import ErrorServerBusy
+# from datetime import datetime, timedelta, timezone
+# from exchangelib.errors import ErrorServerBusy
+
+# @shared_task(bind=True, max_retries=5)
+# def delete_old_emails(self):
+#     """
+#     Deletes all emails that are older than 10 days in the inbox,
+#     with a retry strategy to handle ErrorServerBusy.
+#     """
+#     account = get_exchange_account()
+#     days_to_keep = 7
+
+#     # Create a Python datetime in UTC and convert to EWSDateTime
+#     cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+#     cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+#     threshold_datetime = EWSDateTime.from_datetime(cutoff_date)
+
+#     try:
+#         logger.info(f"Filtering emails older than {days_to_keep} days (before {threshold_datetime})...")
+#         old_emails = account.inbox.filter(datetime_received__lt=threshold_datetime)
+        
+#         count_old = old_emails.count()
+#         logger.info(f"Found {count_old} email(s) older than {days_to_keep} days. Proceeding to delete them...")
+
+#         if count_old > 0:
+#             old_emails.delete()
+#             logger.info(f"Deleted {count_old} old email(s).")
+#         else:
+#             logger.info("No old emails to delete.")
+
+#         return f"Purged {count_old} email(s) older than {days_to_keep} days."
+
+#     except ErrorServerBusy as e:
+#         # If the Exchange server is busy, wait and retry
+#         wait_time = 2 ** self.request.retries * 5  # Exponential backoff
+#         logger.warning(
+#             f"Server is busy (attempt {self.request.retries + 1}/{self.max_retries}). "
+#             f"Retrying in {wait_time} seconds..."
+#         )
+
+#         # Retry the task after `wait_time` seconds
+#         raise self.retry(exc=e, countdown=wait_time)
+
+
+import csv
+import os
+import time
+import logging
+import uuid
+from datetime import datetime, timedelta
+import pytz  # Add this for timezone handling
+
+# Django imports
+from django.conf import settings
+from django.core.mail import EmailMessage, get_connection
+from django.db import transaction
+from django.utils import timezone as django_timezone  # Rename to avoid conflict
+
+# Celery imports
+from celery import shared_task
+from celery.utils.log import get_task_logger
+
+# Your models
+from .models import *
+
+# Initialize loggers
+logger = logging.getLogger(__name__)
+task_logger = get_task_logger(__name__)
 
 @shared_task(bind=True, max_retries=5)
 def delete_old_emails(self):
     """
-    Deletes all emails that are older than 10 days in the inbox,
+    Deletes all emails that are older than 7 days in the inbox,
     with a retry strategy to handle ErrorServerBusy.
     """
     account = get_exchange_account()
-    days_to_keep = 7
+    days_to_keep = 7  # Fixed from 'l7'
 
     # Create a Python datetime in UTC and convert to EWSDateTime
     cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
-    cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+    cutoff_date = cutoff_date.replace(tzinfo=pytz.UTC)  # Use pytz.UTC instead of timezone.utc
     threshold_datetime = EWSDateTime.from_datetime(cutoff_date)
 
     try:
@@ -905,39 +971,12 @@ def delete_old_emails(self):
         # Retry the task after `wait_time` seconds
         raise self.retry(exc=e, countdown=wait_time)
 
-
-
-
-
 # =======================================================================
 
 # DREAMMILES 
 
 # =======================================================================
 
-import csv
-import os
-import time
-import logging
-import uuid
-from datetime import datetime, timedelta
-
-# Django imports
-from django.conf import settings
-from django.core.mail import EmailMessage, get_connection
-from django.db import transaction
-from django.utils import timezone
-
-# Celery imports
-from celery import shared_task
-from celery.utils.log import get_task_logger
-
-# Your models - make sure to import the new Dreammiles models
-from .models import *
-
-# Initialize loggers
-logger = logging.getLogger(__name__)
-task_logger = get_task_logger(__name__)
 # Dreammiles email campaign tasks
 def extract_first_name(email, tier=None):
     """Extract first name from email with fallbacks"""
@@ -1247,7 +1286,7 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
                     # Update records
                     for record, _ in micro_batch:
                         record.status = 'sent'
-                        record.sent_at = datetime.now()
+                        record.sent_at = django_timezone.now()
                         record.save(update_fields=['status', 'sent_at'])
                         success_count += 1
                     
@@ -1277,7 +1316,7 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
             campaign.refresh_from_db()
             campaign.emails_sent += success_count
             campaign.emails_failed += failure_count
-            campaign.last_sent_at = datetime.now()
+            campaign.last_sent_at = django_timezone.now()
             campaign.save(update_fields=['emails_sent', 'emails_failed', 'last_sent_at'])
         
         logger.info(f"Batch {batch_number} complete: {success_count} sent, {failure_count} failed")
@@ -1360,7 +1399,6 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
             pass
         
         return {"status": "error", "message": str(e)}
-
 @shared_task
 def send_dreammiles_report(campaign_id):
     """Generate and send campaign completion report"""
@@ -1373,7 +1411,7 @@ def send_dreammiles_report(campaign_id):
         failed = campaign.emails_failed
         
         # Calculate completion time
-        duration = datetime.now() - campaign.created_at
+        duration = django_timezone.now() - campaign.created_at  # CHANGED
         hours = duration.total_seconds() / 3600
         
         # Generate report
@@ -1383,7 +1421,7 @@ DREAMMILES EMAIL CAMPAIGN REPORT
 
 Campaign: {campaign.name}
 Started: {campaign.created_at.strftime('%Y-%m-%d %H:%M:%S')}
-Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Completed: {django_timezone.now().strftime('%Y-%m-%d %H:%M:%S')}  # CHANGED
 Duration: {int(hours)} hours, {int((hours % 1) * 60)} minutes
 
 SUMMARY
@@ -1424,7 +1462,8 @@ Failed: {failed:,} ({round(failed/total*100 if total > 0 else 0, 2)}%)
         # Send report
         recipients = [
             'winnie.gashumba@rwandair.com',
-            'pacifique.byiringiro@rwandair.com'
+            'pacifique.byiringiro@rwandair.com',
+            'elie.kayitare@rwandair.com'
         ]
         
         email = EmailMessage(
