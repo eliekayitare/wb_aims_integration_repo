@@ -78,7 +78,7 @@ LOGGING = {
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['10.0.0.120', 'localhost', '127.0.0.1','wbhub.rwandair.com']
 
@@ -231,7 +231,11 @@ AIMS_SERVER_USER= config('AIMS_SERVER_USER')
 AIMS_SERVER_PASSWORD= config('AIMS_SERVER_PASSWORD')
 AIMS_SERVER_DESTINATION_PATH= config('AIMS_SERVER_DESTINATION_PATH')
 AIMS_PORT= config('AIMS_PORT')
-# settings.py
+
+# DREAMMILES
+
+DREAM_HOST_USER = config('DREAM_HOST_USER')
+DREAM_HOST_PASSWORD = config('DREAM_HOST_PASSWORD')
 
 # Celery Configuration
 from kombu import Queue, Exchange
@@ -319,6 +323,18 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'aimsintegration.tasks.delete_old_emails',
         'schedule': crontab(minute='*/2'),  # Every hour
     },
+
+     # NEW: Dreammiles Campaign - Check for new campaigns to start hourly
+    'check-dreammiles-campaign-hourly': {
+        'task': 'aimsintegration.tasks.check_and_start_dreammiles_campaign',
+        'schedule': crontab(minute='0'),  # Every hour at XX:00
+    },
+    
+    # NEW: Dreammiles Campaign - Process email batches hourly
+    'process-dreammiles-emails-hourly': {
+        'task': 'aimsintegration.tasks.process_dreammiles_batch',
+        'schedule': crontab(minute='15'),  # Every hour at XX:15
+    },
     
 }
 
@@ -346,6 +362,9 @@ STATICFILES_FINDERS = [
 # Directory where static files are stored for the project
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# In your settings.py, add:
+DATA_DIR = os.path.join(BASE_DIR, 'data')
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 

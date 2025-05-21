@@ -906,3 +906,543 @@ def delete_old_emails(self):
         raise self.retry(exc=e, countdown=wait_time)
 
 
+
+
+
+# =======================================================================
+
+# DREAMMILES 
+
+# =======================================================================
+
+import csv
+import os
+import time
+import logging
+import uuid
+from datetime import datetime, timedelta
+
+# Django imports
+from django.conf import settings
+from django.core.mail import EmailMessage, get_connection
+from django.db import transaction
+from django.utils import timezone
+
+# Celery imports
+from celery import shared_task
+from celery.utils.log import get_task_logger
+
+# Your models - make sure to import the new Dreammiles models
+from .models import *
+
+# Initialize loggers
+logger = logging.getLogger(__name__)
+task_logger = get_task_logger(__name__)
+# Dreammiles email campaign tasks
+def extract_first_name(email, tier=None):
+    """Extract first name from email with fallbacks"""
+    try:
+        username = email.split('@')[0].lower()
+        
+        for separator in ['.', '-', '_']:
+            if separator in username:
+                first_part = username.split(separator)[0]
+                if len(first_part) > 1:
+                    return first_part.capitalize()
+        
+        if 2 < len(username) < 30 and username.isalpha():
+            return username.capitalize()
+        
+        if tier and tier not in ['', 'None', 'NULL']:
+            return f"{tier} Member"
+            
+    except Exception:
+        pass
+    
+    return "Dreammiles Member"
+
+@shared_task
+def check_and_start_dreammiles_campaign():
+    """
+    Checks if an active campaign exists; if not, start a new one.
+    This task runs every hour.
+    """
+    # Check for active campaigns
+    active_campaign = DreammilesCampaign.objects.filter(
+        status__in=['importing', 'processing']
+    ).first()
+    
+    if active_campaign:
+        logger.info(f"Active campaign already exists: {active_campaign.name} (ID: {active_campaign.id})")
+        return {"status": "skipped", "message": "Active campaign exists"}
+    
+    # Check for CSV file
+    csv_path = os.path.join(settings.DATA_DIR, 'dreamilesnotice.csv')
+    if not os.path.exists(csv_path):
+        logger.warning(f"CSV file not found at {csv_path}")
+        return {"status": "error", "message": "CSV file not found"}
+    
+    # Start a new campaign
+    try:
+        campaign = DreammilesCampaign.objects.create(
+            name=f"Dreammiles Business Lite Promotion - {datetime.now().strftime('%Y-%m-%d')}",
+            subject="Upgrade to Business Lite and Fly in Style",
+            email_body="""Dear {first_name},
+
+We have something exciting for you
+
+Did you know that you can now stretch out in style, sip the finest drinks, savour gourmet meals, skip the queues, and lounge like a VIP — Book now and enjoy our Business Lite"""
+        )
+        
+        # Start import process
+        import_dreammiles_csv.delay(str(campaign.id), csv_path)
+        
+        logger.info(f"Started new campaign: {campaign.name} (ID: {campaign.id})")
+        return {"status": "success", "message": "New campaign started", "campaign_id": str(campaign.id)}
+        
+    except Exception as e:
+        logger.error(f"Error starting campaign: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@shared_task
+def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
+    """Process the CSV file and create email records"""
+    try:
+        campaign = DreammilesCampaign.objects.get(id=campaign_id)
+        logger.info(f"Importing CSV for campaign: {campaign.name}")
+        
+        # Track stats
+        total_records = 0
+        valid_records = 0
+        duplicate_records = 0
+        
+        # Open CSV file
+        with open(csv_path, 'r', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            
+            # Check if first row might be a header
+            first_row = next(reader, None)
+            if first_row and not any('@' in col for col in first_row if col):
+                logger.info("Detected header row in CSV file")
+            else:
+                # Process as data row
+                csvfile.seek(0)  # Reset to beginning
+                
+            # Process all rows
+            records_to_create = []
+            batch_number = 0
+            
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                
+                total_records += 1
+                
+                member_id = row[0].strip() if row[0] else ''
+                email = row[1].strip().lower() if row[1] else ''
+                tier = row[2].strip() if len(row) > 2 and row[2] else None
+                
+                # Validate email
+                if not email or '@' not in email:
+                    continue
+                
+                # Determine batch number (3000 emails per batch)
+                batch_number = total_records // 3000
+                
+                # Extract first name
+                first_name = extract_first_name(email, tier)
+                
+                # Add to batch
+                records_to_create.append(DreamilesEmailRecord(
+                    campaign=campaign,
+                    member_id=member_id,
+                    email=email,
+                    tier=tier,
+                    first_name=first_name,
+                    batch_number=batch_number,
+                    status='pending'
+                ))
+                
+                valid_records += 1
+                
+                # Process in batches to manage memory
+                if len(records_to_create) >= batch_size:
+                    try:
+                        with transaction.atomic():
+                            DreamilesEmailRecord.objects.bulk_create(
+                                records_to_create,
+                                batch_size=1000,
+                                ignore_conflicts=True
+                            )
+                    except Exception as e:
+                        logger.error(f"Error creating email records: {str(e)}")
+                        # Fallback to one-by-one if bulk create fails
+                        for record in records_to_create:
+                            try:
+                                record.save()
+                            except Exception:
+                                duplicate_records += 1
+                    
+                    records_to_create = []
+            
+            # Process any remaining records
+            if records_to_create:
+                try:
+                    with transaction.atomic():
+                        DreamilesEmailRecord.objects.bulk_create(
+                            records_to_create,
+                            batch_size=1000,
+                            ignore_conflicts=True
+                        )
+                except Exception as e:
+                    logger.error(f"Error creating remaining email records: {str(e)}")
+                    # Fallback
+                    for record in records_to_create:
+                        try:
+                            record.save()
+                        except Exception:
+                            duplicate_records += 1
+        
+        # Update campaign
+        total_recipients = DreamilesEmailRecord.objects.filter(campaign=campaign).count()
+        campaign.total_recipients = total_recipients
+        campaign.csv_processed = True
+        campaign.status = 'processing'  # Ready for sending
+        campaign.save(update_fields=['total_recipients', 'csv_processed', 'status'])
+        
+        logger.info(f"CSV import completed: {valid_records} valid records, {duplicate_records} duplicates")
+        
+        # Start processing the first batch immediately
+        process_dreammiles_batch.delay(campaign_id, 0)
+        
+        return {
+            "status": "success",
+            "total_records": total_records,
+            "valid_records": valid_records,
+            "duplicate_records": duplicate_records
+        }
+        
+    except DreammilesCampaign.DoesNotExist:
+        logger.error(f"Campaign not found with ID: {campaign_id}")
+        return {"status": "error", "message": "Campaign not found"}
+    
+    except Exception as e:
+        logger.error(f"Error importing CSV: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@shared_task
+def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
+    """
+    Process a batch of emails for sending.
+    If batch_number is None, it will use the campaign's current_batch.
+    """
+    try:
+        # Get campaign and validate status
+        campaign = DreammilesCampaign.objects.get(id=campaign_id)
+        
+        if campaign.status not in ['processing']:
+            logger.info(f"Campaign {campaign.name} is not in processing state: {campaign.status}")
+            return {"status": "skipped", "message": f"Campaign status is {campaign.status}"}
+        
+        # Determine which batch to process
+        if batch_number is None:
+            batch_number = campaign.current_batch
+        
+        logger.info(f"Processing batch {batch_number} for campaign {campaign.name}")
+        
+        # Get records for this batch
+        with transaction.atomic():
+            pending_records = list(DreamilesEmailRecord.objects.select_for_update().filter(
+                campaign=campaign,
+                batch_number=batch_number,
+                status='pending'
+            )[:max_emails])
+            
+            if pending_records:
+                record_ids = [record.id for record in pending_records]
+                DreamilesEmailRecord.objects.filter(id__in=record_ids).update(status='processing')
+        
+        if not pending_records:
+            logger.info(f"No pending emails in batch {batch_number}")
+            
+            # Check if there are any pending emails in other batches
+            next_pending = DreamilesEmailRecord.objects.filter(
+                campaign=campaign,
+                status='pending'
+            ).order_by('batch_number').first()
+            
+            if next_pending:
+                # Move to the next batch
+                next_batch = next_pending.batch_number
+                campaign.current_batch = next_batch
+                campaign.save(update_fields=['current_batch'])
+                
+                logger.info(f"Moving to batch {next_batch}")
+                return process_dreammiles_batch(campaign_id, next_batch, max_emails)
+            else:
+                # Check if any emails are still processing
+                processing = DreamilesEmailRecord.objects.filter(
+                    campaign=campaign, 
+                    status='processing'
+                ).count()
+                
+                if processing == 0:
+                    # Campaign complete
+                    campaign.status = 'completed'
+                    campaign.save(update_fields=['status'])
+                    
+                    # Send final report
+                    send_dreammiles_report.delay(campaign_id)
+                    
+                    logger.info(f"Campaign {campaign.name} completed!")
+                
+                return {"status": "success", "message": "No more emails to process"}
+        
+        # Get email connection
+        connection = get_connection()
+        connection.open()
+        
+        # Process emails
+        success_count = 0
+        failure_count = 0
+        
+        # Process in smaller chunks
+        chunk_size = 100
+        for i in range(0, len(pending_records), chunk_size):
+            chunk = pending_records[i:i+chunk_size]
+            
+            # Prepare messages
+            messages = []
+            for record in chunk:
+                try:
+                    email_body = campaign.email_body.format(
+                        first_name=record.first_name or "Dreammiles Member"
+                    )
+                    
+                    message = EmailMessage(
+                        subject=campaign.subject,
+                        body=email_body,
+                        from_email=settings.EMAIL_HOST_USER,
+                        to=[record.email],
+                        connection=connection
+                    )
+                    
+                    messages.append((record, message))
+                    
+                except Exception as e:
+                    logger.error(f"Error preparing email for {record.email}: {str(e)}")
+                    record.status = 'failed'
+                    record.error_message = str(e)
+                    record.save(update_fields=['status', 'error_message'])
+                    failure_count += 1
+            
+            # Send messages in micro-batches
+            for j in range(0, len(messages), 20):
+                micro_batch = messages[j:j+20]
+                micro_batch_messages = [msg for _, msg in micro_batch]
+                
+                try:
+                    connection.send_messages(micro_batch_messages)
+                    
+                    # Update records
+                    for record, _ in micro_batch:
+                        record.status = 'sent'
+                        record.sent_at = datetime.now()
+                        record.save(update_fields=['status', 'sent_at'])
+                        success_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error sending email batch: {str(e)}")
+                    
+                    # Mark as failed
+                    for record, _ in micro_batch:
+                        record.status = 'failed'
+                        record.error_message = str(e)
+                        record.retry_count = record.retry_count + 1
+                        record.save(update_fields=['status', 'error_message', 'retry_count'])
+                        failure_count += 1
+                
+                # Small delay between micro-batches
+                time.sleep(0.2)
+            
+            # Delay between chunks
+            if i + chunk_size < len(pending_records):
+                time.sleep(1)
+        
+        # Close connection
+        connection.close()
+        
+        # Update campaign stats
+        with transaction.atomic():
+            campaign.refresh_from_db()
+            campaign.emails_sent += success_count
+            campaign.emails_failed += failure_count
+            campaign.last_sent_at = datetime.now()
+            campaign.save(update_fields=['emails_sent', 'emails_failed', 'last_sent_at'])
+        
+        logger.info(f"Batch {batch_number} complete: {success_count} sent, {failure_count} failed")
+        
+        # Check if more emails in current batch
+        remaining_in_batch = DreamilesEmailRecord.objects.filter(
+            campaign=campaign,
+            batch_number=batch_number,
+            status='pending'
+        ).exists()
+        
+        if remaining_in_batch:
+            # Process next chunk in this batch after a short delay
+            process_dreammiles_batch.apply_async(
+                args=[campaign_id, batch_number, max_emails],
+                countdown=300  # 5 minutes delay before continuing same batch
+            )
+        else:
+            # Move to next batch if exists
+            next_batch = batch_number + 1
+            next_batch_exists = DreamilesEmailRecord.objects.filter(
+                campaign=campaign,
+                batch_number=next_batch,
+                status='pending'
+            ).exists()
+            
+            if next_batch_exists:
+                campaign.current_batch = next_batch
+                campaign.save(update_fields=['current_batch'])
+                logger.info(f"Batch {batch_number} complete. Moving to batch {next_batch}")
+            else:
+                # Check if there are any pending records in other batches
+                next_pending = DreamilesEmailRecord.objects.filter(
+                    campaign=campaign,
+                    status='pending'
+                ).order_by('batch_number').first()
+                
+                if next_pending:
+                    next_batch = next_pending.batch_number
+                    campaign.current_batch = next_batch
+                    campaign.save(update_fields=['current_batch'])
+                    logger.info(f"Moving to batch {next_batch}")
+                else:
+                    # Check if campaign is complete
+                    processing = DreamilesEmailRecord.objects.filter(
+                        campaign=campaign, 
+                        status='processing'
+                    ).count()
+                    
+                    if processing == 0:
+                        campaign.status = 'completed'
+                        campaign.save(update_fields=['status'])
+                        
+                        # Send final report
+                        send_dreammiles_report.delay(campaign_id)
+                        
+                        logger.info(f"Campaign {campaign.name} completed!")
+        
+        return {
+            "status": "success",
+            "batch": batch_number,
+            "sent": success_count,
+            "failed": failure_count
+        }
+        
+    except DreammilesCampaign.DoesNotExist:
+        logger.error(f"Campaign not found with ID: {campaign_id}")
+        return {"status": "error", "message": "Campaign not found"}
+    
+    except Exception as e:
+        logger.error(f"Error processing email batch: {str(e)}")
+        
+        # Mark processing emails back as pending
+        try:
+            DreamilesEmailRecord.objects.filter(
+                campaign_id=campaign_id,
+                status='processing'
+            ).update(status='pending')
+        except Exception:
+            pass
+        
+        return {"status": "error", "message": str(e)}
+
+@shared_task
+def send_dreammiles_report(campaign_id):
+    """Generate and send campaign completion report"""
+    try:
+        campaign = DreammilesCampaign.objects.get(id=campaign_id)
+        
+        # Get statistics
+        total = campaign.total_recipients
+        sent = campaign.emails_sent
+        failed = campaign.emails_failed
+        
+        # Calculate completion time
+        duration = datetime.now() - campaign.created_at
+        hours = duration.total_seconds() / 3600
+        
+        # Generate report
+        report = f"""
+DREAMMILES EMAIL CAMPAIGN REPORT
+===============================
+
+Campaign: {campaign.name}
+Started: {campaign.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Duration: {int(hours)} hours, {int((hours % 1) * 60)} minutes
+
+SUMMARY
+-------
+Total Recipients: {total:,}
+Successfully Sent: {sent:,} ({round(sent/total*100 if total > 0 else 0, 2)}%)
+Failed: {failed:,} ({round(failed/total*100 if total > 0 else 0, 2)}%)
+
+"""
+        
+        # Add details of failed emails if any
+        if failed > 0:
+            common_errors = {}
+            failed_samples = DreamilesEmailRecord.objects.filter(
+                campaign=campaign,
+                status='failed'
+            ).order_by('email')[:50]
+            
+            for record in failed_samples:
+                error_type = record.error_message.split(':')[0] if record.error_message else 'Unknown'
+                if error_type in common_errors:
+                    common_errors[error_type] += 1
+                else:
+                    common_errors[error_type] = 1
+            
+            report += "\nError Analysis:\n"
+            report += "--------------\n"
+            
+            for error_type, count in sorted(common_errors.items(), key=lambda x: x[1], reverse=True):
+                report += f"{error_type}: {count} occurrences\n"
+            
+            report += "\nSample Failed Emails:\n"
+            report += "-------------------\n"
+            
+            for i, record in enumerate(failed_samples[:10]):
+                report += f"{i+1}. {record.email}: {record.error_message[:100]}\n"
+        
+        # Send report
+        recipients = [
+            'winnie.gashumba@rwandair.com',
+            'pacifique.byiringiro@rwandair.com'
+        ]
+        
+        email = EmailMessage(
+            subject=f"Dreammiles Campaign Report: {campaign.name}",
+            body=report,
+            from_email=settings.EMAIL_HOST_USER,
+            to=recipients
+        )
+        
+        email.send(fail_silently=False)
+        
+        logger.info(f"Campaign report sent to {', '.join(recipients)}")
+        return {"status": "success", "message": "Campaign report sent"}
+        
+    except DreammilesCampaign.DoesNotExist:
+        logger.error(f"Campaign not found with ID: {campaign_id}")
+        return {"status": "error", "message": "Campaign not found"}
+    
+    except Exception as e:
+        logger.error(f"Error sending campaign report: {str(e)}")
+        return {"status": "error", "message": str(e)}

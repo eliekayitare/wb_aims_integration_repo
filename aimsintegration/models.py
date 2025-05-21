@@ -392,6 +392,78 @@ class InvoiceItem(models.Model):
 
 
 
+# =======================================================================
 
+# DREAMMILES PROJECT MODELS
+
+# =======================================================================
+
+# Add to your existing models.py
+import uuid
+class DreammilesCampaign(models.Model):
+    """Tracks email campaigns to Dreammiles members"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    subject = models.CharField(max_length=255)
+    email_body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('importing', 'Importing Data'),
+            ('processing', 'Sending Emails'),
+            ('completed', 'Completed'),
+            ('failed', 'Failed')
+        ],
+        default='importing',
+        db_index=True
+    )
+    csv_processed = models.BooleanField(default=False)
+    total_recipients = models.IntegerField(default=0)
+    emails_sent = models.IntegerField(default=0)
+    emails_failed = models.IntegerField(default=0)
+    current_batch = models.IntegerField(default=0)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.created_at.strftime('%Y-%m-%d')})"
+    
+    @property
+    def progress_percentage(self):
+        """Calculate percentage of emails processed"""
+        if self.total_recipients == 0:
+            return 0
+        return round(((self.emails_sent + self.emails_failed) / self.total_recipients) * 100, 2)
+
+class DreamilesEmailRecord(models.Model):
+    """Tracks individual email sends"""
+    id = models.BigAutoField(primary_key=True)
+    campaign = models.ForeignKey(DreammilesCampaign, on_delete=models.CASCADE, related_name='email_records')
+    member_id = models.CharField(max_length=50, db_index=True)
+    email = models.EmailField(db_index=True)
+    tier = models.CharField(max_length=50, blank=True, null=True)
+    first_name = models.CharField(max_length=255, blank=True, null=True)
+    batch_number = models.IntegerField(default=0, db_index=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('processing', 'Processing'), 
+            ('sent', 'Sent'),
+            ('failed', 'Failed')
+        ],
+        default='pending',
+        db_index=True
+    )
+    error_message = models.TextField(blank=True, null=True)
+    retry_count = models.SmallIntegerField(default=0)
+    
+    class Meta:
+        unique_together = ['campaign', 'email']
+        indexes = [
+            models.Index(fields=['campaign', 'status', 'batch_number']),
+        ]
 
 
