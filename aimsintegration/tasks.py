@@ -906,26 +906,27 @@ def fetch_tableau():
 #         raise self.retry(exc=e, countdown=wait_time)
 
 
+# Recommended imports
 import csv
 import os
 import time
 import logging
 import uuid
 from datetime import datetime, timedelta
-import pytz  # Add this for timezone handling
+import pytz
 
 # Django imports
 from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
 from django.db import transaction
-from django.utils import timezone as django_timezone  # Rename to avoid conflict
+from django.utils import timezone as django_timezone
 
 # Celery imports
 from celery import shared_task
 from celery.utils.log import get_task_logger
-
+from exchangelib.errors import ErrorServerBusy
 # Your models
-from .models import *
+from .models import DreammilesCampaign, DreamilesEmailRecord
 
 # Initialize loggers
 logger = logging.getLogger(__name__)
@@ -977,7 +978,16 @@ def delete_old_emails(self):
 
 # =======================================================================
 
-# Dreammiles email campaign tasks
+
+# Best practice: Define constants at the top
+DEFAULT_EMAIL_BATCH_SIZE = 2500  # More conservative approach
+EMAIL_CHUNK_SIZE = 100
+EMAIL_MICRO_BATCH_SIZE = 20
+BATCH_DELAY_SECONDS = 1800  # 30 minutes
+CHUNK_DELAY_SECONDS = 1
+MICRO_BATCH_DELAY_SECONDS = 0.2
+
+
 def extract_first_name(email, tier=None):
     """Extract first name from email with fallbacks"""
     try:
@@ -1000,6 +1010,7 @@ def extract_first_name(email, tier=None):
     
     return "Dreammiles Member"
 
+
 @shared_task
 def check_and_start_dreammiles_campaign():
     """
@@ -1012,19 +1023,30 @@ def check_and_start_dreammiles_campaign():
     ).first()
     
     if active_campaign:
-        logger.info(f"Active campaign already exists: {active_campaign.name} (ID: {active_campaign.id})")
+        # Best practice: Check for stalled campaigns
+        if active_campaign.last_sent_at:
+            stalled_threshold = django_timezone.now() - timedelta(hours=4)
+            if active_campaign.last_sent_at < stalled_threshold:
+                logger.warning(f"Campaign {active_campaign.name} appears stalled. Restarting...")
+                process_dreammiles_batch.delay(str(active_campaign.id))
+                return {"status": "restarted", "message": "Stalled campaign restarted"}
+        
+        logger.info(f"Active campaign exists: {active_campaign.name} (ID: {active_campaign.id})")
         return {"status": "skipped", "message": "Active campaign exists"}
     
-    # Check for CSV file
-    csv_path = os.path.join(settings.DATA_DIR, 'dreamilesnotice.csv')
+    # Best practice: Use settings for data paths
+    csv_path = getattr(settings, 'DREAMMILES_CSV_PATH', 
+                      os.path.join(settings.BASE_DIR, 'data', 'dreamilesnotice.csv'))
+    
     if not os.path.exists(csv_path):
         logger.warning(f"CSV file not found at {csv_path}")
         return {"status": "error", "message": "CSV file not found"}
     
     # Start a new campaign
     try:
+        # Best practice: Use timezone-aware datetimes
         campaign = DreammilesCampaign.objects.create(
-            name=f"Dreammiles Business Lite Promotion - {datetime.now().strftime('%Y-%m-%d')}",
+            name=f"Dreammiles Business Lite Promotion - {django_timezone.now().strftime('%Y-%m-%d')}",
             subject="Upgrade to Business Lite and Fly in Style",
             email_body="""Dear {first_name},
 
@@ -1043,6 +1065,7 @@ Did you know that you can now stretch out in style, sip the finest drinks, savou
         logger.error(f"Error starting campaign: {str(e)}")
         return {"status": "error", "message": str(e)}
 
+
 @shared_task
 def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
     """Process the CSV file and create email records"""
@@ -1055,7 +1078,7 @@ def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
         valid_records = 0
         duplicate_records = 0
         
-        # Open CSV file
+        # Best practice: Use context manager for file operations
         with open(csv_path, 'r', encoding='utf-8') as csvfile:
             reader = csv.reader(csvfile)
             
@@ -1085,8 +1108,9 @@ def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
                 if not email or '@' not in email:
                     continue
                 
-                # Determine batch number (3000 emails per batch)
-                batch_number = total_records // 3000
+                # Best practice: More conservative batch sizing for better delivery
+                # Each batch contains DEFAULT_EMAIL_BATCH_SIZE emails (2500)
+                batch_number = total_records // DEFAULT_EMAIL_BATCH_SIZE
                 
                 # Extract first name
                 first_name = extract_first_name(email, tier)
@@ -1106,8 +1130,10 @@ def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
                 
                 # Process in batches to manage memory
                 if len(records_to_create) >= batch_size:
+                    # Best practice: Better error handling with specific exception types
                     try:
                         with transaction.atomic():
+                            # Best practice: Use smaller batch_size for bulk_create
                             DreamilesEmailRecord.objects.bulk_create(
                                 records_to_create,
                                 batch_size=1000,
@@ -1122,6 +1148,8 @@ def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
                             except Exception:
                                 duplicate_records += 1
                     
+                    # Performance monitoring
+                    logger.info(f"Processed {valid_records} records so far...")
                     records_to_create = []
             
             # Process any remaining records
@@ -1169,17 +1197,29 @@ def import_dreammiles_csv(campaign_id, csv_path, batch_size=5000):
         logger.error(f"Error importing CSV: {str(e)}")
         return {"status": "error", "message": str(e)}
 
+
 @shared_task
-def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
+def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=None):
     """
     Process a batch of emails for sending.
     If batch_number is None, it will use the campaign's current_batch.
     """
+    start_time = time.time()
+    
     try:
+        # Best practice: Respect email provider limits
+        if max_emails is None:
+            max_emails = DEFAULT_EMAIL_BATCH_SIZE
+        
+        # Get provider rate limit if configured
+        provider_hourly_limit = getattr(settings, 'EMAIL_HOURLY_LIMIT', None)
+        if provider_hourly_limit:
+            max_emails = min(max_emails, provider_hourly_limit)
+        
         # Get campaign and validate status
         campaign = DreammilesCampaign.objects.get(id=campaign_id)
         
-        if campaign.status not in ['processing']:
+        if campaign.status != 'processing':
             logger.info(f"Campaign {campaign.name} is not in processing state: {campaign.status}")
             return {"status": "skipped", "message": f"Campaign status is {campaign.status}"}
         
@@ -1191,14 +1231,15 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
         
         # Get records for this batch
         with transaction.atomic():
+            # Best practice: Select only needed fields
             pending_records = list(DreamilesEmailRecord.objects.select_for_update().filter(
                 campaign=campaign,
                 batch_number=batch_number,
                 status='pending'
-            )[:max_emails])
+            ).values('id', 'email', 'first_name')[:max_emails])
             
             if pending_records:
-                record_ids = [record.id for record in pending_records]
+                record_ids = [record['id'] for record in pending_records]
                 DreamilesEmailRecord.objects.filter(id__in=record_ids).update(status='processing')
         
         if not pending_records:
@@ -1237,7 +1278,7 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
                 
                 return {"status": "success", "message": "No more emails to process"}
         
-        # Get email connection
+        # Best practice: Use connection pooling
         connection = get_connection()
         connection.open()
         
@@ -1246,67 +1287,97 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
         failure_count = 0
         
         # Process in smaller chunks
-        chunk_size = 100
+        chunk_size = EMAIL_CHUNK_SIZE
         for i in range(0, len(pending_records), chunk_size):
             chunk = pending_records[i:i+chunk_size]
             
             # Prepare messages
             messages = []
+            chunk_records = []
+            
             for record in chunk:
                 try:
+                    # Get the full record
+                    db_record = DreamilesEmailRecord.objects.get(id=record['id'])
+                    
                     email_body = campaign.email_body.format(
-                        first_name=record.first_name or "Dreammiles Member"
+                        first_name=record['first_name'] or "Dreammiles Member"
                     )
                     
                     message = EmailMessage(
                         subject=campaign.subject,
                         body=email_body,
                         from_email=settings.EMAIL_HOST_USER,
-                        to=[record.email],
+                        to=[record['email']],
                         connection=connection
                     )
                     
-                    messages.append((record, message))
+                    messages.append((db_record, message))
+                    chunk_records.append(db_record)
                     
                 except Exception as e:
-                    logger.error(f"Error preparing email for {record.email}: {str(e)}")
-                    record.status = 'failed'
-                    record.error_message = str(e)
-                    record.save(update_fields=['status', 'error_message'])
-                    failure_count += 1
+                    logger.error(f"Error preparing email for {record['email']}: {str(e)}")
+                    try:
+                        db_record = DreamilesEmailRecord.objects.get(id=record['id'])
+                        db_record.status = 'failed'
+                        db_record.error_message = str(e)
+                        db_record.save(update_fields=['status', 'error_message'])
+                        failure_count += 1
+                    except Exception as inner_e:
+                        logger.error(f"Could not update record {record['id']}: {str(inner_e)}")
             
             # Send messages in micro-batches
-            for j in range(0, len(messages), 20):
-                micro_batch = messages[j:j+20]
+            for j in range(0, len(messages), EMAIL_MICRO_BATCH_SIZE):
+                micro_batch = messages[j:j+EMAIL_MICRO_BATCH_SIZE]
                 micro_batch_messages = [msg for _, msg in micro_batch]
+                micro_batch_records = [rec for rec, _ in micro_batch]
                 
                 try:
+                    # Best practice: Measure sending time
+                    send_start = time.time()
                     connection.send_messages(micro_batch_messages)
+                    send_duration = time.time() - send_start
                     
-                    # Update records
-                    for record, _ in micro_batch:
+                    # Log performance metrics
+                    logger.debug(f"Sent {len(micro_batch_messages)} emails in {send_duration:.2f}s")
+                    
+                    # Best practice: Use bulk_update instead of individual saves
+                    for record in micro_batch_records:
                         record.status = 'sent'
                         record.sent_at = django_timezone.now()
-                        record.save(update_fields=['status', 'sent_at'])
-                        success_count += 1
+                    
+                    DreamilesEmailRecord.objects.bulk_update(
+                        micro_batch_records,
+                        ['status', 'sent_at'],
+                        batch_size=EMAIL_MICRO_BATCH_SIZE
+                    )
+                    
+                    success_count += len(micro_batch_records)
                     
                 except Exception as e:
                     logger.error(f"Error sending email batch: {str(e)}")
                     
                     # Mark as failed
-                    for record, _ in micro_batch:
+                    for record in micro_batch_records:
                         record.status = 'failed'
                         record.error_message = str(e)
                         record.retry_count = record.retry_count + 1
-                        record.save(update_fields=['status', 'error_message', 'retry_count'])
-                        failure_count += 1
+                    
+                    # Best practice: Use bulk_update for failures too
+                    DreamilesEmailRecord.objects.bulk_update(
+                        micro_batch_records,
+                        ['status', 'error_message', 'retry_count'],
+                        batch_size=EMAIL_MICRO_BATCH_SIZE
+                    )
+                    
+                    failure_count += len(micro_batch_records)
                 
-                # Small delay between micro-batches
-                time.sleep(0.2)
+                # Small delay between micro-batches to prevent throttling
+                time.sleep(MICRO_BATCH_DELAY_SECONDS)
             
             # Delay between chunks
             if i + chunk_size < len(pending_records):
-                time.sleep(1)
+                time.sleep(CHUNK_DELAY_SECONDS)
         
         # Close connection
         connection.close()
@@ -1319,7 +1390,11 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
             campaign.last_sent_at = django_timezone.now()
             campaign.save(update_fields=['emails_sent', 'emails_failed', 'last_sent_at'])
         
-        logger.info(f"Batch {batch_number} complete: {success_count} sent, {failure_count} failed")
+        # Best practice: Log comprehensive batch information
+        duration = time.time() - start_time
+        logger.info(f"Batch {batch_number} complete: {success_count} sent, {failure_count} failed in {duration:.2f}s")
+        logger.info(f"Campaign progress: {campaign.emails_sent}/{campaign.total_recipients} emails " 
+                   f"({campaign.emails_sent/campaign.total_recipients*100:.2f}%)")
         
         # Check if more emails in current batch
         remaining_in_batch = DreamilesEmailRecord.objects.filter(
@@ -1329,13 +1404,13 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
         ).exists()
         
         if remaining_in_batch:
-            # Process next chunk in this batch after a short delay
+            # Best practice: Use a reasonable delay for the same batch
             process_dreammiles_batch.apply_async(
                 args=[campaign_id, batch_number, max_emails],
                 countdown=300  # 5 minutes delay before continuing same batch
             )
         else:
-            # Move to next batch if exists
+            # Move to next batch with a longer delay
             next_batch = batch_number + 1
             next_batch_exists = DreamilesEmailRecord.objects.filter(
                 campaign=campaign,
@@ -1346,9 +1421,15 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
             if next_batch_exists:
                 campaign.current_batch = next_batch
                 campaign.save(update_fields=['current_batch'])
-                logger.info(f"Batch {batch_number} complete. Moving to batch {next_batch}")
+                logger.info(f"Batch {batch_number} complete. Moving to batch {next_batch} in {BATCH_DELAY_SECONDS // 60} minutes")
+                
+                # Best practice: Schedule the next batch with a controlled delay
+                process_dreammiles_batch.apply_async(
+                    args=[campaign_id, next_batch, max_emails],
+                    countdown=BATCH_DELAY_SECONDS  # 30 minutes between batches
+                )
             else:
-                # Check if there are any pending records in other batches
+                # Double-check if there are any pending records in other batches
                 next_pending = DreamilesEmailRecord.objects.filter(
                     campaign=campaign,
                     status='pending'
@@ -1358,9 +1439,14 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
                     next_batch = next_pending.batch_number
                     campaign.current_batch = next_batch
                     campaign.save(update_fields=['current_batch'])
-                    logger.info(f"Moving to batch {next_batch}")
+                    logger.info(f"Moving to batch {next_batch} in {BATCH_DELAY_SECONDS // 60} minutes")
+                    
+                    process_dreammiles_batch.apply_async(
+                        args=[campaign_id, next_batch, max_emails],
+                        countdown=BATCH_DELAY_SECONDS
+                    )
                 else:
-                    # Check if campaign is complete
+                    # Final check for campaign completion
                     processing = DreamilesEmailRecord.objects.filter(
                         campaign=campaign, 
                         status='processing'
@@ -1379,7 +1465,9 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
             "status": "success",
             "batch": batch_number,
             "sent": success_count,
-            "failed": failure_count
+            "failed": failure_count,
+            "duration": f"{duration:.2f}s",
+            "progress": f"{campaign.emails_sent}/{campaign.total_recipients} ({campaign.emails_sent/campaign.total_recipients*100:.2f}%)"
         }
         
     except DreammilesCampaign.DoesNotExist:
@@ -1389,16 +1477,18 @@ def process_dreammiles_batch(campaign_id, batch_number=None, max_emails=3000):
     except Exception as e:
         logger.error(f"Error processing email batch: {str(e)}")
         
-        # Mark processing emails back as pending
+        # Best practice: Reset processing emails back to pending
         try:
             DreamilesEmailRecord.objects.filter(
                 campaign_id=campaign_id,
                 status='processing'
             ).update(status='pending')
-        except Exception:
-            pass
+        except Exception as reset_error:
+            logger.error(f"Error resetting processing emails: {str(reset_error)}")
         
         return {"status": "error", "message": str(e)}
+
+
 @shared_task
 def send_dreammiles_report(campaign_id):
     """Generate and send campaign completion report"""
@@ -1411,17 +1501,20 @@ def send_dreammiles_report(campaign_id):
         failed = campaign.emails_failed
         
         # Calculate completion time
-        duration = django_timezone.now() - campaign.created_at  # CHANGED
+        duration = django_timezone.now() - campaign.created_at
         hours = duration.total_seconds() / 3600
         
-        # Generate report
+        # Best practice: More detailed and professional report
         report = f"""
 DREAMMILES EMAIL CAMPAIGN REPORT
 ===============================
 
-Campaign: {campaign.name}
+Campaign Details:
+---------------
+Name: {campaign.name}
+Subject: {campaign.subject}
 Started: {campaign.created_at.strftime('%Y-%m-%d %H:%M:%S')}
-Completed: {django_timezone.now().strftime('%Y-%m-%d %H:%M:%S')}  # CHANGED
+Completed: {django_timezone.now().strftime('%Y-%m-%d %H:%M:%S')}
 Duration: {int(hours)} hours, {int((hours % 1) * 60)} minutes
 
 SUMMARY
@@ -1431,6 +1524,28 @@ Successfully Sent: {sent:,} ({round(sent/total*100 if total > 0 else 0, 2)}%)
 Failed: {failed:,} ({round(failed/total*100 if total > 0 else 0, 2)}%)
 
 """
+        
+        # Add tier breakdown if available
+        tier_stats = {}
+        tier_records = DreamilesEmailRecord.objects.filter(
+            campaign=campaign,
+            status='sent',
+            tier__isnull=False
+        ).exclude(tier__exact='')
+        
+        for record in tier_records:
+            tier = record.tier
+            if tier in tier_stats:
+                tier_stats[tier] += 1
+            else:
+                tier_stats[tier] = 1
+        
+        if tier_stats:
+            report += "\nBreakdown by Member Tier:\n"
+            report += "------------------------\n"
+            
+            for tier, count in sorted(tier_stats.items(), key=lambda x: x[1], reverse=True):
+                report += f"{tier}: {count:,} emails ({(count/sent*100):.2f}%)\n"
         
         # Add details of failed emails if any
         if failed > 0:
@@ -1451,13 +1566,25 @@ Failed: {failed:,} ({round(failed/total*100 if total > 0 else 0, 2)}%)
             report += "--------------\n"
             
             for error_type, count in sorted(common_errors.items(), key=lambda x: x[1], reverse=True):
-                report += f"{error_type}: {count} occurrences\n"
+                report += f"{error_type}: {count} occurrences ({(count/failed*100):.2f}%)\n"
             
             report += "\nSample Failed Emails:\n"
             report += "-------------------\n"
             
             for i, record in enumerate(failed_samples[:10]):
                 report += f"{i+1}. {record.email}: {record.error_message[:100]}\n"
+        
+        # Best practice: Add additional performance metrics
+        report += "\nPerformance Metrics:\n"
+        report += "-------------------\n"
+        report += f"Average send rate: {sent/hours:.2f} emails per hour\n"
+        if campaign.last_sent_at and campaign.created_at:
+            active_duration = (campaign.last_sent_at - campaign.created_at).total_seconds() / 3600
+            report += f"Active sending time: {active_duration:.2f} hours\n"
+            report += f"Effective send rate: {sent/active_duration:.2f} emails per hour\n"
+        
+        report += "\n===============================\n"
+        report += "This is an automated report - please do not reply.\n"
         
         # Send report
         recipients = [
@@ -1485,3 +1612,19 @@ Failed: {failed:,} ({round(failed/total*100 if total > 0 else 0, 2)}%)
     except Exception as e:
         logger.error(f"Error sending campaign report: {str(e)}")
         return {"status": "error", "message": str(e)}
+
+
+@shared_task
+def check_stalled_campaigns():
+    """Check for campaigns that might be stalled"""
+    threshold = django_timezone.now() - timedelta(hours=4)
+    stalled_campaigns = DreammilesCampaign.objects.filter(
+        status='processing',
+        last_sent_at__lt=threshold
+    )
+    
+    for campaign in stalled_campaigns:
+        logger.warning(f"Campaign {campaign.name} appears stalled. Restarting...")
+        process_dreammiles_batch.delay(str(campaign.id))
+    
+    return f"Checked for stalled campaigns: {stalled_campaigns.count()} found and restarted"
