@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Individual Crew Allowance Payslip</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 2px solid #003366;
+            padding-bottom: 20px;
+        }
+        .logo { 
+            max-width: 150px; 
+            height: auto; 
+            margin-bottom: 10px;
+        }
+        .header h2 {
+            color: #003366;
+            margin: 10px 0;
+        }
+        .crew-info { 
+            margin-bottom: 25px; 
+            page-break-inside: avoid;
+        }
+        .crew-info table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            border: 2px solid #003366;
+        }
+        .crew-info td { 
+            padding: 8px 12px; 
+            border: 1px solid #ddd; 
+            vertical-align: top;
+        }
+        .crew-info td:nth-child(odd) {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            width: 15%;
+        }
+        .crew-info td:nth-child(even) {
+            width: 35%;
+        }
+        .duties-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0; 
+            border: 2px solid #003366;
+        }
+        .duties-table th, .duties-table td { 
+            border: 1px solid #ddd; 
+            padding: 6px 8px; 
+            text-align: center;
+            font-size: 11px;
+        }
+        .duties-table th { 
+            background-color: #003366; 
+            color: white;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        .duties-table td:first-child,
+        .duties-table td:nth-child(2),
+        .duties-table td:nth-child(3),
+        .duties-table td:nth-child(4) {
+            text-align: center;
+        }
+        .duties-table td:nth-child(5),
+        .duties-table td:nth-child(6),
+        .duties-table td:nth-child(7) {
+            text-align: right;
+        }
+        .duties-table td:last-child {
+            text-align: center;
+            font-weight: bold;
+            min-width: 60px;
+        }
+        
+        /* Enhanced Total Row Styling */
+        .total-section {
+            background: linear-gradient(135deg, #003366 0%, #004080 100%) !important;
+            color: white !important;
+            border: none !important;
+        }
+        
+        .total-section td {
+            border: 1px solid #002244 !important;
+            padding: 15px 8px;
+            font-size: 13px;
+            font-weight: bold;
+            color: white !important;
+        }
+        
+        .total-label {
+            text-align: center;
+            font-size: 14px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        
+        .total-amounts {
+            text-align: center;
+            font-size: 14px;
+            background: linear-gradient(135deg, #003366 0%, #004080 100%) !important;
+            color: white !important;
+            border: 1px solid #002244 !important;
+            padding: 15px 8px;
+            vertical-align: middle;
+        }
+        
+        /* Improved Currency Row Styling */
+        .currency-row {
+            background-color: #f8f9fa !important;
+            border-top: 2px solid #003366 !important;
+        }
+        
+        .currency-row td {
+            padding: 12px 8px !important;
+            font-size: 11px !important;
+            color: #333 !important;
+            border: 1px solid #ddd !important;
+            font-weight: 500;
+        }
+        
+        .payment-currency {
+            background-color: #d4edda !important;
+            font-weight: bold;
+            color: #155724 !important;
+            text-align: center;
+            border: 2px solid #c3e6cb !important;
+        }
+        
+        /* Clean Footer Styling */
+        .footer { 
+            margin-top: 30px; 
+            padding: 20px 0;
+            text-align: center;
+            font-size: 10px; 
+            color: #495057;
+            border-top: 2px solid #003366;
+        }
+        
+        .footer p {
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+        
+        .footer p:first-child {
+            font-size: 14px;
+            color: #003366;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        .footer p:last-child {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 8px 12px;
+            margin-top: 15px;
+            color: #856404;
+            font-style: italic;
+            text-align: left;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        /* Specific column widths */
+        .duties-table th:nth-child(1) { width: 12%; } /* Date */
+        .duties-table th:nth-child(2) { width: 10%; } /* Flight */
+        .duties-table th:nth-child(3) { width: 8%; }  /* From */
+        .duties-table th:nth-child(4) { width: 8%; }  /* To */
+        .duties-table th:nth-child(5) { width: 12%; } /* Layover */
+        .duties-table th:nth-child(6) { width: 10%; } /* Rate */
+        .duties-table th:nth-child(7) { width: 12%; } /* Amount */
+        .duties-table th:nth-child(8) { width: 12%; } /* Aircraft */
+        
+        /* Print optimization */
+        @media print {
+            body { margin: 10px; }
+            .header { page-break-after: avoid; }
+            .crew-info { page-break-after: avoid; }
+            .duties-table { page-break-inside: avoid; }
+            .total-section {
+                background: #003366 !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{ logo_path }}" alt="RwandAir Logo" class="logo">
+        <h2>Individual Crew Allowance Payslip</h2>
+        <p><strong>Period: {{ filter_month|date:"F Y" }}</strong></p>
+    </div>
+    
+    <div class="crew-info">
+        <table>
+            <tr>
+                <td>Crew ID:</td>
+                <td>{{ crew.crew_id }}</td>
+                <td>Full Name:</td>
+                <td>{{ crew.first_name }} {{ crew.last_name }}</td>
+            </tr>
+            <tr>
+                <td>Position:</td>
+                <td>{{ crew.position|default:"N/A" }}</td>
+                <td>Bank Name:</td>
+                <td>{{ bank_name }}</td>
+            </tr>
+            <tr>
+                <td>Account No:</td>
+                <td>{{ account_no }}</td>
+                <td>Generated On:</td>
+                <td>{{ current_date }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <table class="duties-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Flight No.</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Layover<br>(Hours)</th>
+                <th>Rate<br>(USD)</th>
+                <th>Amount<br>(USD)</th>
+                <th>Aircraft<br>Reg.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for duty in duties_data %}
+            <tr>
+                <td>{{ duty.duty_date|date:"d-M-y"|default:"--" }}</td>
+                <td>{{ duty.flight_number|default:"--" }}</td>
+                <td>{{ duty.departure|default:"--" }}</td>
+                <td>{{ duty.arrival|default:"--" }}</td>
+                <td>{{ duty.layover_hours|default:"0.00" }}</td>
+                <td>${{ duty.hourly_rate|default:"0.00" }}</td>
+                <td>${{ duty.line_amount|default:"0.00" }}</td>
+                <td><strong>{{ duty.tail_number|default:"N/A" }}</strong></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" style="text-align: center; padding: 20px; color: #999;">
+                    No duty records found for this period.
+                </td>
+            </tr>
+            {% endfor %}
+            
+            <!-- Enhanced Total Section -->
+            <tr class="total-section">
+                <td colspan="5" class="total-label">TOTAL ALLOWANCE</td>
+                <td class="total-amounts">
+                    <div style="font-size: 11px; margin-top: 8px; margin-bottom: 3px; opacity: 0.8; color: black; text-align: center;">USD</div>
+                    <div style="font-size: 15px; color: green; text-align: center; font-weight: bold;">
+                        ${{ total_amount_usd }}
+                    </div>
+                </td>
+                <td class="total-amounts">
+                    <div style="font-size: 11px; margin-top: 8px; margin-bottom: 3px; opacity: 0.8; color: black; text-align: center;">RWF</div>
+                    <div style="font-size: 15px; color: green; text-align: center; font-weight: bold;">
+                        {{ total_amount_rwf }}
+                    </div>
+                </td>
+                <td style="background: linear-gradient(135deg, #003366 0%, #004080 100%); border: 1px solid #002244;"></td>
+            </tr>
+            
+            <!-- Currency Information Row -->
+            {% if exchange_rate %}
+            <tr class="currency-row">
+                <td colspan="5" style="text-align: right; font-weight: bold; color: #003366;"><strong>Exchange Rate (USD to RWF):</strong></td>
+                <td style="text-align: center; font-weight: bold; color: #d63384; font-size: 12px;">{{ exchange_rate|floatformat:2 }}</td>
+                <td class="payment-currency">
+                    <strong>Paid in: {{ payment_currency }}</strong>
+                </td>
+                <td style="background-color: #f8f9fa; border: 1px solid #ddd;"></td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+    
+    <div class="footer">
+        <p><strong>RwandAir Ltd - Crew Allowance System</strong></p>
+        <p>This is an automatically generated payslip. For inquiries, please contact the Operations Department.</p>
+        <p>Generated on {{ current_date }} | System Reference: {{ crew.crew_id }}-{{ filter_month|date:"Ym" }}</p>
+        {% if payment_currency == 'RWF' %}
+        <p><em>* CP and FO positions are paid in USD. Other positions are paid in RWF at the exchange rate shown above.</em></p>
+        {% endif %}
+    </div>
+</body>
+</html>

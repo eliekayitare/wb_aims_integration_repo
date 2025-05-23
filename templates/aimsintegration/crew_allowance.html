@@ -60,6 +60,57 @@
     text-decoration: none;
   }
 
+  /* Add this to your existing CSS */
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.modal-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 5px;
+  transition: all 0.3s ease;
+  min-width: 140px;
+}
+
+.email-btn {
+  background-color: #28a745 !important;
+}
+
+.email-btn:hover {
+  background-color: #218838 !important;
+}
+
+.modal-btn:disabled {
+  background-color: #6c757d !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Loading state for buttons */
+.modal-btn.loading {
+  position: relative;
+  color: transparent !important;
+}
+
+.modal-btn.loading::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-left: -8px;
+  margin-top: -8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 1s linear infinite;
+}
+
   table {
     width: 100%;
     border-collapse: collapse;
@@ -97,26 +148,41 @@
   a.btn-action:hover {
     background-color: #0056b3;
   }
-
-  .toast {
-    padding: 15px;
-    margin-bottom: 10px;
-    border-radius: 5px;
-    color: white;
-    width: 300px;
-    opacity: 0.9;
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1000;
-    font-size: 14px;
-    transition: opacity 0.3s ease-in-out;
+  button.btn-action:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
   }
+
+  /* Update the toast styling to handle multi-line content */
+.toast {
+  padding: 15px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  color: white;
+  width: 350px; /* Increased width */
+  max-width: 80vw;
+  opacity: 0.9;
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  font-size: 14px;
+  transition: opacity 0.5s ease-in-out;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  white-space: pre-line; /* Important for line breaks */
+}
   .toast.success {
     background-color: #28a745;
   }
   .toast.error {
     background-color: #dc3545;
+  }
+  .toast.info {
+    background-color: #17a2b8;
+  }
+  .toast.warning {
+    background-color: #ffc107;
+    color: #333;
   }
   .toast-container {
     display: flex;
@@ -249,20 +315,210 @@
     border-radius: 4px;
   }
 
-  select#invoice-type-select {
-    height: 38px;      /* match your buttons' height */
-    padding: 0 8px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
+  /* ---------------------------------
+     4) Enhanced Go Button and Select Styling
+  ----------------------------------*/
+  
+  /* Enhanced Select Styling to Match */
+  #invoice-type-select {
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 2px solid #dee2e6;
     font-size: 14px;
+    background-color: white;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    min-width: 280px;
+  }
+
+  #invoice-type-select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  }
+
+  /* Enhanced Go Button Styling */
+  .go-button {
+    height: 38px;
+    min-width: 80px;
+    padding: 0 20px;
+    margin-left: 5px;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white !important;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .go-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .go-button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+  }
+
+  /* Loading State */
+  .go-button:disabled {
+    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%) !important;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .go-button.loading .btn-text {
+    opacity: 0;
+  }
+
+  .go-button.loading .btn-spinner {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Small Spinner for Button */
+  .spinner-small {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 2px solid white;
+    animation: spin 1s linear infinite;
+  }
+
+  /* Container Styling */
+  .generate-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    margin-bottom: 20px;
+  }
+
+  .generate-controls::before {
+    content: "📊";
+    font-size: 18px;
+    margin-right: 5px;
+  }
+
+  /* Success Animation */
+  .go-button.success {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+    animation: successPulse 0.6s ease;
+  }
+
+  @keyframes successPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  /* Error Animation */
+  .go-button.error {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%) !important;
+    animation: errorShake 0.6s ease;
+  }
+
+  @keyframes errorShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  /* Fallback Simple Go Button (if enhanced version has issues) */
+  .go-button-simple {
+    height: 38px;
+    min-width: 80px;
+    padding: 0 20px;
+    margin-left: 5px;
+    font-size: 14px;
+    font-weight: 600;
+    background-color: #007bff;
+    color: white !important;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .go-button-simple:hover:not(:disabled) {
+    background-color: #0056b3;
+  }
+
+  .go-button-simple:disabled {
+    background-color: #6c757d !important;
+    cursor: not-allowed;
+  }
+
+  .go-button-simple.loading {
+    background-color: #6c757d !important;
+    position: relative;
+    color: transparent !important;
+  }
+
+  .go-button-simple.loading::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+  }
+
+  /* ---------------------------------
+     5) Loading spinner styles
+  ----------------------------------*/
+  .spinner-container {
+    display: none;
+    text-align: center;
+    margin: 15px 0;
   }
   
-  button.btn-action.go-button {
-    height: 38px;      /* match the dropdown height */
-    line-height: 38px; /* vertical centering of text */
-    margin-left: 5px;  /* small gap from the select */
+  .spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top: 4px solid #007bff;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
   }
   
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .upload-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 15px;
+  }
 </style>
 {% endblock %} {% block content %}
 <div class="dashboard-container">
@@ -321,24 +577,25 @@
             Upload New File
           </button>
 
-          {% comment %} <a href="{% url 'generate_overall_invoice' %}" class="btn-action">
-            Generate Overall Invoice
-          </a> {% endcomment %}
-          <!-- Replace your old <a> with something like this -->
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <select id="invoice-type-select">
-                <option value="overall">Generate Overall Payslip</option>
-                <option value="overall_position">Generate Overall Payslip by Position</option>
-                <option value="by_bank">Generate Overall Payslip by Bank</option>
-                <option value="individual">Generate Individual Payslip</option>
-              </select>
-            
-              <button type="button" class="btn-action go-button" onclick="handleGenerateInvoice()">
-                Go
-              </button>
-            </div>
-            
-
+          <!-- Generate Payslip Controls -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="invoice-type-select">
+              <option value="overall">Generate Overall Payslip</option>
+              <option value="payment_mode">Generate Payslip by Payment Mode</option>
+              <option value="by_bank">Generate Payslip by Bank</option>
+              <option value="all_individual">Generate Individual Payslip</option>
+            </select>
+          
+            {% comment %} <button type="button" class="btn-action go-button" onclick="handleGenerateInvoice()">
+              Go
+            </button> {% endcomment %}
+            <button type="button" class="btn-action go-button" id="generate-btn" onclick="handleGenerateInvoice()">
+    <span class="btn-text">Go</span>
+    <span class="btn-spinner" style="display: none;">
+      <div class="spinner-small"></div>
+    </span>
+  </button>
+          </div>
         </div>
 
         <div class="table-container">
@@ -349,7 +606,6 @@
                 <th>WB No</th>
                 <th>Name</th>
                 <th>Position</th>
-                {% comment %} <th>Total Allowance($)</th> {% endcomment %}
                 <th>
                   Total Allowance($)
                   <button onclick="sortTable('asc')">▲</button>
@@ -385,8 +641,8 @@
         <div class="pagination-container">
           <!-- "First" -->
           {% if crew_data_list.number > 1 %}
-          <a
-            href="?page=1{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+          
+           <a href="?page=1{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
             class="btn-action"
           >
             First
@@ -397,8 +653,8 @@
 
           <!-- "Previous" -->
           {% if crew_data_list.has_previous %}
-          <a
-            href="?page={{ crew_data_list.previous_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+          
+           <a href="?page={{ crew_data_list.previous_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
             class="btn-action"
           >
             &laquo; Prev
@@ -413,8 +669,8 @@
           {% elif pg == crew_data_list.number %}
           <span class="current">{{ pg }}</span>
           {% else %}
-          <a
-            href="?page={{ pg }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+          
+           <a href="?page={{ pg }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
           >
             {{ pg }}
           </a>
@@ -422,8 +678,8 @@
 
           <!-- "Next" -->
           {% if crew_data_list.has_next %}
-          <a
-            href="?page={{ crew_data_list.next_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+          
+           <a href="?page={{ crew_data_list.next_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
             class="btn-action"
           >
             Next &raquo;
@@ -434,8 +690,8 @@
 
           <!-- "Last" -->
           {% if crew_data_list.number < crew_data_list.paginator.num_pages %}
-          <a
-            href="?page={{ crew_data_list.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+          
+           <a href="?page={{ crew_data_list.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
             class="btn-action"
           >
             Last
@@ -454,6 +710,41 @@
 
 <!-- Toast Container -->
 <div id="toast-container" class="toast-container"></div>
+
+<!-- (1) Crew Duties Modal -->
+{% comment %} <div id="crewModal" class="modal" onclick="closeCrewModalOnOutsideClick(event)">
+  <div class="modal-content">
+    <span class="close" onclick="closeCrewModal()">&times;</span>
+    <div class="modal-header">
+      <h3 id="modal-crew-details"></h3>
+    </div>
+    <div class="modal-body">
+      <table class="crew-table">
+        <thead>
+          <tr>
+            <th>Duty Date</th>
+            <th>Flight No.</th>
+            <th>Dep</th>
+            <th>Arr</th>
+            <!-- Show layover in hours -->
+            <th>Layover (Hrs)</th>
+            <!-- Add columns for Rate & Amount -->
+            <th>Rate</th>
+            <th>Amount</th>
+            <th>Tail No.</th>
+          </tr>
+        </thead>
+        <tbody id="crew-duties-body">
+          <!-- Inserted by JavaScript -->
+        </tbody>
+      </table>
+      <!-- We'll place the total at the bottom -->
+      <div style="margin-top: 10px; text-align: right">
+        <strong>Total Amount: <span id="modal-total-amount">0.00</span></strong>
+      </div>
+    </div>
+  </div>
+</div> {% endcomment %}
 
 <!-- (1) Crew Duties Modal -->
 <div id="crewModal" class="modal" onclick="closeCrewModalOnOutsideClick(event)">
@@ -485,6 +776,27 @@
       <!-- We'll place the total at the bottom -->
       <div style="margin-top: 10px; text-align: right">
         <strong>Total Amount: <span id="modal-total-amount">0.00</span></strong>
+      </div>
+      
+      <!-- New buttons for individual payslip actions -->
+      <div class="modal-actions" style="margin-top: 20px; text-align: center; border-top: 1px solid #ddd; padding-top: 15px;">
+        <button 
+          type="button" 
+          class="btn-action modal-btn" 
+          onclick="printIndividualPayslip()" 
+          id="print-payslip-btn"
+          style="margin-right: 10px;"
+        >
+          📄 Print Payslip
+        </button>
+        <button 
+          type="button" 
+          class="btn-action modal-btn email-btn" 
+          onclick="emailIndividualPayslip()" 
+          id="email-payslip-btn"
+        >
+          📧 Email to Crew
+        </button>
       </div>
     </div>
   </div>
@@ -519,10 +831,19 @@
             required
           />
         </p>
-        <button type="submit" class="btn-action">Upload</button>
-        <button type="button" class="btn-action" onclick="closeUploadModal()">
-          Cancel
-        </button>
+        
+        <!-- Spinner container -->
+        <div id="upload-spinner" class="spinner-container">
+          <div class="spinner"></div>
+          <p>Processing file, please wait...</p>
+        </div>
+        
+        <div class="upload-controls">
+          <button type="submit" class="btn-action" id="upload-submit-btn">Upload</button>
+          <button type="button" class="btn-action" onclick="closeUploadModal()">
+            Cancel
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -552,27 +873,78 @@
   // =========================================
   // 2) Search & Filter
   // =========================================
-  document.getElementById("filter-select").addEventListener("change", function () {
-    const monthPicker = document.getElementById("month-picker");
-    if (this.value === "month") {
-      monthPicker.style.display = "inline-block";
-    } else {
-      monthPicker.style.display = "none";
-      monthPicker.value = "";
-      searchCrewAllowances();
-    }
-  });
+// Debounce timer
+let searchTimer = null;
 
-  document.getElementById("search-input").addEventListener("input", searchCrewAllowances);
-  document.getElementById("month-picker").addEventListener("change", searchCrewAllowances);
-
-  function searchCrewAllowances() {
-    const query = document.getElementById("search-input").value;
-    const selectedMonth = document.getElementById("month-picker").value;
-    // Adjust the URL as needed for your routes
-    const url = `/aims/c-all/?query=${query}&month=${selectedMonth}`;
-    window.location.href = url;
+document.getElementById("filter-select").addEventListener("change", function () {
+  const monthPicker = document.getElementById("month-picker");
+  if (this.value === "month") {
+    monthPicker.style.display = "inline-block";
+  } else {
+    monthPicker.style.display = "none";
+    monthPicker.value = "";
+    searchCrewAllowances(); // Immediate search when clearing month filter
   }
+});
+
+// Add debounced search for text input
+document.getElementById("search-input").addEventListener("input", function() {
+  // Clear the previous timer
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+  }
+  
+  // Set a new timer - search after user stops typing for 800ms
+  searchTimer = setTimeout(function() {
+    searchCrewAllowances();
+  }, 800);
+});
+
+// Immediate search for month picker
+document.getElementById("month-picker").addEventListener("change", searchCrewAllowances);
+
+function searchCrewAllowances() {
+  const query = document.getElementById("search-input").value;
+  const selectedMonth = document.getElementById("month-picker").value;
+  
+  // Build URL parameters correctly
+  const params = new URLSearchParams();
+  
+  // Add search parameter
+  if (query.trim()) {
+    params.append('search', query.trim());
+  }
+  
+  // Add month parameter
+  if (selectedMonth) {
+    params.append('month', selectedMonth);
+  }
+  
+  // Construct the URL
+  const url = `/aims/c-all/${params.toString() ? '?' + params.toString() : ''}`;
+  window.location.href = url;
+}
+
+// =========================================
+// Additional: Initialize search input with current value
+// =========================================
+document.addEventListener('DOMContentLoaded', function() {
+  // Get current search parameter from URL and populate the search input
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentSearch = urlParams.get('search');
+  const currentMonth = urlParams.get('month');
+  
+  if (currentSearch) {
+    document.getElementById('search-input').value = currentSearch;
+  }
+  
+  if (currentMonth) {
+    document.getElementById('month-picker').value = currentMonth;
+    document.getElementById('month-picker').style.display = 'inline-block';
+    document.getElementById('filter-select').value = 'month';
+  }
+});
+
 
   // =========================================
   // 3) Crew Duties Modal
@@ -658,20 +1030,95 @@
   // =========================================
   function openUploadModal() {
     document.getElementById("uploadModal").style.display = "block";
+    // Reset form and spinner state
+    document.getElementById("upload-form").reset();
+    document.getElementById("upload-spinner").style.display = "none";
+    document.getElementById("upload-submit-btn").disabled = false;
   }
+  
   function closeUploadModal() {
     document.getElementById("uploadModal").style.display = "none";
+    // Reset the form and hide spinner when closing
+    document.getElementById("upload-form").reset();
+    document.getElementById("upload-spinner").style.display = "none";
+    document.getElementById("upload-submit-btn").disabled = false;
   }
+  
   function closeUploadModalOnOutsideClick(event) {
     const modalContent = document.querySelector("#uploadModal .modal-content");
     if (!modalContent.contains(event.target)) {
       closeUploadModal();
     }
   }
-
-
   
-  function handleGenerateInvoice() {
+  // Set up the upload form submission with spinner and toast
+  document.addEventListener('DOMContentLoaded', function() {
+    const uploadForm = document.getElementById('upload-form');
+    const submitBtn = document.getElementById('upload-submit-btn');
+    const spinner = document.getElementById('upload-spinner');
+    
+    uploadForm.addEventListener('submit', function(e) {
+      e.preventDefault(); // Prevent normal form submission
+      
+      // Check if a file was selected
+      const fileInput = document.getElementById('id_file');
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showToast('Please select a file to upload', 'error');
+        return;
+      }
+      
+      // Show spinner and disable submit button
+      spinner.style.display = 'block';
+      submitBtn.disabled = true;
+      
+      // Create FormData from the form
+      const formData = new FormData(uploadForm);
+      
+      // Submit form data via fetch
+      fetch(uploadForm.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Upload failed. Server returned ' + response.status);
+        }
+        return response;
+      })
+      .then(() => {
+        // Hide spinner
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        
+        // Close modal
+        closeUploadModal();
+        
+        // Show success toast
+        showToast('File uploaded and processed successfully!', 'success');
+        
+        // Delay redirect to allow toast to be visible
+        setTimeout(() => {
+          window.location.href = "{% url 'crew_allowance_list' %}";
+        }, 2500); // Wait 2.5 seconds before redirecting
+      })
+      .catch(error => {
+        // Hide spinner
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        
+        // Show error toast
+        showToast('Error: ' + error.message, 'error');
+        
+        console.error('Upload error:', error);
+      });
+    });
+  });
+
+  {% comment %} function handleGenerateInvoice() {
     const typeSelect = document.getElementById("invoice-type-select").value;
     // Get the query parameter for the selected month
     const urlParams = new URLSearchParams(window.location.search);
@@ -684,67 +1131,485 @@
         }
         window.location.href = pdfUrl;
 
-    } else if (typeSelect === "overall_position") {
-        // For "Generate Overall Payslip by Position," open both reports
-        let cpUrl = "/aims/generate_usd_payslip/";
-        let othersUrl = "/aims/generate_others_payslip/";
-
+    } else if (typeSelect === "payment_mode") {
+        // Use the combined function with AJAX instead of redirecting
+        let combinedUrl = "/aims/generate_combined_payslips_email/";
         if (monthParam) {
-            cpUrl += `?month=${monthParam}`;
-            othersUrl += `?month=${monthParam}`;
+            combinedUrl += `?month=${monthParam}`;
         }
+        
+        // Show loading toast
+        showToast("Generating payslips and sending email, please wait...", "info");
+        
+        // Use fetch to make an AJAX request
+        fetch(combinedUrl, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json(); // Expecting JSON response now
+        })
+        .then(data => {
+            // Build a detailed success message
+            let successMsg = `Payslips for ${data.month} generated and emailed successfully!`;
+            
+            // Add details about what was generated
+            if (data.has_usd) {
+                successMsg += `\n• USD Payslip: ${data.cp_count} Captain(s), ${data.fo_count} First Officer(s)`;
+            }
+            
+            if (data.has_rwf) {
+                successMsg += `\n• RWF Payslip: ${data.other_positions}`;
+            }
+            
+            // Show success toast with the detailed message
+            showToast(successMsg, "success");
+        })
+        .catch(error => {
+            console.error("Error generating payslips:", error);
+            showToast(`Error generating payslips: ${error.message}`, "error");
+        });
 
-        // Open both reports in separate browser tabs
-        window.open(cpUrl, "_blank"); // Open CP payslip
-        window.open(othersUrl, "_blank"); // Open Others payslip
-
-    }  else if (typeSelect === "by_bank") {
-        // For "Generate Overall Payslip by Bank"
+    } else if (typeSelect === "by_bank") {
+        // For "Generate Payslip by Bank"
         let bankUrl = "/aims/get_bank_names/"; // Endpoint to fetch bank names
 
         fetch(bankUrl, {
             method: "GET",
             headers: { "X-Requested-With": "XMLHttpRequest" },
         })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch bank names: ${response.status}`);
-                }
-                return response.json(); // Expect a JSON array of bank names
-            })
-            .then((bankNames) => {
-                bankNames.forEach((bankName) => {
-                    // Build URL for each bank's payslip PDF
-                    let pdfUrl = `/aims/generate_payslip_for_bank/?bank_name=${encodeURIComponent(bankName)}`;
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch bank names: ${response.status}`);
+            }
+            return response.json(); // Expect a JSON array of bank names
+        })
+        .then((bankNames) => {
+            bankNames.forEach((bankName) => {
+                // Build URL for each bank's payslip PDF
+                let pdfUrl = `/aims/generate_payslip_for_bank/?bank_name=${encodeURIComponent(bankName)}`;
+                if (monthParam) {
                     pdfUrl += `&month=${encodeURIComponent(monthParam)}`;
+                }
 
-                    // Open each bank's PDF in a new tab
-                    window.open(pdfUrl, "_blank");
-                });
-            })
-            .catch((error) => {
-                console.error("Error fetching bank names:", error);
-                alert(`Error: ${error.message}`);
+                // Open each bank's PDF in a new tab
+                window.open(pdfUrl, "_blank");
             });
+        })
+        .catch((error) => {
+            console.error("Error fetching bank names:", error);
+            showToast(`Error: ${error.message}`, "error");
+        });
 
-    } else {
-        // Handle individual logic or other cases
-        alert("Individual payslip generation is not implemented yet.");
+    } else if (typeSelect === "individual") {
+        // Handle individual crew member payslip
+        showToast("Individual payslip feature is coming soon!", "info");
+    }
+} {% endcomment %}
+
+function handleGenerateInvoice() {
+    const typeSelect = document.getElementById("invoice-type-select");
+    const generateBtn = document.getElementById("generate-btn");
+    const btnText = generateBtn.querySelector(".btn-text");
+    const btnSpinner = generateBtn.querySelector(".btn-spinner");
+    
+    // Get the query parameter for the selected month
+    const urlParams = new URLSearchParams(window.location.search);
+    const monthParam = urlParams.get("month");
+    
+    // Set loading state using enhanced function
+    setButtonLoading(true);
+    
+    if (typeSelect.value === "overall") {
+        let pdfUrl = "/aims/generate_overall_payslip/";
+        if (monthParam) {
+            pdfUrl += `?month=${monthParam}`;
+        }
+        
+        showToast("Generating overall payslip, please wait...", "info");
+        
+        // For direct downloads, use a longer timeout to allow for generation
+        setTimeout(() => {
+            setButtonLoading(false);
+            setButtonSuccess();
+            showToast("Payslip should be downloading shortly!", "success");
+        }, 5000);
+        
+        window.location.href = pdfUrl;
+
+    } else if (typeSelect.value === "payment_mode") {
+        let combinedUrl = "/aims/generate_combined_payslips_email/";
+        if (monthParam) {
+            combinedUrl += `?month=${monthParam}`;
+        }
+        
+        showToast("Generating payslips and sending email, please wait...", "info");
+        
+        fetch(combinedUrl, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            let successMsg = `Payslips for ${data.month} generated and emailed successfully!`;
+            
+            if (data.has_usd) {
+                successMsg += `\n• USD Payslip: ${data.cp_count} Captain(s), ${data.fo_count} First Officer(s)`;
+            }
+            if (data.has_rwf) {
+                successMsg += `\n• RWF Payslip: ${data.other_positions}`;
+            }
+            
+            showToast(successMsg, "success");
+            setButtonLoading(false);
+            setButtonSuccess();
+            
+            // Download PDFs
+            setTimeout(() => {
+                if (data.has_usd) {
+                    let usdUrl = `/aims/currency_payslip_download/?type=usd`;
+                    if (monthParam) usdUrl += `&month=${monthParam}`;
+                    window.open(usdUrl, '_blank');
+                }
+                
+                if (data.has_rwf) {
+                    setTimeout(() => {
+                        let rwfUrl = `/aims/currency_payslip_download/?type=rwf`;
+                        if (monthParam) rwfUrl += `&month=${monthParam}`;
+                        window.open(rwfUrl, '_blank');
+                    }, 1000);
+                }
+            }, 500);
+        })
+        .catch(error => {
+            console.error("Error generating payslips:", error);
+            showToast(`Error generating payslips: ${error.message}`, "error");
+            setButtonLoading(false);
+            setButtonError();
+        });
+
+    } else if (typeSelect.value === "by_bank") {
+        let bankUrl = "/aims/generate_all_bank_payslips_zip_email/";
+        if (monthParam) {
+            bankUrl += `?month=${monthParam}`;
+        }
+        
+        showToast("Generating bank payslips, creating ZIP file, and sending email. This may take several minutes...", "info");
+        
+        fetch(bankUrl, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                let successMsg = `Bank payslips generated and emailed successfully!`;
+                successMsg += `\n• Period: ${data.month}`;
+                successMsg += `\n• Banks Processed: ${data.banks_processed}`;
+                successMsg += `\n• Crew Members: ${data.crew_members}`;
+                successMsg += `\n• ZIP file has been sent via email`;
+                
+                showToast(successMsg, "success");
+                setButtonLoading(false);
+                setButtonSuccess();
+                
+                // Download ZIP file
+                setTimeout(() => {
+                    let downloadUrl = "/aims/generate_all_bank_payslips_zip_email/";
+                    if (monthParam) downloadUrl += `?month=${monthParam}`;
+                    window.open(downloadUrl, '_blank');
+                    
+                    setTimeout(() => {
+                        showToast("ZIP file download should start shortly!", "info");
+                    }, 2000);
+                }, 1000);
+            } else {
+                showToast(`Error: ${data.error}`, "error");
+                setButtonLoading(false);
+                setButtonError();
+            }
+        })
+        .catch(error => {
+            console.error("Error generating bank payslips:", error);
+            showToast(`Error generating bank payslips: ${error.message}`, "error");
+            setButtonLoading(false);
+            setButtonError();
+        });
+
+    } else if (typeSelect.value === "all_individual") {
+        // NEW: Generate all individual payslips, email each one, and ZIP for finance
+        let individualUrl = "/aims/generate_all_individual_payslips_zip_email/";
+        if (monthParam) {
+            individualUrl += `?month=${monthParam}`;
+        }
+        
+        showToast("Generating all individual payslips, emailing to crew members, and sending ZIP to finance. This may take several minutes...", "info");
+        
+        fetch(individualUrl, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Build detailed success message
+                let successMsg = `Individual payslips generated and processed successfully!`;
+                successMsg += `\n• Period: ${data.month}`;
+                successMsg += `\n• Total Crew Processed: ${data.total_crew_processed}`;
+                successMsg += `\n• Successfully Emailed: ${data.successful_emails}`;
+                
+                if (data.failed_emails > 0) {
+                    successMsg += `\n• Failed Emails: ${data.failed_emails}`;
+                }
+                
+                successMsg += `\n• ZIP file sent to finance team: ${data.finance_email_sent ? 'Yes' : 'No'}`;
+                
+                // Show additional details if available
+                if (data.details && data.details.failed_emails && data.details.failed_emails.length > 0) {
+                    successMsg += `\n\nFailed emails (first few):`;
+                    data.details.failed_emails.slice(0, 3).forEach(failed => {
+                        successMsg += `\n• ${failed}`;
+                    });
+                }
+                
+                showToast(successMsg, "success");
+                setButtonLoading(false);
+                setButtonSuccess();
+                
+                // Optionally download the ZIP file as well
+                setTimeout(() => {
+                    let downloadUrl = "/aims/generate_all_individual_payslips_zip_email/";
+                    if (monthParam) downloadUrl += `?month=${monthParam}`;
+                    window.open(downloadUrl, '_blank');
+                    
+                    setTimeout(() => {
+                        showToast("ZIP file with all individual payslips is downloading!", "info");
+                    }, 2000);
+                }, 1000);
+            } else {
+                showToast(`Error: ${data.error}`, "error");
+                setButtonLoading(false);
+                setButtonError();
+            }
+        })
+        .catch(error => {
+            console.error("Error generating individual payslips:", error);
+            showToast(`Error generating individual payslips: ${error.message}`, "error");
+            setButtonLoading(false);
+            setButtonError();
+        });
+
+    } else if (typeSelect.value === "individual") {
+        showToast("Single individual payslip feature is available when viewing crew details!", "info");
+        setTimeout(() => {
+            setButtonLoading(false);
+        }, 2000);
     }
 }
 
-
-function sortTable(order) {
-  const urlParams = new URLSearchParams(window.location.search);
-  urlParams.set('sort', order); // Add or update the 'sort' parameter
-  urlParams.set('page', 1); // Reset to the first page
-  window.location.search = urlParams.toString(); // Reload the page with the updated query parameters
+// Button state management functions (keep existing ones)
+function setButtonLoading(isLoading) {
+    const generateBtn = document.getElementById("generate-btn");
+    const btnText = generateBtn.querySelector(".btn-text");
+    const btnSpinner = generateBtn.querySelector(".btn-spinner");
+    
+    if (isLoading) {
+        generateBtn.disabled = true;
+        generateBtn.classList.add("loading");
+        generateBtn.classList.remove("success", "error");
+        btnText.textContent = "Processing...";
+        btnSpinner.style.display = "inline-flex";
+    } else {
+        generateBtn.disabled = false;
+        generateBtn.classList.remove("loading");
+        btnText.textContent = "Go";
+        btnSpinner.style.display = "none";
+    }
 }
 
+function setButtonSuccess() {
+    const generateBtn = document.getElementById("generate-btn");
+    const btnText = generateBtn.querySelector(".btn-text");
+    
+    generateBtn.classList.add("success");
+    btnText.textContent = "✓ Done";
+    
+    setTimeout(() => {
+        generateBtn.classList.remove("success");
+        btnText.textContent = "Go";
+    }, 3000);
+}
 
+function setButtonError() {
+    const generateBtn = document.getElementById("generate-btn");
+    const btnText = generateBtn.querySelector(".btn-text");
+    
+    generateBtn.classList.add("error");
+    btnText.textContent = "✗ Error";
+    
+    setTimeout(() => {
+        generateBtn.classList.remove("error");
+        btnText.textContent = "Go";
+    }, 3000);
+}
 
+// Add these global variables to store current crew info
+let currentCrewId = null;
+let currentCrewYear = null;
+let currentCrewMonth = null;
 
+// Update the viewCrewDetails function to store crew info
+function viewCrewDetails(crewId, year, month) {
+    // Store the current crew details for use in other functions
+    currentCrewId = crewId;
+    currentCrewYear = year;
+    currentCrewMonth = month;
+    
+    const detailUrl = `/aims/c-all/details/${crewId}/${year}/${month}/`;
 
+    fetch(detailUrl, {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      document.getElementById("modal-crew-details").textContent = data.crew_info || 'Crew Details';
+      const tbody = document.getElementById("crew-duties-body");
+      tbody.innerHTML = "";
+
+      if (data.duties && data.duties.length > 0) {
+        data.duties.forEach(d => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${d.duty_date}</td>
+            <td>${d.flight_number}</td>
+            <td>${d.departure}</td>
+            <td>${d.arrival}</td>
+            <td>${d.layover_hours}</td>
+            <td>${d.hourly_rate}</td>
+            <td>${d.line_amount}</td>
+            <td>${d.tail_number}</td>
+          `;
+          tbody.appendChild(row);
+        });
+
+        // Show final total in the bottom "Total Amount" area
+        if (data.total_amount) {
+          document.getElementById("modal-total-amount").textContent = data.total_amount;
+        } else {
+          document.getElementById("modal-total-amount").textContent = "0.00";
+        }
+      } else {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align:center;">No duties found.</td>
+          </tr>
+        `;
+        document.getElementById("modal-total-amount").textContent = "0.00";
+      }
+      document.getElementById("crewModal").style.display = "block";
+    })
+    .catch(error => {
+      console.error("Error fetching crew details:", error);
+      showToast("Error fetching crew details: " + error.message, "error");
+    });
+}
+
+// Function to print individual payslip
+function printIndividualPayslip() {
+    if (!currentCrewId || !currentCrewYear || !currentCrewMonth) {
+        showToast("Error: No crew member selected", "error");
+        return;
+    }
+    
+    const printBtn = document.getElementById("print-payslip-btn");
+    printBtn.classList.add("loading");
+    printBtn.disabled = true;
+    
+    // Build URL for individual payslip
+    const printUrl = `/aims/generate_individual_payslip/${currentCrewId}/${currentCrewYear}/${currentCrewMonth}/`;
+    
+    // Open in new tab for printing
+    window.open(printUrl, '_blank');
+    
+    // Remove loading state
+    setTimeout(() => {
+        printBtn.classList.remove("loading");
+        printBtn.disabled = false;
+        showToast("Individual payslip opened for printing", "success");
+    }, 1000);
+}
+
+// Function to email individual payslip
+function emailIndividualPayslip() {
+    if (!currentCrewId || !currentCrewYear || !currentCrewMonth) {
+        showToast("Error: No crew member selected", "error");
+        return;
+    }
+    
+    const emailBtn = document.getElementById("email-payslip-btn");
+    emailBtn.classList.add("loading");
+    emailBtn.disabled = true;
+    
+    // Build URL for emailing individual payslip
+    const emailUrl = `/aims/email_individual_payslip/${currentCrewId}/${currentCrewYear}/${currentCrewMonth}/`;
+    
+    fetch(emailUrl, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showToast(`Payslip successfully emailed to ${data.crew_name}`, "success");
+        } else {
+            showToast(`Error: ${data.error}`, "error");
+        }
+    })
+    .catch(error => {
+        console.error("Error emailing payslip:", error);
+        showToast(`Error emailing payslip: ${error.message}`, "error");
+    })
+    .finally(() => {
+        // Remove loading state
+        emailBtn.classList.remove("loading");
+        emailBtn.disabled = false;
+    });
+}
+
+  function sortTable(order) {
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('sort', order); // Add or update the 'sort' parameter
+    urlParams.set('page', 1); // Reset to the first page
+    window.location.search = urlParams.toString(); // Reload the page with the updated query parameters
+  }
 
   // =========================================
   // 5) Toast Handling
@@ -755,11 +1620,20 @@ function sortTable(order) {
     toast.classList.add("toast", type);
     toast.textContent = message;
     container.appendChild(toast);
+    
+    // For success toasts, keep them visible longer (8 seconds for detailed messages)
+    const displayTime = type === 'success' ? 8000 : 5000;
+    
     setTimeout(() => {
       toast.style.opacity = '0';
-      setTimeout(() => container.removeChild(toast), 300);
-    }, 3000);
-  }
+      setTimeout(() => {
+        // Only remove the toast if it's still in the container
+        if (container.contains(toast)) {
+          container.removeChild(toast);
+        }
+      }, 500); // Match with the transition time in CSS
+    }, displayTime);
+}
 
   {% if messages %}
     {% for message in messages %}
@@ -767,6 +1641,10 @@ function sortTable(order) {
         showToast("{{ message }}", "success");
       {% elif message.tags == 'error' %}
         showToast("{{ message }}", "error");
+      {% elif message.tags == 'warning' %}
+        showToast("{{ message }}", "warning");
+      {% elif message.tags == 'info' %}
+        showToast("{{ message }}", "info");
       {% endif %}
     {% endfor %}
   {% endif %}

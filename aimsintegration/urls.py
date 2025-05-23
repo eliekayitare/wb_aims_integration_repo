@@ -24,13 +24,19 @@ urlpatterns = [
          views.crew_allowance_details, name='crew_allowance_details'),
         
     path('generate_overall_payslip/', views.generate_overall_payslip, name='generate_overall_payslip'),
-    path("generate_usd_payslip/", views.generate_usd_payslip, name="generate_usd_payslip"),
-    path("generate_others_payslip/", views.generate_others_payslip, name="generate_others_payslip"),
+    # path("generate_usd_payslip/", views.generate_usd_payslip, name="generate_usd_payslip"),
+    # path("generate_others_payslip/", views.generate_others_payslip, name="generate_others_payslip"),
+    path('generate_currency_payslips/', views.generate_currency_payslips, name='generate_currency_payslips'),
+    # Add this to your urlpatterns
+    path('generate_combined_payslips_email/', views.generate_combined_payslips_email, name='generate_combined_payslips_email'),
+    path('currency_payslip_download/', views.currency_payslip_download, name='currency_payslip_download'),
     # New endpoint for generating payslips by bank
      # New URLs for payslips by bank
-    path('get_bank_names/', views.get_bank_names, name='get_bank_names'),
-    path('generate_payslip_for_bank/', views.generate_payslip_for_bank, name='generate_payslip_for_bank'),
-
+    path('generate_all_bank_payslips_zip_email/', views.generate_all_bank_payslips_zip_email, name='generate_all_bank_payslips_zip_email'),
+    # Add these to your urlpatterns
+    path('generate_individual_payslip/<int:crew_id>/<int:year>/<int:month>/', views.generate_individual_payslip, name='generate_individual_payslip'),
+    path('email_individual_payslip/<int:crew_id>/<int:year>/<int:month>/', views.email_individual_payslip, name='email_individual_payslip'),
+    path('generate_all_individual_payslips_zip_email/', views.generate_all_individual_payslips_zip_email, name='generate_all_individual_payslips_zip_email'),
     path('layover_setup/', views.layover_setup, name='layover_setup'),
     path('zones/create/', views.create_zone, name='create_zone'),
     # path("zones/<int:zone_id>/get_airports/", views.get_zone_airports, name="get_zone_airports"),
