@@ -2425,7 +2425,7 @@ RwandAir Operations Team
         filename = f"Individual_Payslip_{crew.crew_id}_{filter_month.strftime('%Y-%m')}.pdf"
         email.attach(filename, pdf_file, 'application/pdf')
         
-        email.send(fail_silently=False)
+        # email.send(fail_silently=False)
         
         return JsonResponse({
             'success': True, 
