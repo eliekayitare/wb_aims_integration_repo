@@ -29,24 +29,7 @@ def get_exchange_account():
     return account
 
 
-# @shared_task
-# def fetch_airport_data():
-#     account = get_exchange_account()
-#     logger.info("Fetching the most recent airport data email...")
 
-#     emails = account.inbox.filter(
-#         subject__contains='AIMS JOB : #1003 Airport details Feed to WB server file attached'
-#     ).order_by('-datetime_received')
-    
-#     email = emails[0] if emails else None
-
-#     if email:
-#         logger.info(f"Processing airport data email with subject: {email.subject}")
-#         process_email_attachment(email, process_airport_file)
-#         # Trigger flight schedule task immediately after processing airport data
-#         fetch_flight_schedules.apply_async()
-#     else:
-#         logger.info("No airport data email found.")
 
 @shared_task
 def fetch_airport_data():
@@ -103,40 +86,6 @@ def cargo_fetch_flight_schedules():
         process_cargo_email_attachment(email, process_cargo_flight_schedule_file)
     else:
         logger.info("No new cargo flight schedule email found.")
-
-
-# @shared_task
-# def fetch_acars_messages():
-#     account = get_exchange_account()
-#     logger.info("Fetching and processing ACARS messages...")
-
-#     # Fetch a batch of the oldest unread messages
-#     # emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')[:5]
-#     emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
-#     # email = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received').first()
-
-#     # Process each email in the batch
-#     for item in emails:
-#         if "M16" in item.body:
-#             logger.info(f"Skipping 'M16' ACARS message: {item.subject}")
-#             item.is_read = True
-#             item.save(update_fields=['is_read'])
-#             continue
-
-#         # Log and process the ACARS message
-#         logger.info(f"Processing ACARS email with subject: {item.subject}")
-#         process_acars_message(item)
-
-#         # Mark as read to avoid reprocessing
-#         item.is_read = True
-#         item.save(update_fields=['is_read'])
-
-#     # Check if more unread messages are available and re-trigger task if needed
-#     if account.inbox.filter(subject__icontains='ARR', is_read=False).exists():
-#         fetch_acars_messages.apply_async(countdown=1)  # Re-run task with a short delay
-
-#     logger.info("Batch processing of ACARS emails completed.")
-
 
 
 from celery import shared_task
@@ -584,11 +533,6 @@ def send_cpat_expiry_notifications():
 
 
 
-
-
-
-
-
 #TASK for FDM project
 
 @shared_task
@@ -883,48 +827,6 @@ def fetch_tableau():
 
 
 
-# from datetime import datetime, timedelta, timezone
-# from exchangelib.errors import ErrorServerBusy
-
-# @shared_task(bind=True, max_retries=5)
-# def delete_old_emails(self):
-#     """
-#     Deletes all emails that are older than 10 days in the inbox,
-#     with a retry strategy to handle ErrorServerBusy.
-#     """
-#     account = get_exchange_account()
-#     days_to_keep = 7
-
-#     # Create a Python datetime in UTC and convert to EWSDateTime
-#     cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
-#     cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
-#     threshold_datetime = EWSDateTime.from_datetime(cutoff_date)
-
-#     try:
-#         logger.info(f"Filtering emails older than {days_to_keep} days (before {threshold_datetime})...")
-#         old_emails = account.inbox.filter(datetime_received__lt=threshold_datetime)
-        
-#         count_old = old_emails.count()
-#         logger.info(f"Found {count_old} email(s) older than {days_to_keep} days. Proceeding to delete them...")
-
-#         if count_old > 0:
-#             old_emails.delete()
-#             logger.info(f"Deleted {count_old} old email(s).")
-#         else:
-#             logger.info("No old emails to delete.")
-
-#         return f"Purged {count_old} email(s) older than {days_to_keep} days."
-
-#     except ErrorServerBusy as e:
-#         # If the Exchange server is busy, wait and retry
-#         wait_time = 2 ** self.request.retries * 5  # Exponential backoff
-#         logger.warning(
-#             f"Server is busy (attempt {self.request.retries + 1}/{self.max_retries}). "
-#             f"Retrying in {wait_time} seconds..."
-#         )
-
-#         # Retry the task after `wait_time` seconds
-#         raise self.retry(exc=e, countdown=wait_time)
 
 
 # Recommended imports
