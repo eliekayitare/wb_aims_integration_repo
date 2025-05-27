@@ -29,6 +29,25 @@ def get_exchange_account():
     return account
 
 
+# @shared_task
+# def fetch_airport_data():
+#     account = get_exchange_account()
+#     logger.info("Fetching the most recent airport data email...")
+
+#     emails = account.inbox.filter(
+#         subject__contains='AIMS JOB : #1003 Airport details Feed to WB server file attached'
+#     ).order_by('-datetime_received')
+    
+#     email = emails[0] if emails else None
+
+#     if email:
+#         logger.info(f"Processing airport data email with subject: {email.subject}")
+#         process_email_attachment(email, process_airport_file)
+#         # Trigger flight schedule task immediately after processing airport data
+#         fetch_flight_schedules.apply_async()
+#     else:
+#         logger.info("No airport data email found.")
+
 @shared_task
 def fetch_airport_data():
     account = get_exchange_account()
@@ -38,15 +57,17 @@ def fetch_airport_data():
         subject__contains='AIMS JOB : #1003 Airport details Feed to WB server file attached'
     ).order_by('-datetime_received')
     
-    email = emails[0] if emails else None
-
-    if email:
+    try:
+        email = emails[0]
         logger.info(f"Processing airport data email with subject: {email.subject}")
         process_email_attachment(email, process_airport_file)
         # Trigger flight schedule task immediately after processing airport data
         fetch_flight_schedules.apply_async()
-    else:
+    except IndexError:
         logger.info("No airport data email found.")
+    except Exception as e:
+        logger.error(f"Error processing airport data email: {e}")
+        raise
 
 @shared_task
 def fetch_flight_schedules():
