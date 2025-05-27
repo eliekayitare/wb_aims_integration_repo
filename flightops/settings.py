@@ -324,17 +324,17 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/2'),  # Every hour
     },
 
-    # Only keep the campaign checker in CELERY_BEAT (the processing will self-schedule)
-    'check-dreammiles-campaign-hourly': {
-        'task': 'aimsintegration.tasks.check_and_start_dreammiles_campaign',
-        'schedule': crontab(minute='0'),  # Every hour at XX:00
-    },
+    # # Only keep the campaign checker in CELERY_BEAT (the processing will self-schedule)
+    # 'check-dreammiles-campaign-hourly': {
+    #     'task': 'aimsintegration.tasks.check_and_start_dreammiles_campaign',
+    #     'schedule': crontab(minute='0'),  # Every hour at XX:00
+    # },
     
-    # Add a monitor for stalled campaigns
-    'check-stalled-campaigns': {
-        'task': 'aimsintegration.tasks.check_stalled_campaigns',
-        'schedule': crontab(minute='30'),  # Every hour at XX:30
-    },
+    # # Add a monitor for stalled campaigns
+    # 'check-stalled-campaigns': {
+    #     'task': 'aimsintegration.tasks.check_stalled_campaigns',
+    #     'schedule': crontab(minute='30'),  # Every hour at XX:30
+    # },
     
 }
 
