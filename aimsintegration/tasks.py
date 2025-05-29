@@ -52,6 +52,24 @@ def fetch_airport_data():
         logger.error(f"Error processing airport data email: {e}")
         raise
 
+# @shared_task
+# def fetch_flight_schedules():
+#     account = get_exchange_account()
+#     logger.info("Fetching the most recent flight schedule email...")
+
+#     emails = account.inbox.filter(
+#         subject__contains='AIMS JOB : #1002 Flight schedule feed to WB server file attached'
+#     ).order_by('-datetime_received')
+    
+#     email = emails[0] if emails else None
+
+#     if email:
+#         logger.info(f"Processing the most recent flight schedule email with subject: {email.subject}")
+#         process_email_attachment(email, process_flight_schedule_file)
+#     else:
+#         logger.info("No new flight schedule email found.")
+
+
 @shared_task
 def fetch_flight_schedules():
     account = get_exchange_account()
@@ -61,14 +79,15 @@ def fetch_flight_schedules():
         subject__contains='AIMS JOB : #1002 Flight schedule feed to WB server file attached'
     ).order_by('-datetime_received')
     
-    email = emails[0] if emails else None
-
-    if email:
+    try:
+        email = emails[0]
         logger.info(f"Processing the most recent flight schedule email with subject: {email.subject}")
         process_email_attachment(email, process_flight_schedule_file)
-    else:
+    except IndexError:
         logger.info("No new flight schedule email found.")
-
+    except Exception as e:
+        logger.error(f"Error processing flight schedule email: {e}")
+        raise
 
 @shared_task
 def cargo_fetch_flight_schedules():
