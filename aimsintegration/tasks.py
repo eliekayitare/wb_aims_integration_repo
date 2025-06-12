@@ -560,7 +560,7 @@ def fetch_fdm_flight_schedules():
     logger.info("Fetching the most recent fdm flight schedule email...")
 
     emails = account.inbox.filter(
-        subject__contains='AIMS JOB : #1002 Flight schedule feed to FDM file attached'
+        subject__contains="AIMS JOB : #1002.C Flight schedule feed to FDM + ' file attached'"
     ).order_by('-datetime_received')
     
     email = emails[0] if emails else None
