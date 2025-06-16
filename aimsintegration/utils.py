@@ -53,6 +53,150 @@ def process_airport_file(attachment):
 
 
 
+# from datetime import datetime
+# from django.db import transaction
+# from .models import AirportData, FlightData
+# import logging
+
+# logger = logging.getLogger(__name__)
+
+# def process_flight_schedule_file(attachment):
+#     """
+#     Process the flight schedule file, preventing duplicates using logic checks and transaction handling.
+#     """
+#     try:
+#         content = attachment.content.decode('utf-8').splitlines()
+#         logger.info("Starting to process the flight schedule file...")
+
+#         for line_num, line in enumerate(content, start=1):
+#             try:
+#                 # Split the line based on comma delimiter
+#                 fields = line.split(',')
+
+#                 # Ensure all fields are stripped of surrounding quotes
+#                 fields = [field.strip().replace('"', '') for field in fields]
+
+#                 # Extract fields
+#                 flight_date = fields[0]
+#                 tail_no = fields[1]
+#                 flight_no = fields[2]
+#                 dep_code_icao = fields[3]
+#                 arr_code_icao = fields[4]
+#                 std = fields[5]
+#                 sta = fields[6]
+#                 flight_service_type = fields[7] if len(fields) > 7 else None
+#                 etd = fields[8] if len(fields) > 8 else None
+#                 eta = fields[9] if len(fields) > 9 else None
+#                 atd = fields[10] if len(fields) > 10 else None
+#                 takeoff = fields[11] if len(fields) > 11 else None
+#                 touchdown = fields[12] if len(fields) > 12 else None
+#                 ata = fields[13] if len(fields) > 13 else None
+#                 arrival_date = fields[14] if len(fields) > 14 else None
+
+#                 print("\n-------------------------------------------------------------\n")
+#                 print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
+#                 print("\n-------------------------------------------------------------\n")
+
+#                 # Parse dates and times
+#                 try:
+#                     sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
+#                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
+#                     std_utc = datetime.strptime(std, "%H:%M").time()
+#                     sta_utc = datetime.strptime(sta, "%H:%M").time()
+#                     atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
+#                     takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
+#                     touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
+#                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
+#                     etd_utc = datetime.strptime(etd, "%H:%M").time() if etd else None
+#                     eta_utc = datetime.strptime(eta, "%H:%M").time() if eta else None
+#                 except ValueError:
+#                     logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
+#                     continue
+
+#                 # Fetch airport data
+#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
+#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
+
+#                 if not dep_airport or not arr_airport:
+#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
+#                     continue
+
+#                 dep_code_iata = dep_airport.iata_code
+#                 arr_code_iata = arr_airport.iata_code
+
+#                 # Define criteria to check for existing record
+#                 existing_record = FlightData.objects.filter(
+#                     flight_no=flight_no,
+#                     tail_no=tail_no,
+#                     sd_date_utc=sd_date_utc,
+#                     dep_code_icao=dep_code_icao,
+#                     arr_code_icao=arr_code_icao,
+#                     std_utc=std_utc,
+#                     sta_utc=sta_utc,
+#                 ).first()
+
+#                 # Prevent duplicate insertions using transaction.atomic()
+#                 with transaction.atomic():
+#                     if existing_record:
+#                         logger.info(f"Record already exists for flight {flight_no} on {sd_date_utc}. Checking for updates...")
+                        
+#                         # Check if any actual times need updating
+#                         updated = False
+#                         if std_utc and existing_record.std_utc != std_utc:
+#                             existing_record.std_utc = std_utc
+#                             updated = True
+#                         if sta_utc and existing_record.sta_utc != sta_utc:
+#                             existing_record.sta_utc = sta_utc
+#                             updated = True
+#                         if atd_utc and existing_record.atd_utc != atd_utc:
+#                             existing_record.atd_utc = atd_utc
+#                             updated = True
+#                         if takeoff_utc and existing_record.takeoff_utc != takeoff_utc:
+#                             existing_record.takeoff_utc = takeoff_utc
+#                             updated = True
+#                         if touchdown_utc and existing_record.touchdown_utc != touchdown_utc:
+#                             existing_record.touchdown_utc = touchdown_utc
+#                             updated = True
+#                         if ata_utc and existing_record.ata_utc != ata_utc:
+#                             existing_record.ata_utc = ata_utc
+#                             updated = True
+                     
+#                         if updated:
+#                             existing_record.save()
+#                             logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
+#                         else:
+#                             logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
+#                     else:
+#                         # Create a new record if no existing one matches
+#                         FlightData.objects.create(
+#                             flight_no=flight_no,
+#                             tail_no=tail_no,
+#                             dep_code_iata=dep_code_iata,
+#                             dep_code_icao=dep_code_icao,
+#                             arr_code_iata=arr_code_iata,
+#                             arr_code_icao=arr_code_icao,
+#                             sd_date_utc=sd_date_utc,
+#                             std_utc=std_utc,
+#                             sta_utc=sta_utc,
+#                             atd_utc=atd_utc,
+#                             takeoff_utc=takeoff_utc,
+#                             touchdown_utc=touchdown_utc,
+#                             ata_utc=ata_utc,
+#                             sa_date_utc=sa_date_utc,
+#                             source_type="FDM",
+#                             raw_content=",".join(fields),
+#                         )
+#                         logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}.")
+#             except Exception as e:
+#                 logger.error(f"Error processing line {line_num}: {e} - {fields}", exc_info=True)
+#                 continue
+
+#         logger.info("Flight schedule file processed successfully.")
+
+#     except Exception as e:
+#         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
+
 from datetime import datetime
 from django.db import transaction
 from .models import AirportData, FlightData
@@ -97,20 +241,28 @@ def process_flight_schedule_file(attachment):
                 print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
                 print("\n-------------------------------------------------------------\n")
 
-                # Parse dates and times
+                # Parse dates and times - FIXED DATE FORMATS
                 try:
-                    sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
+                    # Handle the MMDDYYYY format for flight_date
+                    sd_date_utc = datetime.strptime(flight_date, "%m%d%Y").date()
+                    
+                    # Handle the MM/DD/YYYY format for arrival_date
                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
+                    
+                    # Parse time fields (these remain the same)
                     std_utc = datetime.strptime(std, "%H:%M").time()
                     sta_utc = datetime.strptime(sta, "%H:%M").time()
-                    atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
-                    takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
-                    touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
-                    ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
-                    etd_utc = datetime.strptime(etd, "%H:%M").time() if etd else None
-                    eta_utc = datetime.strptime(eta, "%H:%M").time() if eta else None
-                except ValueError:
-                    logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
+                    
+                    # Handle optional time fields - check if they're not empty strings
+                    atd_utc = datetime.strptime(atd, "%H:%M").time() if atd and atd.strip() else None
+                    takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff and takeoff.strip() else None
+                    touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown and touchdown.strip() else None
+                    ata_utc = datetime.strptime(ata, "%H:%M").time() if ata and ata.strip() else None
+                    etd_utc = datetime.strptime(etd, "%H:%M").time() if etd and etd.strip() else None
+                    eta_utc = datetime.strptime(eta, "%H:%M").time() if eta and eta.strip() else None
+                    
+                except ValueError as ve:
+                    logger.error(f"Skipping line {line_num} due to date/time format error: {ve} - {line}")
                     continue
 
                 # Fetch airport data
@@ -160,6 +312,12 @@ def process_flight_schedule_file(attachment):
                         if ata_utc and existing_record.ata_utc != ata_utc:
                             existing_record.ata_utc = ata_utc
                             updated = True
+                        if etd_utc and existing_record.etd_utc != etd_utc:
+                            existing_record.etd_utc = etd_utc
+                            updated = True
+                        if eta_utc and existing_record.eta_utc != eta_utc:
+                            existing_record.eta_utc = eta_utc
+                            updated = True
                      
                         if updated:
                             existing_record.save()
@@ -182,6 +340,8 @@ def process_flight_schedule_file(attachment):
                             takeoff_utc=takeoff_utc,
                             touchdown_utc=touchdown_utc,
                             ata_utc=ata_utc,
+                            etd_utc=etd_utc,
+                            eta_utc=eta_utc,
                             sa_date_utc=sa_date_utc,
                             source_type="FDM",
                             raw_content=",".join(fields),
@@ -195,8 +355,6 @@ def process_flight_schedule_file(attachment):
 
     except Exception as e:
         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
-
-
 
 
 
