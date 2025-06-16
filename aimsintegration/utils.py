@@ -241,28 +241,20 @@ def process_flight_schedule_file(attachment):
                 print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
                 print("\n-------------------------------------------------------------\n")
 
-                # Parse dates and times - FIXED DATE FORMATS
+                # Parse dates and times
                 try:
-                    # Handle the MMDDYYYY format for flight_date
+                    # FIXED: Changed from "%m/%d/%Y" to "%m%d%Y" to match your CSV format
                     sd_date_utc = datetime.strptime(flight_date, "%m%d%Y").date()
-                    
-                    # Handle the MM/DD/YYYY format for arrival_date
                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
-                    
-                    # Parse time fields (these remain the same)
                     std_utc = datetime.strptime(std, "%H:%M").time()
                     sta_utc = datetime.strptime(sta, "%H:%M").time()
-                    
-                    # Handle optional time fields - check if they're not empty strings
-                    atd_utc = datetime.strptime(atd, "%H:%M").time() if atd and atd.strip() else None
-                    takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff and takeoff.strip() else None
-                    touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown and touchdown.strip() else None
-                    ata_utc = datetime.strptime(ata, "%H:%M").time() if ata and ata.strip() else None
-                    etd_utc = datetime.strptime(etd, "%H:%M").time() if etd and etd.strip() else None
-                    eta_utc = datetime.strptime(eta, "%H:%M").time() if eta and eta.strip() else None
-                    
-                except ValueError as ve:
-                    logger.error(f"Skipping line {line_num} due to date/time format error: {ve} - {line}")
+                    atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
+                    takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
+                    touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
+                    ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
+                    # Removed etd_utc and eta_utc parsing since they're not in your model
+                except ValueError:
+                    logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
                     continue
 
                 # Fetch airport data
@@ -334,8 +326,6 @@ def process_flight_schedule_file(attachment):
                             takeoff_utc=takeoff_utc,
                             touchdown_utc=touchdown_utc,
                             ata_utc=ata_utc,
-                            etd_utc=etd_utc,
-                            eta_utc=eta_utc,
                             sa_date_utc=sa_date_utc,
                             source_type="FDM",
                             raw_content=",".join(fields),
