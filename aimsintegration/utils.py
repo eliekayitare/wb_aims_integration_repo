@@ -312,12 +312,6 @@ def process_flight_schedule_file(attachment):
                         if ata_utc and existing_record.ata_utc != ata_utc:
                             existing_record.ata_utc = ata_utc
                             updated = True
-                        if etd_utc and existing_record.etd_utc != etd_utc:
-                            existing_record.etd_utc = etd_utc
-                            updated = True
-                        if eta_utc and existing_record.eta_utc != eta_utc:
-                            existing_record.eta_utc = eta_utc
-                            updated = True
                      
                         if updated:
                             existing_record.save()
