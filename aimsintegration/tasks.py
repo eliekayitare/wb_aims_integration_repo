@@ -554,6 +554,23 @@ def send_cpat_expiry_notifications():
 
 #TASK for FDM project
 
+# @shared_task
+# def fetch_fdm_flight_schedules():
+#     account = get_exchange_account()
+#     logger.info("Fetching the most recent fdm flight schedule email...")
+
+#     emails = account.inbox.filter(
+#         subject__contains="AIMS JOB : #1002.C Flight schedule feed to FDM + ' file attached'"
+#     ).order_by('-datetime_received')
+    
+#     email = emails[0] if emails else None
+
+#     if email:
+#         logger.info(f"Processing the most recent fdm flight schedule email with subject: {email.subject}")
+#         process_fdm_email_attachment(email, process_fdm_flight_schedule_file)
+#     else:
+#         logger.info("No new fdm flight schedule email found.")
+
 @shared_task
 def fetch_fdm_flight_schedules():
     account = get_exchange_account()
@@ -563,9 +580,9 @@ def fetch_fdm_flight_schedules():
         subject__contains="AIMS JOB : #1002.C Flight schedule feed to FDM + ' file attached'"
     ).order_by('-datetime_received')
     
-    email = emails[0] if emails else None
-
-    if email:
+    # Check if emails exist before accessing
+    if emails.exists():
+        email = emails[0]
         logger.info(f"Processing the most recent fdm flight schedule email with subject: {email.subject}")
         process_fdm_email_attachment(email, process_fdm_flight_schedule_file)
     else:
