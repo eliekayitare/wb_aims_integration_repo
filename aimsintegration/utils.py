@@ -60,147 +60,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# def process_flight_schedule_file(attachment):
-#     """
-#     Process the flight schedule file, preventing duplicates using logic checks and transaction handling.
-#     """
-#     try:
-#         content = attachment.content.decode('utf-8').splitlines()
-#         logger.info("Starting to process the flight schedule file...")
-
-#         for line_num, line in enumerate(content, start=1):
-#             try:
-#                 # Split the line based on comma delimiter
-#                 fields = line.split(',')
-
-#                 # Ensure all fields are stripped of surrounding quotes
-#                 fields = [field.strip().replace('"', '') for field in fields]
-
-#                 # Extract fields
-#                 flight_date = fields[0]
-#                 tail_no = fields[1]
-#                 flight_no = fields[2]
-#                 dep_code_icao = fields[3]
-#                 arr_code_icao = fields[4]
-#                 std = fields[5]
-#                 sta = fields[6]
-#                 flight_service_type = fields[7] if len(fields) > 7 else None
-#                 etd = fields[8] if len(fields) > 8 else None
-#                 eta = fields[9] if len(fields) > 9 else None
-#                 atd = fields[10] if len(fields) > 10 else None
-#                 takeoff = fields[11] if len(fields) > 11 else None
-#                 touchdown = fields[12] if len(fields) > 12 else None
-#                 ata = fields[13] if len(fields) > 13 else None
-#                 arrival_date = fields[14] if len(fields) > 14 else None
-
-#                 print("\n-------------------------------------------------------------\n")
-#                 print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
-#                 print("\n-------------------------------------------------------------\n")
-
-#                 # Parse dates and times
-#                 try:
-#                     sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date()
-#                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
-#                     std_utc = datetime.strptime(std, "%H:%M").time()
-#                     sta_utc = datetime.strptime(sta, "%H:%M").time()
-#                     atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
-#                     takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
-#                     touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
-#                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
-#                     etd_utc = datetime.strptime(etd, "%H:%M").time() if etd else None
-#                     eta_utc = datetime.strptime(eta, "%H:%M").time() if eta else None
-#                 except ValueError:
-#                     logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
-#                     continue
-
-#                 # Fetch airport data
-#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
-#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
-
-#                 if not dep_airport or not arr_airport:
-#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
-#                     continue
-
-#                 dep_code_iata = dep_airport.iata_code
-#                 arr_code_iata = arr_airport.iata_code
-
-#                 # Define criteria to check for existing record
-#                 existing_record = FlightData.objects.filter(
-#                     flight_no=flight_no,
-#                     tail_no=tail_no,
-#                     sd_date_utc=sd_date_utc,
-#                     dep_code_icao=dep_code_icao,
-#                     arr_code_icao=arr_code_icao,
-#                     std_utc=std_utc,
-#                     sta_utc=sta_utc,
-#                 ).first()
-
-#                 # Prevent duplicate insertions using transaction.atomic()
-#                 with transaction.atomic():
-#                     if existing_record:
-#                         logger.info(f"Record already exists for flight {flight_no} on {sd_date_utc}. Checking for updates...")
-                        
-#                         # Check if any actual times need updating
-#                         updated = False
-#                         if std_utc and existing_record.std_utc != std_utc:
-#                             existing_record.std_utc = std_utc
-#                             updated = True
-#                         if sta_utc and existing_record.sta_utc != sta_utc:
-#                             existing_record.sta_utc = sta_utc
-#                             updated = True
-#                         if atd_utc and existing_record.atd_utc != atd_utc:
-#                             existing_record.atd_utc = atd_utc
-#                             updated = True
-#                         if takeoff_utc and existing_record.takeoff_utc != takeoff_utc:
-#                             existing_record.takeoff_utc = takeoff_utc
-#                             updated = True
-#                         if touchdown_utc and existing_record.touchdown_utc != touchdown_utc:
-#                             existing_record.touchdown_utc = touchdown_utc
-#                             updated = True
-#                         if ata_utc and existing_record.ata_utc != ata_utc:
-#                             existing_record.ata_utc = ata_utc
-#                             updated = True
-                     
-#                         if updated:
-#                             existing_record.save()
-#                             logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
-#                         else:
-#                             logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
-#                     else:
-#                         # Create a new record if no existing one matches
-#                         FlightData.objects.create(
-#                             flight_no=flight_no,
-#                             tail_no=tail_no,
-#                             dep_code_iata=dep_code_iata,
-#                             dep_code_icao=dep_code_icao,
-#                             arr_code_iata=arr_code_iata,
-#                             arr_code_icao=arr_code_icao,
-#                             sd_date_utc=sd_date_utc,
-#                             std_utc=std_utc,
-#                             sta_utc=sta_utc,
-#                             atd_utc=atd_utc,
-#                             takeoff_utc=takeoff_utc,
-#                             touchdown_utc=touchdown_utc,
-#                             ata_utc=ata_utc,
-#                             sa_date_utc=sa_date_utc,
-#                             source_type="FDM",
-#                             raw_content=",".join(fields),
-#                         )
-#                         logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}.")
-#             except Exception as e:
-#                 logger.error(f"Error processing line {line_num}: {e} - {fields}", exc_info=True)
-#                 continue
-
-#         logger.info("Flight schedule file processed successfully.")
-
-#     except Exception as e:
-#         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
-
-
 def process_flight_schedule_file(attachment):
     """
-    Process the flight schedule file with comprehensive protection for initiated flights.
-    Prevents updates to core flight data once flight has any actual timing data.
+    Process the flight schedule file, preventing duplicates using logic checks and transaction handling.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -231,7 +93,9 @@ def process_flight_schedule_file(attachment):
                 ata = fields[13] if len(fields) > 13 else None
                 arrival_date = fields[14] if len(fields) > 14 else None
 
-                logger.debug(f"Processing line {line_num}: Flight {flight_no}, Tail {tail_no}, Date {flight_date}")
+                print("\n-------------------------------------------------------------\n")
+                print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
+                print("\n-------------------------------------------------------------\n")
 
                 # Parse dates and times
                 try:
@@ -245,8 +109,8 @@ def process_flight_schedule_file(attachment):
                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
                     etd_utc = datetime.strptime(etd, "%H:%M").time() if etd else None
                     eta_utc = datetime.strptime(eta, "%H:%M").time() if eta else None
-                except ValueError as ve:
-                    logger.error(f"Skipping line {line_num} due to date/time format error: {ve} - {line}")
+                except ValueError:
+                    logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
                     continue
 
                 # Fetch airport data
@@ -260,177 +124,50 @@ def process_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code
                 arr_code_iata = arr_airport.iata_code
 
-                # UPDATED MATCHING CRITERIA - Remove tail_no to avoid circular matching issues
-                # This is crucial for preventing the tail number change problem
+                # Define criteria to check for existing record
                 existing_record = FlightData.objects.filter(
                     flight_no=flight_no,
+                    tail_no=tail_no,
                     sd_date_utc=sd_date_utc,
                     dep_code_icao=dep_code_icao,
                     arr_code_icao=arr_code_icao,
                     std_utc=std_utc,
-                    # Removed tail_no from matching criteria
+                    sta_utc=sta_utc,
                 ).first()
 
                 # Prevent duplicate insertions using transaction.atomic()
                 with transaction.atomic():
                     if existing_record:
-                        logger.info(f"Found existing record for flight {flight_no} on {sd_date_utc}")
+                        logger.info(f"Record already exists for flight {flight_no} on {sd_date_utc}. Checking for updates...")
                         
-                        # CHECK IF FLIGHT HAS BEEN INITIATED (Critical Protection Check)
-                        flight_initiated = any([
-                            existing_record.atd_utc,      # Actual Time of Departure
-                            existing_record.takeoff_utc,  # Takeoff time
-                            existing_record.touchdown_utc, # Landing time
-                            existing_record.ata_utc       # Actual Time of Arrival
-                        ])
-                        
-                        if flight_initiated:
-                            logger.warning(
-                                f"🛡️  PROTECTION ACTIVE: Flight {flight_no} on {sd_date_utc} has been initiated. "
-                                f"Actual timings present: ATD={bool(existing_record.atd_utc)}, "
-                                f"TO={bool(existing_record.takeoff_utc)}, "
-                                f"TD={bool(existing_record.touchdown_utc)}, "
-                                f"ATA={bool(existing_record.ata_utc)}"
-                            )
-                            
-                            # LOG BLOCKED CHANGES TO CORE FIELDS
-                            blocked_changes = []
-                            
-                            if existing_record.tail_no != tail_no:
-                                blocked_changes.append(f"tail_no: '{existing_record.tail_no}' -> '{tail_no}'")
-                            if existing_record.flight_no != flight_no:
-                                blocked_changes.append(f"flight_no: '{existing_record.flight_no}' -> '{flight_no}'")
-                            if existing_record.dep_code_iata != dep_code_iata:
-                                blocked_changes.append(f"dep_code_iata: '{existing_record.dep_code_iata}' -> '{dep_code_iata}'")
-                            if existing_record.arr_code_iata != arr_code_iata:
-                                blocked_changes.append(f"arr_code_iata: '{existing_record.arr_code_iata}' -> '{arr_code_iata}'")
-                            if existing_record.std_utc != std_utc:
-                                blocked_changes.append(f"std_utc: '{existing_record.std_utc}' -> '{std_utc}'")
-                            if existing_record.sta_utc != sta_utc:
-                                blocked_changes.append(f"sta_utc: '{existing_record.sta_utc}' -> '{sta_utc}'")
-                            
-                            if blocked_changes:
-                                logger.warning(
-                                    f"🚫 BLOCKED {len(blocked_changes)} core field changes for initiated flight {flight_no}:\n" +
-                                    "\n".join([f"   - {change}" for change in blocked_changes]) +
-                                    f"\n   Source: Flight Schedule File (Line {line_num})"
-                                )
-                            
-                            # ONLY UPDATE ACTUAL TIMING FIELDS (and only if currently null)
-                            timing_updated = False
-                            
-                            if atd_utc and not existing_record.atd_utc:
-                                existing_record.atd_utc = atd_utc
-                                timing_updated = True
-                                logger.info(f"✅ Updated ATD for initiated flight {flight_no}: {atd_utc}")
-                            elif atd_utc and existing_record.atd_utc != atd_utc:
-                                logger.info(f"⚠️  ATD already set for flight {flight_no}: {existing_record.atd_utc}, ignoring {atd_utc}")
-                            
-                            if takeoff_utc and not existing_record.takeoff_utc:
-                                existing_record.takeoff_utc = takeoff_utc
-                                timing_updated = True
-                                logger.info(f"✅ Updated takeoff for initiated flight {flight_no}: {takeoff_utc}")
-                            elif takeoff_utc and existing_record.takeoff_utc != takeoff_utc:
-                                logger.info(f"⚠️  Takeoff already set for flight {flight_no}: {existing_record.takeoff_utc}, ignoring {takeoff_utc}")
-                            
-                            if touchdown_utc and not existing_record.touchdown_utc:
-                                existing_record.touchdown_utc = touchdown_utc
-                                timing_updated = True
-                                logger.info(f"✅ Updated touchdown for initiated flight {flight_no}: {touchdown_utc}")
-                            elif touchdown_utc and existing_record.touchdown_utc != touchdown_utc:
-                                logger.info(f"⚠️  Touchdown already set for flight {flight_no}: {existing_record.touchdown_utc}, ignoring {touchdown_utc}")
-                            
-                            if ata_utc and not existing_record.ata_utc:
-                                existing_record.ata_utc = ata_utc
-                                timing_updated = True
-                                logger.info(f"✅ Updated ATA for initiated flight {flight_no}: {ata_utc}")
-                            elif ata_utc and existing_record.ata_utc != ata_utc:
-                                logger.info(f"⚠️  ATA already set for flight {flight_no}: {existing_record.ata_utc}, ignoring {ata_utc}")
-                            
-                            if timing_updated:
-                                existing_record.save()
-                                logger.info(f"💾 Saved timing updates for initiated flight {flight_no}")
-                            else:
-                                logger.info(f"📋 No timing updates needed for initiated flight {flight_no}")
-                            
-                            # Skip to next record - don't update core fields
-                            continue
-                        
-                        # FLIGHT NOT INITIATED - Allow all updates as before
-                        logger.info(f"✅ Flight {flight_no} not yet initiated. Updating all fields as normal.")
-                        
+                        # Check if any actual times need updating
                         updated = False
-                        changes_made = []
-                        
-                        # Update core fields (only for non-initiated flights)
-                        if existing_record.tail_no != tail_no:
-                            changes_made.append(f"tail_no: '{existing_record.tail_no}' -> '{tail_no}'")
-                            existing_record.tail_no = tail_no
-                            updated = True
-                        
-                        if existing_record.dep_code_iata != dep_code_iata:
-                            changes_made.append(f"dep_code_iata: '{existing_record.dep_code_iata}' -> '{dep_code_iata}'")
-                            existing_record.dep_code_iata = dep_code_iata
-                            updated = True
-                        
-                        if existing_record.arr_code_iata != arr_code_iata:
-                            changes_made.append(f"arr_code_iata: '{existing_record.arr_code_iata}' -> '{arr_code_iata}'")
-                            existing_record.arr_code_iata = arr_code_iata
-                            updated = True
-                        
-                        # Update scheduled times
                         if std_utc and existing_record.std_utc != std_utc:
-                            changes_made.append(f"std_utc: '{existing_record.std_utc}' -> '{std_utc}'")
                             existing_record.std_utc = std_utc
                             updated = True
-                        
                         if sta_utc and existing_record.sta_utc != sta_utc:
-                            changes_made.append(f"sta_utc: '{existing_record.sta_utc}' -> '{sta_utc}'")
                             existing_record.sta_utc = sta_utc
                             updated = True
-                        
-                        if sa_date_utc and existing_record.sa_date_utc != sa_date_utc:
-                            changes_made.append(f"sa_date_utc: '{existing_record.sa_date_utc}' -> '{sa_date_utc}'")
-                            existing_record.sa_date_utc = sa_date_utc
-                            updated = True
-                        
-                        # Update actual timing fields (if provided and different)
                         if atd_utc and existing_record.atd_utc != atd_utc:
-                            changes_made.append(f"atd_utc: '{existing_record.atd_utc}' -> '{atd_utc}'")
                             existing_record.atd_utc = atd_utc
                             updated = True
-                        
                         if takeoff_utc and existing_record.takeoff_utc != takeoff_utc:
-                            changes_made.append(f"takeoff_utc: '{existing_record.takeoff_utc}' -> '{takeoff_utc}'")
                             existing_record.takeoff_utc = takeoff_utc
                             updated = True
-                        
                         if touchdown_utc and existing_record.touchdown_utc != touchdown_utc:
-                            changes_made.append(f"touchdown_utc: '{existing_record.touchdown_utc}' -> '{touchdown_utc}'")
                             existing_record.touchdown_utc = touchdown_utc
                             updated = True
-                        
                         if ata_utc and existing_record.ata_utc != ata_utc:
-                            changes_made.append(f"ata_utc: '{existing_record.ata_utc}' -> '{ata_utc}'")
                             existing_record.ata_utc = ata_utc
                             updated = True
-                        
+                     
                         if updated:
                             existing_record.save()
-                            logger.info(
-                                f"💾 Updated FlightData record for flight {flight_no} on {sd_date_utc}. "
-                                f"Changes: {len(changes_made)} fields updated"
-                            )
-                            if logger.isEnabledFor(logging.DEBUG):
-                                for change in changes_made:
-                                    logger.debug(f"   - {change}")
+                            logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
                         else:
-                            logger.info(f"📋 No changes needed for FlightData record {flight_no} on {sd_date_utc}")
-                    
+                            logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
                     else:
-                        # CREATE NEW RECORD - No existing record found
-                        logger.info(f"➕ Creating new flight record: {flight_no} on {sd_date_utc}")
-                        
+                        # Create a new record if no existing one matches
                         FlightData.objects.create(
                             flight_no=flight_no,
                             tail_no=tail_no,
@@ -446,53 +183,21 @@ def process_flight_schedule_file(attachment):
                             touchdown_utc=touchdown_utc,
                             ata_utc=ata_utc,
                             sa_date_utc=sa_date_utc,
-                            source_type="Flight_Schedule",  # Changed from "FDM" to be more accurate
+                            source_type="FDM",
                             raw_content=",".join(fields),
                         )
-                        logger.info(f"✅ Successfully inserted new flight record: {flight_no} on {sd_date_utc}")
-                        
+                        logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}.")
             except Exception as e:
-                logger.error(f"❌ Error processing line {line_num}: {e} - Fields: {fields}", exc_info=True)
+                logger.error(f"Error processing line {line_num}: {e} - {fields}", exc_info=True)
                 continue
 
-        logger.info("🎉 Flight schedule file processed successfully with data protection active")
+        logger.info("Flight schedule file processed successfully.")
 
     except Exception as e:
-        logger.error(f"❌ Error processing flight schedule file: {e}", exc_info=True)
+        logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
 
 
-# Optional: Add a helper function to check flight initiation status
-def is_flight_initiated(flight_record):
-    """
-    Helper function to check if a flight has been initiated
-    Returns True if flight has any actual timing data
-    """
-    return any([
-        flight_record.atd_utc,      # Actual Time of Departure
-        flight_record.takeoff_utc,  # Takeoff time
-        flight_record.touchdown_utc, # Landing time
-        flight_record.ata_utc       # Actual Time of Arrival
-    ])
 
-
-# Optional: Add a function to get flight initiation summary
-def get_flight_timing_summary(flight_record):
-    """
-    Get a summary of which actual timings are present for a flight
-    """
-    return {
-        'initiated': is_flight_initiated(flight_record),
-        'atd_present': bool(flight_record.atd_utc),
-        'takeoff_present': bool(flight_record.takeoff_utc),
-        'touchdown_present': bool(flight_record.touchdown_utc),
-        'ata_present': bool(flight_record.ata_utc),
-        'completion_percentage': sum([
-            bool(flight_record.atd_utc),
-            bool(flight_record.takeoff_utc),
-            bool(flight_record.touchdown_utc),
-            bool(flight_record.ata_utc)
-        ]) * 25  # Each timing represents 25% completion
-    }
 
 
 #CARGO Website
@@ -783,114 +488,7 @@ from aimsintegration.models import FlightData
 logger = logging.getLogger(__name__)
 
 
-# def process_acars_message(item, file_path):
-#     try:
-#         email_received_date = item.datetime_received.date()  # Get only the date part
-#         message_body = item.body
-
-#         if "M16" in message_body:
-#             logger.info("Skipping 'M16' ACARS message.")
-#             return
-
-#         logger.info(f"ACARS message received at: {email_received_date} UTC")
-#         logger.info(f"ACARS message body: {message_body}")
-
-#         # Extract fields from the message
-#         flight_no = extract_flight_number(message_body)
-#         acars_event, event_time_str = extract_acars_event(message_body)
-#         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
-#         tail_number = extract_tail_number(message_body)
-
-#         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
-#             logger.error("Invalid time format in ACARS message.")
-#             return
-
-#         event_time = datetime.strptime(event_time_str, "%H:%M").time()
-
-#         # flights = FlightData.objects.filter(
-#         #     flight_no=flight_no,
-#         #     tail_no=tail_number,
-#         #     dep_code_iata=dep_code,
-#         #     arr_code_iata=arr_code
-#         # )
-
-#         # First, try to get matching flights with flight number
-#         flights = FlightData.objects.filter(
-#             flight_no=flight_no,
-#             tail_no=tail_number,
-#             dep_code_iata=dep_code,
-#             arr_code_iata=arr_code
-#         )
-
-#         # If no flights found, try matching without flight number
-#         if not flights.exists():
-#             flights = FlightData.objects.filter(
-#                 tail_no=tail_number,
-#                 dep_code_iata=dep_code,
-#                 arr_code_iata=arr_code
-#             )
-
-#         # If still no flights found, send an email and return
-#         if not flights.exists():
-#             logger.info(f"No matching flights found for flight number: {flight_no}")
-#             send_mail(
-#                 subject=f"No matching flights found for flight number: {flight_no}",
-#                 message=(
-#                     f"Dear Team,\n\n"
-#                     f"The ACARS message for flight {flight_no} could not be matched.\n"
-#                     f"Message details:\n\n{message_body}\n\n"
-#                     f"Please review and update manually.\n\n"
-#                     f"Regards,\nFlightOps Team"
-#                 ),
-#                 from_email=settings.EMAIL_HOST_USER,
-#                 recipient_list=[
-#                     settings.FIRST_EMAIL_RECEIVER,
-#                     settings.SECOND_EMAIL_RECEIVER,
-#                     settings.THIRD_EMAIL_RECEIVER,
-#                 ],
-#                 fail_silently=False,
-#             )
-#             return
-
-#         closest_flight = min(
-#             flights,
-#             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
-#         )
-
-#         # closest_fdm_flight = min(
-#         #     fdm_flights,
-#         #     key=lambda fl: abs((fl.sd_date_utc - email_received_date).days)
-#         # ) 
-
-#         if acars_event == "OT":
-#             closest_flight.atd_utc = event_time
-#             # closest_fdm_flight.atd_utc = event_time
-#         elif acars_event == "OF":
-#             closest_flight.takeoff_utc = event_time
-#             # closest_fdm_flight.takeoff_utc = event_time
-#         elif acars_event == "ON":
-#             closest_flight.touchdown_utc = event_time
-#             # closest_fdm_flight.touchdown_utc = event_time
-#         elif acars_event == "IN":
-#             closest_flight.ata_utc = event_time
-#             # closest_fdm_flight.ata_utc = event_time
-
-#         closest_flight.save()
-#         # closest_fdm_flight.save()
-
-#         # Append the updated flight details to the job file
-#         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
-
-#     except Exception as e:
-#         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
-
-
-# Start of updated process acars messages
 def process_acars_message(item, file_path):
-    """
-    Enhanced ACARS processing with protection against timing overwrites.
-    ACARS should only update actual timing fields and only if they're currently null.
-    """
     try:
         email_received_date = item.datetime_received.date()  # Get only the date part
         message_body = item.body
@@ -899,8 +497,8 @@ def process_acars_message(item, file_path):
             logger.info("Skipping 'M16' ACARS message.")
             return
 
-        logger.info(f"📡 ACARS message received at: {email_received_date} UTC")
-        logger.debug(f"ACARS message body: {message_body}")
+        logger.info(f"ACARS message received at: {email_received_date} UTC")
+        logger.info(f"ACARS message body: {message_body}")
 
         # Extract fields from the message
         flight_no = extract_flight_number(message_body)
@@ -908,82 +506,44 @@ def process_acars_message(item, file_path):
         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
         tail_number = extract_tail_number(message_body)
 
-        # Validate extracted data
-        if not flight_no:
-            logger.error("❌ Could not extract flight number from ACARS message")
-            return
-        
-        if not acars_event or not event_time_str:
-            logger.error("❌ Could not extract ACARS event or time from message")
-            return
-        
-        if not tail_number:
-            logger.warning("⚠️  Could not extract tail number from ACARS message")
-        
-        if not dep_code or not arr_code:
-            logger.warning("⚠️  Could not extract airport codes from ACARS message")
-
         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
-            logger.error(f"❌ Invalid time format in ACARS message: {event_time_str}")
+            logger.error("Invalid time format in ACARS message.")
             return
 
         event_time = datetime.strptime(event_time_str, "%H:%M").time()
-        
-        logger.info(f"🔍 Processing ACARS: Flight {flight_no}, Event {acars_event}, Time {event_time}, Tail {tail_number}")
 
-        # IMPROVED FLIGHT MATCHING STRATEGY
-        flights = None
-        matching_strategy = ""
-        
-        # Strategy 1: Match with all available criteria
-        if tail_number and dep_code and arr_code:
+        # flights = FlightData.objects.filter(
+        #     flight_no=flight_no,
+        #     tail_no=tail_number,
+        #     dep_code_iata=dep_code,
+        #     arr_code_iata=arr_code
+        # )
+
+        # First, try to get matching flights with flight number
+        flights = FlightData.objects.filter(
+            flight_no=flight_no,
+            tail_no=tail_number,
+            dep_code_iata=dep_code,
+            arr_code_iata=arr_code
+        )
+
+        # If no flights found, try matching without flight number
+        if not flights.exists():
             flights = FlightData.objects.filter(
-                flight_no=flight_no,
                 tail_no=tail_number,
                 dep_code_iata=dep_code,
                 arr_code_iata=arr_code
             )
-            matching_strategy = "full criteria (flight_no + tail_no + airports)"
-        
-        # Strategy 2: Match without tail number (in case tail number changed)
-        if not flights or not flights.exists():
-            if dep_code and arr_code:
-                flights = FlightData.objects.filter(
-                    flight_no=flight_no,
-                    dep_code_iata=dep_code,
-                    arr_code_iata=arr_code
-                )
-                matching_strategy = "flight_no + airports only"
-        
-        # Strategy 3: Match with tail number and flight number only
-        if not flights or not flights.exists():
-            if tail_number:
-                flights = FlightData.objects.filter(
-                    flight_no=flight_no,
-                    tail_no=tail_number
-                )
-                matching_strategy = "flight_no + tail_no only"
-        
-        # Strategy 4: Match with just flight number (last resort)
-        if not flights or not flights.exists():
-            flights = FlightData.objects.filter(flight_no=flight_no)
-            matching_strategy = "flight_no only (last resort)"
 
-        if not flights or not flights.exists():
-            logger.error(f"❌ No matching flights found for ACARS flight {flight_no}")
+        # If still no flights found, send an email and return
+        if not flights.exists():
+            logger.info(f"No matching flights found for flight number: {flight_no}")
             send_mail(
-                subject=f"No matching flights found for ACARS flight: {flight_no}",
+                subject=f"No matching flights found for flight number: {flight_no}",
                 message=(
                     f"Dear Team,\n\n"
-                    f"The ACARS message for flight {flight_no} could not be matched to any flight record.\n\n"
-                    f"ACARS Details:\n"
-                    f"- Flight: {flight_no}\n"
-                    f"- Event: {acars_event}\n" 
-                    f"- Time: {event_time}\n"
-                    f"- Tail: {tail_number}\n"
-                    f"- Route: {dep_code} -> {arr_code}\n"
-                    f"- Received: {email_received_date}\n\n"
-                    f"Message body:\n{message_body}\n\n"
+                    f"The ACARS message for flight {flight_no} could not be matched.\n"
+                    f"Message details:\n\n{message_body}\n\n"
                     f"Please review and update manually.\n\n"
                     f"Regards,\nFlightOps Team"
                 ),
@@ -997,206 +557,40 @@ def process_acars_message(item, file_path):
             )
             return
 
-        # Find the closest flight by date
         closest_flight = min(
             flights,
             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
         )
-        
-        date_diff = abs((closest_flight.sd_date_utc - email_received_date).days)
-        logger.info(
-            f"✅ Matched ACARS to flight using {matching_strategy}. "
-            f"Flight: {closest_flight.flight_no} on {closest_flight.sd_date_utc} "
-            f"(date difference: {date_diff} days)"
-        )
-        
-        # Check current flight timing status
-        current_timings = {
-            'atd_utc': closest_flight.atd_utc,
-            'takeoff_utc': closest_flight.takeoff_utc,
-            'touchdown_utc': closest_flight.touchdown_utc,
-            'ata_utc': closest_flight.ata_utc
-        }
-        
-        logger.debug(
-            f"Current flight timings: ATD={bool(current_timings['atd_utc'])}, "
-            f"TO={bool(current_timings['takeoff_utc'])}, "
-            f"TD={bool(current_timings['touchdown_utc'])}, "
-            f"ATA={bool(current_timings['ata_utc'])}"
-        )
 
-        # ACARS TIMING UPDATE LOGIC WITH PROTECTION
-        timing_updated = False
-        update_blocked = False
-        update_message = ""
-        
-        if acars_event == "OT":  # Off blocks (departure)
-            if not closest_flight.atd_utc:
-                closest_flight.atd_utc = event_time
-                timing_updated = True
-                update_message = f"✅ ACARS set ATD (Off blocks): {event_time}"
-                logger.info(update_message)
-            else:
-                update_blocked = True
-                update_message = f"🛡️  ACARS ATD blocked - already set to {closest_flight.atd_utc}, ignoring new value {event_time}"
-                logger.warning(update_message)
-        
-        elif acars_event == "OF":  # Airborne (takeoff)
-            if not closest_flight.takeoff_utc:
-                closest_flight.takeoff_utc = event_time
-                timing_updated = True
-                update_message = f"✅ ACARS set Takeoff (Airborne): {event_time}"
-                logger.info(update_message)
-            else:
-                update_blocked = True
-                update_message = f"🛡️  ACARS Takeoff blocked - already set to {closest_flight.takeoff_utc}, ignoring new value {event_time}"
-                logger.warning(update_message)
-        
-        elif acars_event == "ON":  # Touchdown (landing)
-            if not closest_flight.touchdown_utc:
-                closest_flight.touchdown_utc = event_time
-                timing_updated = True
-                update_message = f"✅ ACARS set Touchdown (Landing): {event_time}"
-                logger.info(update_message)
-            else:
-                update_blocked = True
-                update_message = f"🛡️  ACARS Touchdown blocked - already set to {closest_flight.touchdown_utc}, ignoring new value {event_time}"
-                logger.warning(update_message)
-        
-        elif acars_event == "IN":  # On blocks (arrival)
-            if not closest_flight.ata_utc:
-                closest_flight.ata_utc = event_time
-                timing_updated = True
-                update_message = f"✅ ACARS set ATA (On blocks): {event_time}"
-                logger.info(update_message)
-            else:
-                update_blocked = True
-                update_message = f"🛡️  ACARS ATA blocked - already set to {closest_flight.ata_utc}, ignoring new value {event_time}"
-                logger.warning(update_message)
-        
-        else:
-            logger.error(f"❌ Unknown ACARS event type: {acars_event}")
-            return
+        # closest_fdm_flight = min(
+        #     fdm_flights,
+        #     key=lambda fl: abs((fl.sd_date_utc - email_received_date).days)
+        # ) 
 
-        # Save changes if any timing was updated
-        if timing_updated:
-            try:
-                closest_flight.save()
-                logger.info(f"💾 Successfully saved ACARS timing update for flight {flight_no}")
-                
-                # Check if flight is now complete
-                flight_complete = all([
-                    closest_flight.atd_utc,
-                    closest_flight.takeoff_utc,
-                    closest_flight.touchdown_utc,
-                    closest_flight.ata_utc
-                ])
-                
-                if flight_complete:
-                    logger.info(f"🎉 Flight {flight_no} is now complete with all actual timings!")
-                
-                # Write to job file only if update was successful
-                write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
-                logger.info(f"📝 Added ACARS data to job file for flight {flight_no}")
-                
-            except Exception as save_error:
-                logger.error(f"❌ Failed to save ACARS timing update: {save_error}", exc_info=True)
-                return
-        
-        elif update_blocked:
-            logger.info(f"📋 ACARS timing update blocked for flight {flight_no} - timing already exists")
-            # Could still write to job file for audit purposes, but with a note
-            # write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
-        
-        else:
-            logger.warning(f"⚠️  No ACARS timing update performed for flight {flight_no}")
+        if acars_event == "OT":
+            closest_flight.atd_utc = event_time
+            # closest_fdm_flight.atd_utc = event_time
+        elif acars_event == "OF":
+            closest_flight.takeoff_utc = event_time
+            # closest_fdm_flight.takeoff_utc = event_time
+        elif acars_event == "ON":
+            closest_flight.touchdown_utc = event_time
+            # closest_fdm_flight.touchdown_utc = event_time
+        elif acars_event == "IN":
+            closest_flight.ata_utc = event_time
+            # closest_fdm_flight.ata_utc = event_time
 
-        # Log final flight timing status
-        logger.info(
-            f"📊 Final timing status for flight {flight_no}: "
-            f"ATD={bool(closest_flight.atd_utc)}, "
-            f"TO={bool(closest_flight.takeoff_utc)}, "
-            f"TD={bool(closest_flight.touchdown_utc)}, "
-            f"ATA={bool(closest_flight.ata_utc)}"
-        )
+        closest_flight.save()
+        # closest_fdm_flight.save()
+
+        # Append the updated flight details to the job file
+        write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
 
     except Exception as e:
-        logger.error(f"❌ Error processing ACARS message: {e}", exc_info=True)
-        logger.error(f"ACARS message details - Flight: {flight_no if 'flight_no' in locals() else 'Unknown'}, "
-                    f"Event: {acars_event if 'acars_event' in locals() else 'Unknown'}, "
-                    f"Time: {event_time_str if 'event_time_str' in locals() else 'Unknown'}")
+        logger.error(f"Error processing ACARS message: {e}", exc_info=True)
 
 
-# Optional: Helper function to validate ACARS data
-def validate_acars_timing(flight_record, acars_event, new_time):
-    """
-    Validate ACARS timing against existing flight data
-    Returns (is_valid, reason)
-    """
-    current_timings = {
-        'OT': flight_record.atd_utc,
-        'OF': flight_record.takeoff_utc, 
-        'ON': flight_record.touchdown_utc,
-        'IN': flight_record.ata_utc
-    }
-    
-    current_value = current_timings.get(acars_event)
-    
-    if current_value is None:
-        return True, "Field is empty, update allowed"
-    
-    if current_value == new_time:
-        return False, f"Same value already exists ({current_value})"
-    
-    return False, f"Different value already exists ({current_value}), cannot overwrite with {new_time}"
 
-
-# Optional: Get ACARS event description
-def get_acars_event_description(acars_event):
-    """
-    Get human-readable description of ACARS events
-    """
-    descriptions = {
-        'OT': 'Off blocks (Departure)',
-        'OF': 'Airborne (Takeoff)',
-        'ON': 'Touchdown (Landing)', 
-        'IN': 'On blocks (Arrival)'
-    }
-    return descriptions.get(acars_event, f'Unknown event ({acars_event})')
-
-
-# Optional: ACARS processing summary
-def get_acars_processing_summary(flight_record):
-    """
-    Get summary of ACARS timing data for a flight
-    """
-    return {
-        'flight_no': flight_record.flight_no,
-        'tail_no': flight_record.tail_no,
-        'route': f"{flight_record.dep_code_iata} -> {flight_record.arr_code_iata}",
-        'acars_timings': {
-            'departure_blocks': flight_record.atd_utc,
-            'airborne': flight_record.takeoff_utc,
-            'touchdown': flight_record.touchdown_utc,
-            'arrival_blocks': flight_record.ata_utc
-        },
-        'acars_complete': all([
-            flight_record.atd_utc,
-            flight_record.takeoff_utc,
-            flight_record.touchdown_utc,
-            flight_record.ata_utc
-        ]),
-        'missing_acars': [
-            event for event, timing in [
-                ('OT - Off blocks', flight_record.atd_utc),
-                ('OF - Airborne', flight_record.takeoff_utc), 
-                ('ON - Touchdown', flight_record.touchdown_utc),
-                ('IN - On blocks', flight_record.ata_utc)
-            ] if not timing
-        ]
-    }
-
-# End of updated process acars messages
 
 def extract_flight_number(message_body):
     """
@@ -1280,147 +674,10 @@ import csv
 
 logger = logging.getLogger(__name__)
 
-# def process_fdm_flight_schedule_file(attachment):
-#     """
-#     Process the FDM flight schedule file using a comma delimiter.
-#     Insert into FdmFlightData and update missing actual timings in FlightData.
-#     """
-#     try:
-#         content = attachment.content.decode('utf-8').splitlines()
-#         logger.info("Starting to process the FDM flight schedule file...")
-
-#         reader = csv.reader(content)
-
-#         for line_num, row in enumerate(reader, start=1):
-#             try:
-#                 # Extract fields
-#                 flight_date = row[0].strip() if len(row) > 0 else ""
-#                 tail_no = row[1].strip()[:10] if len(row) > 1 else ""
-#                 flight_no = row[2].strip()[:6] if len(row) > 2 else ""
-#                 dep_code_icao = row[3].strip()[:4] if len(row) > 3 else ""
-#                 arr_code_icao = row[4].strip()[:4] if len(row) > 4 else ""
-#                 std_utc = row[5].strip() if len(row) > 5 else ""
-#                 sta_utc = row[6].strip() if len(row) > 6 else ""
-#                 flight_type = row[7].strip()[:10] if len(row) > 7 else ""
-#                 etd_utc = row[8].strip() if len(row) > 8 else ""
-#                 eta_utc = row[9].strip() if len(row) > 9 else ""
-#                 atd_utc = row[10].strip() if len(row) > 10 else ""
-#                 takeoff_utc = row[11].strip() if len(row) > 11 else ""
-#                 touchdown_utc = row[12].strip() if len(row) > 12 else ""
-#                 ata_utc = row[13].strip() if len(row) > 13 else ""
-#                 arrival_date = row[14].strip() if len(row) > 14 else ""
-
-#                 # Parse dates and times
-#                 sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
-#                 sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
-#                 std_utc_time = datetime.strptime(std_utc, "%H:%M").time() if std_utc else None
-#                 sta_utc_time = datetime.strptime(sta_utc, "%H:%M").time() if sta_utc else None
-#                 etd_utc_time = datetime.strptime(etd_utc, "%H:%M").time() if etd_utc else None
-#                 eta_utc_time = datetime.strptime(eta_utc, "%H:%M").time() if eta_utc else None
-#                 atd_utc_time = datetime.strptime(atd_utc, "%H:%M").time() if atd_utc else None
-#                 takeoff_utc_time = datetime.strptime(takeoff_utc, "%H:%M").time() if takeoff_utc else None
-#                 touchdown_utc_time = datetime.strptime(touchdown_utc, "%H:%M").time() if touchdown_utc else None
-#                 ata_utc_time = datetime.strptime(ata_utc, "%H:%M").time() if ata_utc else None
-
-#                 # Fetch airport data
-#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
-#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
-
-#                 dep_code_iata = dep_airport.iata_code if dep_airport else ""
-#                 arr_code_iata = arr_airport.iata_code if arr_airport else ""
-
-#                 # Define unique criteria
-#                 unique_criteria = {
-#                     'flight_no': flight_no,
-#                     'tail_no': tail_no,
-#                     'sd_date_utc': sd_date_utc,
-#                     'dep_code_icao': dep_code_icao,
-#                     'arr_code_icao': arr_code_icao,
-#                     'sa_date_utc': sa_date_utc,
-#                     'std_utc': std_utc_time,
-#                     'sta_utc': sta_utc_time,
-#                 }
-
-#                 # Insert or Update FDM FlightData
-#                 existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
-
-#                 if existing_record:
-#                     # Update fields if actual timings have changed
-#                     updated = False
-#                     if std_utc_time and existing_record.std_utc != std_utc_time:
-#                         existing_record.std_utc = std_utc_time
-#                         updated = True
-#                     if sta_utc_time and existing_record.sta_utc != sta_utc_time:
-#                         existing_record.sta_utc = sta_utc_time
-#                         updated = True
-
-#                     if atd_utc_time and existing_record.atd_utc != atd_utc_time:
-#                         existing_record.atd_utc = atd_utc_time
-#                         updated = True
-#                     if takeoff_utc_time and existing_record.takeoff_utc != takeoff_utc_time:
-#                         existing_record.takeoff_utc = takeoff_utc_time
-#                         updated = True
-#                     if touchdown_utc_time and existing_record.touchdown_utc != touchdown_utc_time:
-#                         existing_record.touchdown_utc = touchdown_utc_time
-#                         updated = True
-#                     if ata_utc_time and existing_record.ata_utc != ata_utc_time:
-#                         existing_record.ata_utc = ata_utc_time
-#                         updated = True
-#                     if etd_utc_time and existing_record.etd_utc != etd_utc_time:
-#                         existing_record.etd_utc = etd_utc_time
-#                         updated = True
-#                     if eta_utc_time and existing_record.eta_utc != eta_utc_time:
-#                         existing_record.eta_utc = eta_utc_time
-#                         updated = True
-
-#                     if flight_type and existing_record.flight_type != flight_type:
-#                         existing_record.flight_type = flight_type
-#                         updated = True
-
-#                     if updated:
-#                         existing_record.save()
-#                         logger.info(f"Updated FDM record for flight {flight_no} on {sd_date_utc}.")
-#                     else:
-#                         logger.info(f"No changes for FDM record {flight_no} on {sd_date_utc}.")
-#                 else:
-#                     # Create a new FdmFlightData record
-#                     FdmFlightData.objects.create(
-#                         flight_no=flight_no,
-#                         tail_no=tail_no,
-#                         dep_code_iata=dep_code_iata,
-#                         dep_code_icao=dep_code_icao,
-#                         arr_code_iata=arr_code_iata,
-#                         arr_code_icao=arr_code_icao,
-#                         sd_date_utc=sd_date_utc,
-#                         std_utc=std_utc_time,
-#                         sta_utc=sta_utc_time,
-#                         sa_date_utc=sa_date_utc,
-#                         flight_type=flight_type,
-#                         etd_utc=etd_utc_time,
-#                         eta_utc=eta_utc_time,
-#                         atd_utc=atd_utc_time,
-#                         takeoff_utc=takeoff_utc_time,
-#                         touchdown_utc=touchdown_utc_time,
-#                         ata_utc=ata_utc_time,
-#                         raw_content=','.join(row)
-#                     )
-#                     logger.info(f"Created new FDM flight record: {flight_no} on {sd_date_utc}.")
-
-#             except Exception as e:
-#                 logger.error(f"Error processing line {line_num}: {e} - {row}", exc_info=True)
-#                 continue
-
-#         logger.info("FDM flight schedule file processed successfully.")
-
-#     except Exception as e:
-#         logger.error(f"Error processing FDM flight schedule file: {e}", exc_info=True)
-
-
 def process_fdm_flight_schedule_file(attachment):
     """
-    Process the FDM flight schedule file with comprehensive protection for initiated flights.
+    Process the FDM flight schedule file using a comma delimiter.
     Insert into FdmFlightData and update missing actual timings in FlightData.
-    Prevents updates to core flight data once flight has any actual timing data.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -1447,23 +704,17 @@ def process_fdm_flight_schedule_file(attachment):
                 ata_utc = row[13].strip() if len(row) > 13 else ""
                 arrival_date = row[14].strip() if len(row) > 14 else ""
 
-                logger.debug(f"Processing FDM line {line_num}: Flight {flight_no}, Tail {tail_no}, Date {flight_date}")
-
                 # Parse dates and times
-                try:
-                    sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
-                    sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
-                    std_utc_time = datetime.strptime(std_utc, "%H:%M").time() if std_utc else None
-                    sta_utc_time = datetime.strptime(sta_utc, "%H:%M").time() if sta_utc else None
-                    etd_utc_time = datetime.strptime(etd_utc, "%H:%M").time() if etd_utc else None
-                    eta_utc_time = datetime.strptime(eta_utc, "%H:%M").time() if eta_utc else None
-                    atd_utc_time = datetime.strptime(atd_utc, "%H:%M").time() if atd_utc else None
-                    takeoff_utc_time = datetime.strptime(takeoff_utc, "%H:%M").time() if takeoff_utc else None
-                    touchdown_utc_time = datetime.strptime(touchdown_utc, "%H:%M").time() if touchdown_utc else None
-                    ata_utc_time = datetime.strptime(ata_utc, "%H:%M").time() if ata_utc else None
-                except ValueError as ve:
-                    logger.error(f"Skipping FDM line {line_num} due to date/time format error: {ve} - {row}")
-                    continue
+                sd_date_utc = datetime.strptime(flight_date, "%m/%d/%Y").date() if flight_date else None
+                sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
+                std_utc_time = datetime.strptime(std_utc, "%H:%M").time() if std_utc else None
+                sta_utc_time = datetime.strptime(sta_utc, "%H:%M").time() if sta_utc else None
+                etd_utc_time = datetime.strptime(etd_utc, "%H:%M").time() if etd_utc else None
+                eta_utc_time = datetime.strptime(eta_utc, "%H:%M").time() if eta_utc else None
+                atd_utc_time = datetime.strptime(atd_utc, "%H:%M").time() if atd_utc else None
+                takeoff_utc_time = datetime.strptime(takeoff_utc, "%H:%M").time() if takeoff_utc else None
+                touchdown_utc_time = datetime.strptime(touchdown_utc, "%H:%M").time() if touchdown_utc else None
+                ata_utc_time = datetime.strptime(ata_utc, "%H:%M").time() if ata_utc else None
 
                 # Fetch airport data
                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
@@ -1472,209 +723,61 @@ def process_fdm_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code if dep_airport else ""
                 arr_code_iata = arr_airport.iata_code if arr_airport else ""
 
-                # UPDATED MATCHING CRITERIA - Remove tail_no to prevent circular matching issues
-                # This is crucial for preventing the tail number change problem in FDM data
+                # Define unique criteria
                 unique_criteria = {
                     'flight_no': flight_no,
+                    'tail_no': tail_no,
                     'sd_date_utc': sd_date_utc,
                     'dep_code_icao': dep_code_icao,
                     'arr_code_icao': arr_code_icao,
+                    'sa_date_utc': sa_date_utc,
                     'std_utc': std_utc_time,
-                    # Removed tail_no from matching criteria
-                    # Removed sa_date_utc and sta_utc for more flexible matching
+                    'sta_utc': sta_utc_time,
                 }
 
-                # Find existing FDM record
+                # Insert or Update FDM FlightData
                 existing_record = FdmFlightData.objects.filter(**unique_criteria).first()
 
                 if existing_record:
-                    logger.info(f"Found existing FDM record for flight {flight_no} on {sd_date_utc}")
-                    
-                    # CHECK IF FLIGHT HAS BEEN INITIATED (Critical Protection Check)
-                    flight_initiated = any([
-                        existing_record.atd_utc,      # Actual Time of Departure
-                        existing_record.takeoff_utc,  # Takeoff time
-                        existing_record.touchdown_utc, # Landing time
-                        existing_record.ata_utc       # Actual Time of Arrival
-                    ])
-                    
-                    if flight_initiated:
-                        logger.warning(
-                            f"🛡️  FDM PROTECTION ACTIVE: Flight {flight_no} on {sd_date_utc} has been initiated. "
-                            f"Actual timings present: ATD={bool(existing_record.atd_utc)}, "
-                            f"TO={bool(existing_record.takeoff_utc)}, "
-                            f"TD={bool(existing_record.touchdown_utc)}, "
-                            f"ATA={bool(existing_record.ata_utc)}"
-                        )
-                        
-                        # LOG BLOCKED CHANGES TO CORE FIELDS
-                        blocked_changes = []
-                        
-                        if existing_record.tail_no != tail_no:
-                            blocked_changes.append(f"tail_no: '{existing_record.tail_no}' -> '{tail_no}'")
-                        if existing_record.flight_no != flight_no:
-                            blocked_changes.append(f"flight_no: '{existing_record.flight_no}' -> '{flight_no}'")
-                        if existing_record.dep_code_iata != dep_code_iata:
-                            blocked_changes.append(f"dep_code_iata: '{existing_record.dep_code_iata}' -> '{dep_code_iata}'")
-                        if existing_record.arr_code_iata != arr_code_iata:
-                            blocked_changes.append(f"arr_code_iata: '{existing_record.arr_code_iata}' -> '{arr_code_iata}'")
-                        if existing_record.std_utc != std_utc_time:
-                            blocked_changes.append(f"std_utc: '{existing_record.std_utc}' -> '{std_utc_time}'")
-                        if existing_record.sta_utc != sta_utc_time:
-                            blocked_changes.append(f"sta_utc: '{existing_record.sta_utc}' -> '{sta_utc_time}'")
-                        if existing_record.flight_type != flight_type:
-                            blocked_changes.append(f"flight_type: '{existing_record.flight_type}' -> '{flight_type}'")
-                        
-                        if blocked_changes:
-                            logger.warning(
-                                f"🚫 BLOCKED {len(blocked_changes)} core field changes for initiated FDM flight {flight_no}:\n" +
-                                "\n".join([f"   - {change}" for change in blocked_changes]) +
-                                f"\n   Source: FDM Flight Schedule File (Line {line_num})"
-                            )
-                        
-                        # ONLY UPDATE ACTUAL TIMING FIELDS (and only if currently null)
-                        timing_updated = False
-                        
-                        if atd_utc_time and not existing_record.atd_utc:
-                            existing_record.atd_utc = atd_utc_time
-                            timing_updated = True
-                            logger.info(f"✅ FDM Updated ATD for initiated flight {flight_no}: {atd_utc_time}")
-                        elif atd_utc_time and existing_record.atd_utc != atd_utc_time:
-                            logger.info(f"⚠️  FDM ATD already set for flight {flight_no}: {existing_record.atd_utc}, ignoring {atd_utc_time}")
-                        
-                        if takeoff_utc_time and not existing_record.takeoff_utc:
-                            existing_record.takeoff_utc = takeoff_utc_time
-                            timing_updated = True
-                            logger.info(f"✅ FDM Updated takeoff for initiated flight {flight_no}: {takeoff_utc_time}")
-                        elif takeoff_utc_time and existing_record.takeoff_utc != takeoff_utc_time:
-                            logger.info(f"⚠️  FDM Takeoff already set for flight {flight_no}: {existing_record.takeoff_utc}, ignoring {takeoff_utc_time}")
-                        
-                        if touchdown_utc_time and not existing_record.touchdown_utc:
-                            existing_record.touchdown_utc = touchdown_utc_time
-                            timing_updated = True
-                            logger.info(f"✅ FDM Updated touchdown for initiated flight {flight_no}: {touchdown_utc_time}")
-                        elif touchdown_utc_time and existing_record.touchdown_utc != touchdown_utc_time:
-                            logger.info(f"⚠️  FDM Touchdown already set for flight {flight_no}: {existing_record.touchdown_utc}, ignoring {touchdown_utc_time}")
-                        
-                        if ata_utc_time and not existing_record.ata_utc:
-                            existing_record.ata_utc = ata_utc_time
-                            timing_updated = True
-                            logger.info(f"✅ FDM Updated ATA for initiated flight {flight_no}: {ata_utc_time}")
-                        elif ata_utc_time and existing_record.ata_utc != ata_utc_time:
-                            logger.info(f"⚠️  FDM ATA already set for flight {flight_no}: {existing_record.ata_utc}, ignoring {ata_utc_time}")
-                        
-                        # Allow estimated time updates (ETD/ETA) even for initiated flights
-                        if etd_utc_time and existing_record.etd_utc != etd_utc_time:
-                            existing_record.etd_utc = etd_utc_time
-                            timing_updated = True
-                            logger.info(f"✅ FDM Updated ETD for initiated flight {flight_no}: {etd_utc_time}")
-                        
-                        if eta_utc_time and existing_record.eta_utc != eta_utc_time:
-                            existing_record.eta_utc = eta_utc_time
-                            timing_updated = True
-                            logger.info(f"✅ FDM Updated ETA for initiated flight {flight_no}: {eta_utc_time}")
-                        
-                        if timing_updated:
-                            existing_record.save()
-                            logger.info(f"💾 Saved FDM timing updates for initiated flight {flight_no}")
-                        else:
-                            logger.info(f"📋 No FDM timing updates needed for initiated flight {flight_no}")
-                        
-                        # Skip to next record - don't update core fields
-                        continue
-                    
-                    # FLIGHT NOT INITIATED - Allow all updates as before
-                    logger.info(f"✅ FDM Flight {flight_no} not yet initiated. Updating all fields as normal.")
-                    
+                    # Update fields if actual timings have changed
                     updated = False
-                    changes_made = []
-                    
-                    # Update core fields (only for non-initiated flights)
-                    if existing_record.tail_no != tail_no:
-                        changes_made.append(f"tail_no: '{existing_record.tail_no}' -> '{tail_no}'")
-                        existing_record.tail_no = tail_no
-                        updated = True
-                    
-                    if existing_record.dep_code_iata != dep_code_iata:
-                        changes_made.append(f"dep_code_iata: '{existing_record.dep_code_iata}' -> '{dep_code_iata}'")
-                        existing_record.dep_code_iata = dep_code_iata
-                        updated = True
-                    
-                    if existing_record.arr_code_iata != arr_code_iata:
-                        changes_made.append(f"arr_code_iata: '{existing_record.arr_code_iata}' -> '{arr_code_iata}'")
-                        existing_record.arr_code_iata = arr_code_iata
-                        updated = True
-                    
-                    if existing_record.sa_date_utc != sa_date_utc:
-                        changes_made.append(f"sa_date_utc: '{existing_record.sa_date_utc}' -> '{sa_date_utc}'")
-                        existing_record.sa_date_utc = sa_date_utc
-                        updated = True
-                    
-                    # Update scheduled times
                     if std_utc_time and existing_record.std_utc != std_utc_time:
-                        changes_made.append(f"std_utc: '{existing_record.std_utc}' -> '{std_utc_time}'")
                         existing_record.std_utc = std_utc_time
                         updated = True
-                    
                     if sta_utc_time and existing_record.sta_utc != sta_utc_time:
-                        changes_made.append(f"sta_utc: '{existing_record.sta_utc}' -> '{sta_utc_time}'")
                         existing_record.sta_utc = sta_utc_time
                         updated = True
-                    
-                    # Update flight type
-                    if flight_type and existing_record.flight_type != flight_type:
-                        changes_made.append(f"flight_type: '{existing_record.flight_type}' -> '{flight_type}'")
-                        existing_record.flight_type = flight_type
-                        updated = True
-                    
-                    # Update estimated times
-                    if etd_utc_time and existing_record.etd_utc != etd_utc_time:
-                        changes_made.append(f"etd_utc: '{existing_record.etd_utc}' -> '{etd_utc_time}'")
-                        existing_record.etd_utc = etd_utc_time
-                        updated = True
-                    
-                    if eta_utc_time and existing_record.eta_utc != eta_utc_time:
-                        changes_made.append(f"eta_utc: '{existing_record.eta_utc}' -> '{eta_utc_time}'")
-                        existing_record.eta_utc = eta_utc_time
-                        updated = True
-                    
-                    # Update actual timing fields (if provided and different)
+
                     if atd_utc_time and existing_record.atd_utc != atd_utc_time:
-                        changes_made.append(f"atd_utc: '{existing_record.atd_utc}' -> '{atd_utc_time}'")
                         existing_record.atd_utc = atd_utc_time
                         updated = True
-                    
                     if takeoff_utc_time and existing_record.takeoff_utc != takeoff_utc_time:
-                        changes_made.append(f"takeoff_utc: '{existing_record.takeoff_utc}' -> '{takeoff_utc_time}'")
                         existing_record.takeoff_utc = takeoff_utc_time
                         updated = True
-                    
                     if touchdown_utc_time and existing_record.touchdown_utc != touchdown_utc_time:
-                        changes_made.append(f"touchdown_utc: '{existing_record.touchdown_utc}' -> '{touchdown_utc_time}'")
                         existing_record.touchdown_utc = touchdown_utc_time
                         updated = True
-                    
                     if ata_utc_time and existing_record.ata_utc != ata_utc_time:
-                        changes_made.append(f"ata_utc: '{existing_record.ata_utc}' -> '{ata_utc_time}'")
                         existing_record.ata_utc = ata_utc_time
                         updated = True
-                    
+                    if etd_utc_time and existing_record.etd_utc != etd_utc_time:
+                        existing_record.etd_utc = etd_utc_time
+                        updated = True
+                    if eta_utc_time and existing_record.eta_utc != eta_utc_time:
+                        existing_record.eta_utc = eta_utc_time
+                        updated = True
+
+                    if flight_type and existing_record.flight_type != flight_type:
+                        existing_record.flight_type = flight_type
+                        updated = True
+
                     if updated:
                         existing_record.save()
-                        logger.info(
-                            f"💾 Updated FDM record for flight {flight_no} on {sd_date_utc}. "
-                            f"Changes: {len(changes_made)} fields updated"
-                        )
-                        if logger.isEnabledFor(logging.DEBUG):
-                            for change in changes_made:
-                                logger.debug(f"   - {change}")
+                        logger.info(f"Updated FDM record for flight {flight_no} on {sd_date_utc}.")
                     else:
-                        logger.info(f"📋 No changes needed for FDM record {flight_no} on {sd_date_utc}")
-                
+                        logger.info(f"No changes for FDM record {flight_no} on {sd_date_utc}.")
                 else:
-                    # CREATE NEW FDM RECORD - No existing record found
-                    logger.info(f"➕ Creating new FDM flight record: {flight_no} on {sd_date_utc}")
-                    
+                    # Create a new FdmFlightData record
                     FdmFlightData.objects.create(
                         flight_no=flight_no,
                         tail_no=tail_no,
@@ -1693,58 +796,19 @@ def process_fdm_flight_schedule_file(attachment):
                         takeoff_utc=takeoff_utc_time,
                         touchdown_utc=touchdown_utc_time,
                         ata_utc=ata_utc_time,
-                        source_type="FDM",
                         raw_content=','.join(row)
                     )
-                    logger.info(f"✅ Successfully created new FDM flight record: {flight_no} on {sd_date_utc}")
+                    logger.info(f"Created new FDM flight record: {flight_no} on {sd_date_utc}.")
 
             except Exception as e:
-                logger.error(f"❌ Error processing FDM line {line_num}: {e} - Row: {row}", exc_info=True)
+                logger.error(f"Error processing line {line_num}: {e} - {row}", exc_info=True)
                 continue
 
-        logger.info("🎉 FDM flight schedule file processed successfully with data protection active")
+        logger.info("FDM flight schedule file processed successfully.")
 
     except Exception as e:
-        logger.error(f"❌ Error processing FDM flight schedule file: {e}", exc_info=True)
+        logger.error(f"Error processing FDM flight schedule file: {e}", exc_info=True)
 
-
-# Optional: FDM-specific helper function
-def is_fdm_flight_initiated(fdm_flight_record):
-    """
-    Helper function to check if an FDM flight has been initiated
-    Returns True if flight has any actual timing data
-    """
-    return any([
-        fdm_flight_record.atd_utc,      # Actual Time of Departure
-        fdm_flight_record.takeoff_utc,  # Takeoff time
-        fdm_flight_record.touchdown_utc, # Landing time
-        fdm_flight_record.ata_utc       # Actual Time of Arrival
-    ])
-
-
-# Optional: FDM flight timing summary
-def get_fdm_flight_timing_summary(fdm_flight_record):
-    """
-    Get a comprehensive summary of FDM flight timing status
-    """
-    return {
-        'initiated': is_fdm_flight_initiated(fdm_flight_record),
-        'scheduled_complete': bool(fdm_flight_record.std_utc and fdm_flight_record.sta_utc),
-        'estimated_complete': bool(fdm_flight_record.etd_utc and fdm_flight_record.eta_utc),
-        'actual_timings': {
-            'atd_present': bool(fdm_flight_record.atd_utc),
-            'takeoff_present': bool(fdm_flight_record.takeoff_utc),
-            'touchdown_present': bool(fdm_flight_record.touchdown_utc),
-            'ata_present': bool(fdm_flight_record.ata_utc),
-        },
-        'completion_percentage': sum([
-            bool(fdm_flight_record.atd_utc),
-            bool(fdm_flight_record.takeoff_utc),
-            bool(fdm_flight_record.touchdown_utc),
-            bool(fdm_flight_record.ata_utc)
-        ]) * 25,  # Each timing represents 25% completion
-        'flight_type': fdm_flight_record.flight_type
-    }
 
 
 
