@@ -107,32 +107,94 @@ def cargo_fetch_flight_schedules():
         logger.info("No new cargo flight schedule email found.")
 
 
-from celery import shared_task
-from celery.utils.log import get_task_logger
-import os
-from .utils import  process_acars_message
+# from celery import shared_task
+# from celery.utils.log import get_task_logger
+# import os
+# from .utils import  process_acars_message
 
-logger = get_task_logger(__name__)
+# logger = get_task_logger(__name__)
+
+# @shared_task(bind=True)
+# def fetch_acars_messages(self):
+#     account = get_exchange_account()
+#     logger.info("Fetching and processing ACARS messages...")
+
+#     # Define the file path for JOB1.txt
+#     file_path = os.path.join(settings.MEDIA_ROOT, "JOB1.txt")
+
+#     # Start with a fresh file for each task execution
+#     open(file_path, 'w').close()  # Clear file contents
+
+#     # Fetch all unread ACARS messages
+#     emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
+
+#     if not emails.exists():
+#         logger.info("No unread ACARS messages found. Skipping processing.")
+#         return
+
+#     # Process each email
+#     for item in emails:
+#         if "M16" in item.body:
+#             logger.info(f"Skipping 'M16' ACARS message: {item.subject}")
+#             item.is_read = True
+#             item.save(update_fields=['is_read'])
+#             continue
+
+#         logger.info(f"Processing ACARS email with subject: {item.subject}")
+#         process_acars_message(item, file_path)
+
+#         # Mark the email as read to avoid reprocessing
+#         item.is_read = True
+#         item.save(update_fields=['is_read'])
+
+#     # Upload the file to the AIMS server after processing the batch
+#     if os.path.getsize(file_path) > 0:  # Ensure the file is not empty
+#         logger.info(f"Uploading {file_path} to AIMS server...")
+#         upload_acars_to_aims_server(file_path)
+#     else:
+#         logger.info(f"{file_path} is empty. Skipping upload.")
+
+#     logger.info("Batch processing of ACARS emails completed.")
+
+
+import os
+import shutil
+from django.conf import settings
+from django.utils.timezone import now
+from celery import shared_task
+import logging
+
+logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
 def fetch_acars_messages(self):
     account = get_exchange_account()
     logger.info("Fetching and processing ACARS messages...")
 
-    # Define the file path for JOB1.txt
+    # 1) Define the “live” file and the backup directory
     file_path = os.path.join(settings.MEDIA_ROOT, "JOB1.txt")
+    backup_dir = os.path.join(settings.MEDIA_ROOT, "job1_backups")
 
-    # Start with a fresh file for each task execution
-    open(file_path, 'w').close()  # Clear file contents
+    # 2) Create the backup directory if it doesn’t exist
+    os.makedirs(backup_dir, exist_ok=True)
 
-    # Fetch all unread ACARS messages
+    # 3) If there's an existing non-empty JOB1.txt, back it up
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        ts = now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"JOB1_{ts}.txt"
+        backup_path = os.path.join(backup_dir, backup_name)
+        shutil.copy(file_path, backup_path)
+        logger.info(f"Backed up previous JOB1.txt to {backup_path}")
+
+    # 4) Clear out the live file so you start fresh
+    open(file_path, 'w').close()
+
+    # 5) Fetch and process unread ACARS messages
     emails = account.inbox.filter(subject__icontains='ARR', is_read=False).order_by('datetime_received')
-
     if not emails.exists():
         logger.info("No unread ACARS messages found. Skipping processing.")
         return
 
-    # Process each email
     for item in emails:
         if "M16" in item.body:
             logger.info(f"Skipping 'M16' ACARS message: {item.subject}")
@@ -142,20 +204,17 @@ def fetch_acars_messages(self):
 
         logger.info(f"Processing ACARS email with subject: {item.subject}")
         process_acars_message(item, file_path)
-
-        # Mark the email as read to avoid reprocessing
         item.is_read = True
         item.save(update_fields=['is_read'])
 
-    # Upload the file to the AIMS server after processing the batch
-    if os.path.getsize(file_path) > 0:  # Ensure the file is not empty
+    # 6) Upload the new file if it has content
+    if os.path.getsize(file_path) > 0:
         logger.info(f"Uploading {file_path} to AIMS server...")
         upload_acars_to_aims_server(file_path)
     else:
         logger.info(f"{file_path} is empty. Skipping upload.")
 
     logger.info("Batch processing of ACARS emails completed.")
-
 
 
 
