@@ -583,7 +583,7 @@ def fetch_fdm_flight_schedules():
     # Check if emails exist before accessing
     if emails.exists():
         email = emails[0]
-        logger.info(f"Processing the most recent fdm flight schedule email with subject: {email.subject}")
+        logger.info(f"Processing the most recent  fdm flight schedule email with subject: {email.subject}")
         process_fdm_email_attachment(email, process_fdm_flight_schedule_file)
     else:
         logger.info("No new fdm flight schedule email found.")
