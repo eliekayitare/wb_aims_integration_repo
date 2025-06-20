@@ -264,10 +264,10 @@ CELERY_BEAT_SCHEDULE = {
         'options': {'run_immediately': False}
     },
     # ACARS Messages - Runs every 3 minutes
-    'fetch-acars-messages-every-3-minutes': {
-        'task': 'aimsintegration.tasks.fetch_acars_messages',
-        'schedule': crontab(minute='*/3'),  # Every 3 minutes
-    },
+    # 'fetch-acars-messages-every-3-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_acars_messages',
+    #     'schedule': crontab(minute='*/3'),  # Every 3 minutes
+    # },
 
     # CARGO Project - Runs every 1 hour 20 minutes
     'fetch-cargo-data-every-1-hour': {
