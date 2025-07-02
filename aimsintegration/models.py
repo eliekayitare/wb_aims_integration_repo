@@ -242,10 +242,9 @@ class TableauData(models.Model):
     original_sta = models.TimeField(null=True, blank=True)
     departure_delay_time = models.IntegerField(null=True, blank=True)
     delay_code_kind = models.CharField(max_length=100, null=True, blank=True)
-    # commented delay_number field
-    # delay_number = models.CharField(max_length=100, null=True, blank=True)
+    # Removed delay_number field
+    # Removed seat_type_config field
     aircraft_config = models.CharField(max_length=100, null=True, blank=True)
-    seat_type_config = models.CharField(max_length=100, null=True, blank=True)
     atd = models.TimeField(null=True, blank=True)
     takeoff = models.TimeField(null=True, blank=True)
     touchdown = models.TimeField(null=True, blank=True)
@@ -258,7 +257,6 @@ class TableauData(models.Model):
         indexes = [
             models.Index(fields=['updated_at']),
         ]
-
 
 
 # Crew Allowance Project models

@@ -1320,6 +1320,7 @@ def process_fdm_crew_email_attachment(item, process_function):
 
 
 # Tableau project
+# Tableau project
 from .models import TableauData
 from datetime import datetime, time
 import logging
@@ -1432,7 +1433,7 @@ def process_tableau_data_file(attachment):
                 departure_delay_time = parse_delay_time(remaining_fields[14], "Departure Delay Time")
                 delay_code_kind = parse_string(remaining_fields[15], "Delay Code Kind")
                 # Removed delay_number parsing - skip remaining_fields[16]
-                seat_type_config = parse_string(remaining_fields[17], "Seat Type Config") if len(remaining_fields) > 17 else ""
+                # Removed seat_type_config parsing - skip remaining_fields[17]
                 # CORRECTED: Actual times are at the END of the data (indices 24-27 in remaining_fields)
                 atd = parse_time(remaining_fields[24], "ATD") if len(remaining_fields) > 24 and remaining_fields[24] else None
                 takeoff = parse_time(remaining_fields[25], "Takeoff") if len(remaining_fields) > 25 and remaining_fields[25] else None
@@ -1440,7 +1441,7 @@ def process_tableau_data_file(attachment):
                 ata = parse_time(remaining_fields[27], "ATA") if len(remaining_fields) > 27 and remaining_fields[27] else None
 
                 print("\n=======================================================")
-                print(f"\nAircraft Config: {aircraft_config}\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nSeat Type Config: {seat_type_config}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
+                print(f"\nAircraft Config: {aircraft_config}\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
                 print()
 
                 # Database operations
@@ -1474,8 +1475,8 @@ def process_tableau_data_file(attachment):
                         'ata': ata,
                         'delay_code_kind': delay_code_kind,
                         # Removed delay_number from fields_to_update
+                        # Removed seat_type_config from fields_to_update
                         'aircraft_config': aircraft_config,
-                        'seat_type_config': seat_type_config,
                     }
 
                     for field, new_value in fields_to_update.items():
@@ -1512,8 +1513,8 @@ def process_tableau_data_file(attachment):
                         ata=format_time(ata),
                         delay_code_kind=delay_code_kind,
                         # Removed delay_number from create operation
-                        aircraft_config=aircraft_config,
-                        seat_type_config=seat_type_config
+                        # Removed seat_type_config from create operation
+                        aircraft_config=aircraft_config
                     )
                     logger.info(f"Created new record for flight {flight_no} on {operation_day}.")
             except Exception as e:
