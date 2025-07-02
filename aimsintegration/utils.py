@@ -1320,7 +1320,6 @@ def process_fdm_crew_email_attachment(item, process_function):
 
 
 # Tableau project
-# Tableau project
 from .models import TableauData
 from datetime import datetime, time
 import logging
@@ -1339,7 +1338,7 @@ def process_tableau_data_file(attachment):
             value = value.strip()
             if not value or value in ["0000", "00000000", None]:
                 logger.warning(f"{field_name} is empty or invalid. Defaulting to None.")
-                return None  # Default to None
+                return None
             try:
                 # Try DD/MM/YYYY format first (like "07/05/2025")
                 if "/" in value:
@@ -1387,6 +1386,17 @@ def process_tableau_data_file(attachment):
                 logger.warning(f"Invalid {field_name}: {value}. Defaulting to None.")
                 return None
 
+        def parse_boolean(value, field_name):
+            """Parse boolean field - convert string to boolean"""
+            value = value.strip()
+            if value in ["1", "True", "true", "YES", "yes"]:
+                return True
+            elif value in ["0", "False", "false", "NO", "no", ""]:
+                return False
+            else:
+                logger.warning(f"Invalid {field_name}: {value}. Defaulting to False.")
+                return False
+
         def parse_string(value, field_name):
             value = value.strip()
             if not value:
@@ -1402,43 +1412,39 @@ def process_tableau_data_file(attachment):
                 continue
 
             try:
-                # Extract the first field (aircraft_config) before the 4th comma
-                first_field_end = line.find(',', line.find(',', line.find(',', line.find(',') + 1) + 1) + 1)
-                aircraft_config = line[:first_field_end].strip()
+                # SIMPLE CSV PARSING - split all fields directly
+                fields = line.split(',')
+                fields = [field.strip() for field in fields]
+                
+                if len(fields) < 29:  # Ensure we have enough fields
+                    logger.warning(f"Line {line_num} has insufficient fields ({len(fields)}). Skipping.")
+                    continue
 
-                # Extract the second field (operation_day) right after the 4th comma
-                remaining_line = line[first_field_end + 1:].strip()
-                operation_day_field_end = remaining_line.find(',')
-                operation_day = parse_date(remaining_line[:operation_day_field_end].strip(), "Operation Day")
-
-                # Extract the remaining fields
-                remaining_fields = remaining_line[operation_day_field_end + 1:].split(",")
-                remaining_fields = [field.strip() for field in remaining_fields]
-
-                # Parse the fields
-                departure_station = remaining_fields[0]
-                flight_no = remaining_fields[1]
-                flight_leg_code = remaining_fields[2] if len(remaining_fields) > 2 else " "
-                cancelled_deleted = remaining_fields[3]
-                arrival_station = remaining_fields[4]
-                aircraft_reg_id = remaining_fields[5]
-                aircraft_type_index = remaining_fields[6] or None
-                aircraft_category = remaining_fields[7] or None
-                flight_service_type = remaining_fields[8]
-                std = parse_time(remaining_fields[9], "STD")
-                sta = parse_time(remaining_fields[10], "STA")
-                original_operation_day = parse_date(remaining_fields[11], "Original Operation Day") if remaining_fields[11] and remaining_fields[11] not in ["0000", ""] else None
-                original_std = parse_time(remaining_fields[12], "Original STD") if remaining_fields[12] and remaining_fields[12] not in ["0000", "00:00", ""] else None
-                original_sta = parse_time(remaining_fields[13], "Original STA") if remaining_fields[13] and remaining_fields[13] not in ["0000", "00:00", ""] else None
-                departure_delay_time = parse_delay_time(remaining_fields[14], "Departure Delay Time")
-                delay_code_kind = parse_string(remaining_fields[15], "Delay Code Kind")
-                # Removed delay_number parsing - skip remaining_fields[16]
-                # Removed seat_type_config parsing - skip remaining_fields[17]
-                # CORRECTED: Actual times are at the END of the data (indices 24-27 in remaining_fields)
-                atd = parse_time(remaining_fields[24], "ATD") if len(remaining_fields) > 24 and remaining_fields[24] else None
-                takeoff = parse_time(remaining_fields[25], "Takeoff") if len(remaining_fields) > 25 and remaining_fields[25] else None
-                touchdown = parse_time(remaining_fields[26], "Touchdown") if len(remaining_fields) > 26 and remaining_fields[26] else None
-                ata = parse_time(remaining_fields[27], "ATA") if len(remaining_fields) > 27 and remaining_fields[27] else None
+                # Parse the fields directly from the CSV (CORRECTED INDICES)
+                aircraft_config = fields[0]
+                operation_day = parse_date(fields[1], "Operation Day")
+                departure_station = fields[2]
+                flight_no = fields[3]
+                flight_leg_code = fields[4] if fields[4] else " "
+                cancelled_deleted = parse_boolean(fields[5], "Cancelled/Deleted")  # FIXED: Convert to boolean
+                arrival_station = fields[6]
+                aircraft_reg_id = fields[7]
+                aircraft_type_index = fields[8] or None
+                aircraft_category = fields[9] or None
+                flight_service_type = fields[10]
+                std = parse_time(fields[11], "STD")
+                sta = parse_time(fields[12], "STA")
+                original_operation_day = parse_date(fields[13], "Original Operation Day") if fields[13] and fields[13] not in ["0000", ""] else None
+                original_std = parse_time(fields[14], "Original STD") if fields[14] and fields[14] not in ["0000", "00:00", ""] else None
+                original_sta = parse_time(fields[15], "Original STA") if fields[15] and fields[15] not in ["0000", "00:00", ""] else None
+                departure_delay_time = parse_delay_time(fields[16], "Departure Delay Time")
+                delay_code_kind = parse_string(fields[17], "Delay Code Kind")
+                # Fields 18-24 are unused in this format
+                # Actual times are at the end
+                atd = parse_time(fields[25], "ATD") if len(fields) > 25 and fields[25] else None
+                takeoff = parse_time(fields[26], "Takeoff") if len(fields) > 26 and fields[26] else None
+                touchdown = parse_time(fields[27], "Touchdown") if len(fields) > 27 and fields[27] else None
+                ata = parse_time(fields[28], "ATA") if len(fields) > 28 and fields[28] else None
 
                 print("\n=======================================================")
                 print(f"\nAircraft Config: {aircraft_config}\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
@@ -1474,8 +1480,6 @@ def process_tableau_data_file(attachment):
                         'touchdown': touchdown,
                         'ata': ata,
                         'delay_code_kind': delay_code_kind,
-                        # Removed delay_number from fields_to_update
-                        # Removed seat_type_config from fields_to_update
                         'aircraft_config': aircraft_config,
                     }
 
@@ -1512,8 +1516,6 @@ def process_tableau_data_file(attachment):
                         touchdown=format_time(touchdown),
                         ata=format_time(ata),
                         delay_code_kind=delay_code_kind,
-                        # Removed delay_number from create operation
-                        # Removed seat_type_config from create operation
                         aircraft_config=aircraft_config
                     )
                     logger.info(f"Created new record for flight {flight_no} on {operation_day}.")
