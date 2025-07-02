@@ -909,7 +909,7 @@ def fetch_tableau():
     logger.info("Fetching the most recent tableau email...")
 
     emails = account.inbox.filter(
-        subject__contains='AIMS JOB : #1011 Flight OPS stat dashboard file attached'
+        subject__contains="AIMS JOB : #1011 Flight OPS stat dashboard + ' file attached"
     ).order_by('-datetime_received')
     
     email = emails[0] if emails else None
