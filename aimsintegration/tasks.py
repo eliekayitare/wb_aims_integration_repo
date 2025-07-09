@@ -1646,3 +1646,79 @@ def check_stalled_campaigns():
         process_dreammiles_batch.delay(str(campaign.id))
     
     return f"Checked for stalled campaigns: {stalled_campaigns.count()} found and restarted"
+
+
+
+
+# Delete job1 files in job1_backups folder that are older than 30 days
+
+@shared_task
+def cleanup_old_job1_backups():
+    """
+    Delete JOB1 backup files older than one month.
+    This task runs every 24 hours to maintain disk space.
+    """
+    try:
+        backup_dir = os.path.join(settings.MEDIA_ROOT, "job1_backups")
+        
+        # Check if backup directory exists
+        if not os.path.exists(backup_dir):
+            logger.info("JOB1 backup directory does not exist. No cleanup needed.")
+            return {"status": "skipped", "message": "Backup directory not found"}
+        
+        # Calculate cutoff date (one month ago)
+        cutoff_date = datetime.now() - timedelta(days=30)
+        
+        deleted_files = []
+        total_size_freed = 0
+        
+        # Iterate through all files in backup directory
+        for filename in os.listdir(backup_dir):
+            file_path = os.path.join(backup_dir, filename)
+            
+            # Skip if it's not a file or doesn't match expected pattern
+            if not os.path.isfile(file_path) or not filename.startswith("JOB1_"):
+                continue
+            
+            try:
+                # Get file modification time
+                file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                
+                # Check if file is older than cutoff date
+                if file_mtime < cutoff_date:
+                    # Get file size before deletion
+                    file_size = os.path.getsize(file_path)
+                    
+                    # Delete the file
+                    os.remove(file_path)
+                    
+                    deleted_files.append({
+                        "filename": filename,
+                        "size": file_size,
+                        "date": file_mtime.strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    total_size_freed += file_size
+                    
+                    logger.info(f"Deleted old JOB1 backup: {filename} ({file_size} bytes)")
+                    
+            except Exception as e:
+                logger.error(f"Error processing file {filename}: {str(e)}")
+                continue
+        
+        # Log summary
+        if deleted_files:
+            logger.info(f"Cleanup completed: {len(deleted_files)} files deleted, "
+                       f"{total_size_freed:,} bytes freed")
+        else:
+            logger.info("No old JOB1 backup files found to delete")
+        
+        return {
+            "status": "success",
+            "deleted_files": len(deleted_files),
+            "total_size_freed": total_size_freed,
+            "files": deleted_files
+        }
+        
+    except Exception as e:
+        logger.error(f"Error during JOB1 backup cleanup: {str(e)}", exc_info=True)
+        return {"status": "error", "message": str(e)}

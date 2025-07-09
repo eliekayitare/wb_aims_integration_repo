@@ -335,6 +335,13 @@ CELERY_BEAT_SCHEDULE = {
     #     'task': 'aimsintegration.tasks.check_stalled_campaigns',
     #     'schedule': crontab(minute='30'),  # Every hour at XX:30
     # },
+
+
+    # Cleanup old JOB1 backups - Runs every 24 hours
+    'cleanup-job1-backups-daily': {
+        'task': 'aimsintegration.tasks.cleanup_old_job1_backups',
+        'schedule': crontab(hour=2, minute=0),  # Runs daily at 02:00 AM
+    },
     
 }
 
