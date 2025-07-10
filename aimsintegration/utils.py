@@ -478,15 +478,118 @@ def extract_departure_and_arrival_codes(message_body):
 
 
 
+# from datetime import datetime, timedelta
+# import os
+# import logging
+# import re
+# from django.conf import settings
+# from aimsintegration.models import FlightData
+
+# logger = logging.getLogger(__name__)
+
+
+# def process_acars_message(item, file_path):
+#     try:
+#         email_received_date = item.datetime_received.date()  # Get only the date part
+#         message_body = item.body
+
+#         if "M16" in message_body:
+#             logger.info("Skipping 'M16' ACARS message.")
+#             return
+
+#         logger.info(f"ACARS message received at: {email_received_date} UTC")
+#         logger.info(f"ACARS message body: {message_body}")
+
+#         # Extract fields from the message
+#         flight_no = extract_flight_number(message_body)
+#         acars_event, event_time_str = extract_acars_event(message_body)
+#         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
+#         tail_number = extract_tail_number(message_body)
+
+#         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
+#             logger.error("Invalid time format in ACARS message.")
+#             return
+
+#         event_time = datetime.strptime(event_time_str, "%H:%M").time()
+
+
+#         # First, try to get matching flights with flight number
+#         flights = FlightData.objects.filter(
+#             flight_no=flight_no,
+#             tail_no=tail_number,
+#             dep_code_iata=dep_code,
+#             arr_code_iata=arr_code
+#         )
+
+#         # If no flights found, try matching without flight number
+#         if not flights.exists():
+#             flights = FlightData.objects.filter(
+#                 tail_no=tail_number,
+#                 dep_code_iata=dep_code,
+#                 arr_code_iata=arr_code
+#             )
+
+#         # If still no flights found, send an email and return
+#         if not flights.exists():
+#             logger.info(f"No matching flights found for flight number: {flight_no}")
+#             send_mail(
+#                 subject=f"No matching flights found for flight number: {flight_no}",
+#                 message=(
+#                     f"Dear Team,\n\n"
+#                     f"The ACARS message for flight {flight_no} could not be matched.\n"
+#                     f"Message details:\n\n{message_body}\n\n"
+#                     f"Please review and update manually.\n\n"
+#                     f"Regards,\nFlightOps Team"
+#                 ),
+#                 from_email=settings.EMAIL_HOST_USER,
+#                 recipient_list=[
+#                     settings.FIRST_EMAIL_RECEIVER,
+#                     settings.SECOND_EMAIL_RECEIVER,
+#                     settings.THIRD_EMAIL_RECEIVER,
+#                 ],
+#                 fail_silently=False,
+#             )
+#             return
+
+#         closest_flight = min(
+#             flights,
+#             key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
+#         )
+
+
+#         if acars_event == "OT":
+#             closest_flight.atd_utc = event_time
+#             # closest_fdm_flight.atd_utc = event_time
+#         elif acars_event == "OF":
+#             closest_flight.takeoff_utc = event_time
+#             # closest_fdm_flight.takeoff_utc = event_time
+#         elif acars_event == "ON":
+#             closest_flight.touchdown_utc = event_time
+#             # closest_fdm_flight.touchdown_utc = event_time
+#         elif acars_event == "IN":
+#             closest_flight.ata_utc = event_time
+#             # closest_fdm_flight.ata_utc = event_time
+
+#         closest_flight.save()
+#         # closest_fdm_flight.save()
+
+#         # Append the updated flight details to the job file
+#         write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
+
+#     except Exception as e:
+#         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
+
+
+
 from datetime import datetime, timedelta
 import os
 import logging
 import re
 from django.conf import settings
+from django.db import models
 from aimsintegration.models import FlightData
 
 logger = logging.getLogger(__name__)
-
 
 def process_acars_message(item, file_path):
     try:
@@ -512,27 +615,29 @@ def process_acars_message(item, file_path):
 
         event_time = datetime.strptime(event_time_str, "%H:%M").time()
 
-        # flights = FlightData.objects.filter(
-        #     flight_no=flight_no,
-        #     tail_no=tail_number,
-        #     dep_code_iata=dep_code,
-        #     arr_code_iata=arr_code
-        # )
+        # Define comprehensive date range for flight matching
+        # Cover all possible scenarios: early/late arrivals, delays, cross-day operations
+        search_dates = [
+            email_received_date + timedelta(days=i) 
+            for i in range(-3, 4)  # -3, -2, -1, 0, 1, 2, 3 days
+        ]
 
-        # First, try to get matching flights with flight number
+        # First, try to get matching flights with flight number and expanded date range
         flights = FlightData.objects.filter(
             flight_no=flight_no,
             tail_no=tail_number,
             dep_code_iata=dep_code,
-            arr_code_iata=arr_code
+            arr_code_iata=arr_code,
+            sd_date_utc__in=search_dates
         )
 
-        # If no flights found, try matching without flight number
+        # If no flights found, try matching without flight number but with date range
         if not flights.exists():
             flights = FlightData.objects.filter(
                 tail_no=tail_number,
                 dep_code_iata=dep_code,
-                arr_code_iata=arr_code
+                arr_code_iata=arr_code,
+                sd_date_utc__in=search_dates
             )
 
         # If still no flights found, send an email and return
@@ -544,6 +649,9 @@ def process_acars_message(item, file_path):
                     f"Dear Team,\n\n"
                     f"The ACARS message for flight {flight_no} could not be matched.\n"
                     f"Message details:\n\n{message_body}\n\n"
+                    f"ACARS received date: {email_received_date}\n"
+                    f"Flight details: {flight_no}, Tail: {tail_number}, Route: {dep_code}-{arr_code}\n"
+                    f"ACARS Event: {acars_event}\n\n"
                     f"Please review and update manually.\n\n"
                     f"Regards,\nFlightOps Team"
                 ),
@@ -557,38 +665,226 @@ def process_acars_message(item, file_path):
             )
             return
 
-        closest_flight = min(
-            flights,
-            key=lambda flight: abs((flight.sd_date_utc - email_received_date).days)
-        )
+        # Comprehensive flight selection logic covering all scenarios
+        selected_flight = select_best_flight_match(flights, acars_event, email_received_date)
 
-        # closest_fdm_flight = min(
-        #     fdm_flights,
-        #     key=lambda fl: abs((fl.sd_date_utc - email_received_date).days)
-        # ) 
+        if not selected_flight:
+            logger.error("No flight could be selected for update")
+            return
 
+        logger.info(f"Selected flight: {selected_flight.flight_no} ({selected_flight.tail_no}) on {selected_flight.sd_date_utc} for {acars_event} event")
+
+        # Update the appropriate field based on ACARS event
         if acars_event == "OT":
-            closest_flight.atd_utc = event_time
-            # closest_fdm_flight.atd_utc = event_time
+            selected_flight.atd_utc = event_time
+            logger.info(f"Updated ATD to {event_time}")
         elif acars_event == "OF":
-            closest_flight.takeoff_utc = event_time
-            # closest_fdm_flight.takeoff_utc = event_time
+            selected_flight.takeoff_utc = event_time
+            logger.info(f"Updated takeoff to {event_time}")
         elif acars_event == "ON":
-            closest_flight.touchdown_utc = event_time
-            # closest_fdm_flight.touchdown_utc = event_time
+            selected_flight.touchdown_utc = event_time
+            logger.info(f"Updated touchdown to {event_time}")
         elif acars_event == "IN":
-            closest_flight.ata_utc = event_time
-            # closest_fdm_flight.ata_utc = event_time
+            selected_flight.ata_utc = event_time
+            logger.info(f"Updated ATA to {event_time}")
 
-        closest_flight.save()
-        # closest_fdm_flight.save()
+        selected_flight.save()
 
         # Append the updated flight details to the job file
-        write_job_one_row(file_path, closest_flight, acars_event, event_time, email_received_date)
+        write_job_one_row(file_path, selected_flight, acars_event, event_time, email_received_date)
 
     except Exception as e:
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
 
+
+def select_best_flight_match(flights, acars_event, email_received_date):
+    """
+    Comprehensive flight selection logic covering ALL possible scenarios:
+    
+    Departure Events (OT, OF):
+    - OT early, OF same day
+    - OT late night, OF next day
+    - OF received before OT
+    - Multiple flights same day
+    
+    Arrival Events (ON, IN):
+    - Same day arrival
+    - Next day arrival (long flights)
+    - ON/IN on different days
+    - Late arrival ACARS
+    
+    Mixed Scenarios:
+    - Out-of-order ACARS reception
+    - Multiple flights with same tail/route
+    - Delayed/cancelled flights
+    """
+    
+    logger.info(f"Selecting best flight from {flights.count()} candidates for {acars_event} event")
+    
+    if acars_event == "OT":  # Pushback from gate
+        return select_flight_for_ot(flights, email_received_date)
+    
+    elif acars_event == "OF":  # Takeoff
+        return select_flight_for_of(flights, email_received_date)
+    
+    elif acars_event == "ON":  # Landing
+        return select_flight_for_on(flights, email_received_date)
+    
+    elif acars_event == "IN":  # Arrival at gate
+        return select_flight_for_in(flights, email_received_date)
+    
+    return None
+
+
+def select_flight_for_ot(flights, email_received_date):
+    """Select flight for OT (pushback) event"""
+    
+    # Priority 1: Flights without any departure data (fresh flight)
+    fresh_flights = flights.filter(
+        atd_utc__isnull=True,
+        takeoff_utc__isnull=True
+    )
+    
+    if fresh_flights.exists():
+        logger.info(f"Found {fresh_flights.count()} fresh flights for OT")
+        # Pick the closest scheduled date to email received date
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    
+    # Priority 2: Flights with only takeoff data (OF received before OT scenario)
+    flights_with_only_of = flights.filter(
+        atd_utc__isnull=True,
+        takeoff_utc__isnull=False
+    )
+    
+    if flights_with_only_of.exists():
+        logger.info(f"Found {flights_with_only_of.count()} flights with only OF data - updating same flight")
+        return flights_with_only_of.first()
+    
+    # Priority 3: Fall back to closest flight by date
+    logger.warning("All flights have OT data, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+
+
+def select_flight_for_of(flights, email_received_date):
+    """Select flight for OF (takeoff) event"""
+    
+    # Priority 1: Flights that already have OT but no OF (normal sequence)
+    flights_with_ot_only = flights.filter(
+        atd_utc__isnull=False,
+        takeoff_utc__isnull=True
+    )
+    
+    if flights_with_ot_only.exists():
+        logger.info(f"Found {flights_with_ot_only.count()} flights with OT but no OF - normal sequence")
+        return flights_with_ot_only.first()
+    
+    # Priority 2: Fresh flights without any departure data (OF before OT scenario)
+    fresh_flights = flights.filter(
+        atd_utc__isnull=True,
+        takeoff_utc__isnull=True
+    )
+    
+    if fresh_flights.exists():
+        logger.info(f"Found {fresh_flights.count()} fresh flights for OF (OF before OT scenario)")
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    
+    # Priority 3: Fall back to closest flight by date
+    logger.warning("Complex OF scenario, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+
+
+def select_flight_for_on(flights, email_received_date):
+    """Select flight for ON (landing) event"""
+    
+    # Priority 1: Flights with complete departure data (OT and OF)
+    flights_with_complete_departure = flights.filter(
+        atd_utc__isnull=False,
+        takeoff_utc__isnull=False,
+        touchdown_utc__isnull=True
+    )
+    
+    if flights_with_complete_departure.exists():
+        logger.info(f"Found {flights_with_complete_departure.count()} flights with complete departure data")
+        return flights_with_complete_departure.first()
+    
+    # Priority 2: Flights with partial departure data (either OT or OF)
+    flights_with_partial_departure = flights.filter(
+        models.Q(atd_utc__isnull=False) | models.Q(takeoff_utc__isnull=False),
+        touchdown_utc__isnull=True
+    )
+    
+    if flights_with_partial_departure.exists():
+        logger.info(f"Found {flights_with_partial_departure.count()} flights with partial departure data")
+        return flights_with_partial_departure.first()
+    
+    # Priority 3: Flights with only IN data (ON before IN scenario)
+    flights_with_only_in = flights.filter(
+        atd_utc__isnull=True,
+        takeoff_utc__isnull=True,
+        touchdown_utc__isnull=True,
+        ata_utc__isnull=False
+    )
+    
+    if flights_with_only_in.exists():
+        logger.info(f"Found {flights_with_only_in.count()} flights with only IN data - ON before IN scenario")
+        return flights_with_only_in.first()
+    
+    # Priority 4: Fresh flights (unusual but possible)
+    fresh_flights = flights.filter(
+        atd_utc__isnull=True,
+        takeoff_utc__isnull=True,
+        touchdown_utc__isnull=True,
+        ata_utc__isnull=True
+    )
+    
+    if fresh_flights.exists():
+        logger.warning(f"Found {fresh_flights.count()} fresh flights for ON (unusual scenario)")
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    
+    # Priority 5: Fall back to closest flight by date
+    logger.warning("Complex ON scenario, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+
+
+def select_flight_for_in(flights, email_received_date):
+    """Select flight for IN (gate arrival) event"""
+    
+    # Priority 1: Flights with landing data but no gate arrival
+    flights_with_on_only = flights.filter(
+        touchdown_utc__isnull=False,
+        ata_utc__isnull=True
+    )
+    
+    if flights_with_on_only.exists():
+        logger.info(f"Found {flights_with_on_only.count()} flights with ON but no IN - normal sequence")
+        return flights_with_on_only.first()
+    
+    # Priority 2: Flights with departure data but no arrival data
+    flights_with_departure_only = flights.filter(
+        models.Q(atd_utc__isnull=False) | models.Q(takeoff_utc__isnull=False),
+        touchdown_utc__isnull=True,
+        ata_utc__isnull=True
+    )
+    
+    if flights_with_departure_only.exists():
+        logger.info(f"Found {flights_with_departure_only.count()} flights with departure but no arrival data")
+        return flights_with_departure_only.first()
+    
+    # Priority 3: Fresh flights (IN before ON scenario)
+    fresh_flights = flights.filter(
+        atd_utc__isnull=True,
+        takeoff_utc__isnull=True,
+        touchdown_utc__isnull=True,
+        ata_utc__isnull=True
+    )
+    
+    if fresh_flights.exists():
+        logger.warning(f"Found {fresh_flights.count()} fresh flights for IN (IN before ON scenario)")
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    
+    # Priority 4: Fall back to closest flight by date
+    logger.warning("Complex IN scenario, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
 
 
 
