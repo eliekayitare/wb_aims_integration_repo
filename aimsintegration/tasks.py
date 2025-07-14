@@ -1726,6 +1726,7 @@ def cleanup_old_job1_backups():
 
 
 
+
 from celery import shared_task
 from aimsintegration.models import FlightData
 import logging
@@ -1733,7 +1734,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
-def delete_flights_no_actual_timings(self, dry_run=True):
+def delete_flights_no_actual_timings(self, dry_run=False):
     """
     Delete all flight records that have no actual timing data.
     
@@ -1765,7 +1766,7 @@ def delete_flights_no_actual_timings(self, dry_run=True):
         else:
             # Delete the records
             deleted_count = flights_to_delete.delete()[0]
-            logger.info(f"✅ Deleted {deleted_count} flight records")
+            logger.info(f"✅ Deleted {deleted_count} flight records with no actual timings")
             
             return {
                 'status': 'success',

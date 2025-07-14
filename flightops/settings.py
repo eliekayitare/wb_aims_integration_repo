@@ -335,6 +335,12 @@ CELERY_BEAT_SCHEDULE = {
     #     'task': 'aimsintegration.tasks.delete_flights_no_actual_timings',
     #     'schedule': crontab(minute='*/2'),  # Every hour
     # },
+
+
+    'delete_flights_no_actual_timings': {
+        'task': 'aimsintegration.tasks.delete_flights_no_actual_timings',
+        'schedule': crontab(minute='*/2'),  # Every hour
+    },
     
 }
 
