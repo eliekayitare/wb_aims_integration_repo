@@ -391,6 +391,7 @@ def process_flight_schedule_file(attachment):
 
 
 
+
 #CARGO Website
 
 def process_cargo_flight_schedule_file(attachment):
@@ -807,6 +808,7 @@ def process_acars_message(item, file_path):
         event_time = datetime.strptime(event_time_str, "%H:%M").time()
 
         # Define comprehensive date range for flight matching
+        # Cover all possible scenarios: early/late arrivals, delays, cross-day operations
         search_dates = [
             email_received_date + timedelta(days=i) 
             for i in range(-3, 4)  # -3, -2, -1, 0, 1, 2, 3 days
@@ -855,20 +857,14 @@ def process_acars_message(item, file_path):
             )
             return
 
-        # Log multiple flight scenario for debugging
-        if flights.count() > 1:
-            logger.warning(f"Found {flights.count()} matching flights for {flight_no} - applying smart selection")
-            for flight in flights:
-                logger.info(f"Candidate: ID={flight.id}, STD={flight.std_utc}, ATD={flight.atd_utc}, Takeoff={flight.takeoff_utc}")
-
-        # Comprehensive flight selection logic
-        selected_flight = select_best_flight_match(flights, acars_event, email_received_date, event_time)
+        # Comprehensive flight selection logic covering all scenarios
+        selected_flight = select_best_flight_match(flights, acars_event, email_received_date)
 
         if not selected_flight:
             logger.error("No flight could be selected for update")
             return
 
-        logger.info(f"Selected flight: ID={selected_flight.id}, {selected_flight.flight_no} ({selected_flight.tail_no}) STD={selected_flight.std_utc} for {acars_event} event")
+        logger.info(f"Selected flight: {selected_flight.flight_no} ({selected_flight.tail_no}) on {selected_flight.sd_date_utc} for {acars_event} event")
 
         # Update the appropriate field based on ACARS event
         if acars_event == "OT":
@@ -893,32 +889,49 @@ def process_acars_message(item, file_path):
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
 
 
-def select_best_flight_match(flights, acars_event, email_received_date, event_time):
+def select_best_flight_match(flights, acars_event, email_received_date):
     """
-    Enhanced flight selection logic that handles multiple records intelligently
+    Comprehensive flight selection logic covering ALL possible scenarios:
+    
+    Departure Events (OT, OF):
+    - OT early, OF same day
+    - OT late night, OF next day
+    - OF received before OT
+    - Multiple flights same day
+    
+    Arrival Events (ON, IN):
+    - Same day arrival
+    - Next day arrival (long flights)
+    - ON/IN on different days
+    - Late arrival ACARS
+    
+    Mixed Scenarios:
+    - Out-of-order ACARS reception
+    - Multiple flights with same tail/route
+    - Delayed/cancelled flights
     """
     
     logger.info(f"Selecting best flight from {flights.count()} candidates for {acars_event} event")
     
     if acars_event == "OT":  # Pushback from gate
-        return select_flight_for_ot(flights, email_received_date, event_time)
+        return select_flight_for_ot(flights, email_received_date)
     
     elif acars_event == "OF":  # Takeoff
-        return select_flight_for_of(flights, email_received_date, event_time)
+        return select_flight_for_of(flights, email_received_date)
     
     elif acars_event == "ON":  # Landing
-        return select_flight_for_on(flights, email_received_date, event_time)
+        return select_flight_for_on(flights, email_received_date)
     
     elif acars_event == "IN":  # Arrival at gate
-        return select_flight_for_in(flights, email_received_date, event_time)
+        return select_flight_for_in(flights, email_received_date)
     
     return None
 
 
-def select_flight_for_ot(flights, email_received_date, event_time):
-    """Enhanced OT selection with smart logic for multiple records"""
+def select_flight_for_ot(flights, email_received_date):
+    """Select flight for OT (pushback) event"""
     
-    # Priority 1: Flights without any departure data (fresh flights)
+    # Priority 1: Flights without any departure data (fresh flight)
     fresh_flights = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=True
@@ -926,82 +939,54 @@ def select_flight_for_ot(flights, email_received_date, event_time):
     
     if fresh_flights.exists():
         logger.info(f"Found {fresh_flights.count()} fresh flights for OT")
-        
-        if fresh_flights.count() == 1:
-            return fresh_flights.first()
-        
-        # Multiple fresh flights - use smart selection
-        # 1. Try to find STD closest to actual departure time
-        # 2. Fall back to earliest STD (most likely to be the actual flight)
-        best_flight = find_best_std_match(fresh_flights, event_time)
-        if best_flight:
-            logger.info(f"Selected fresh flight with STD closest to actual OT time")
-            return best_flight
-        
-        # Fallback: earliest STD
-        return min(fresh_flights, key=lambda f: (f.std_utc or datetime.time(23, 59), f.id))
+        # Pick the closest scheduled date to email received date
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
     
-    # Priority 2: Flights with only takeoff data (OF received before OT)
+    # Priority 2: Flights with only takeoff data (OF received before OT scenario)
     flights_with_only_of = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=False
     )
     
     if flights_with_only_of.exists():
-        logger.info(f"Found {flights_with_only_of.count()} flights with only OF data")
-        # Pick the one with takeoff time closest to current OT + reasonable taxi time
-        return min(flights_with_only_of, key=lambda f: abs_time_diff(f.takeoff_utc, add_minutes(event_time, 15)))
+        logger.info(f"Found {flights_with_only_of.count()} flights with only OF data - updating same flight")
+        return flights_with_only_of.first()
     
-    # Priority 3: All flights have OT data - pick best candidate for overwrite
-    logger.warning(f"All {flights.count()} flights have OT data - selecting best for overwrite")
-    return min(flights, key=lambda f: (
-        abs((f.sd_date_utc - email_received_date).days),  # Closest date
-        abs_time_diff(f.atd_utc, event_time),  # Closest existing ATD to new time
-        f.id  # Consistent tiebreaker
-    ))
+    # Priority 3: Fall back to closest flight by date
+    logger.warning("All flights have OT data, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
 
 
-def select_flight_for_of(flights, email_received_date, event_time):
-    """Enhanced OF selection with smart logic for multiple records"""
+def select_flight_for_of(flights, email_received_date):
+    """Select flight for OF (takeoff) event"""
     
-    # Priority 1: Flights with OT but no OF (normal sequence)
+    # Priority 1: Flights that already have OT but no OF (normal sequence)
     flights_with_ot_only = flights.filter(
         atd_utc__isnull=False,
         takeoff_utc__isnull=True
     )
     
     if flights_with_ot_only.exists():
-        logger.info(f"Found {flights_with_ot_only.count()} flights with OT but no OF")
-        
-        if flights_with_ot_only.count() == 1:
-            return flights_with_ot_only.first()
-        
-        # Multiple flights with OT - pick the one with OT closest to OF time (reasonable taxi time)
-        return min(flights_with_ot_only, key=lambda f: abs_time_diff(f.atd_utc, event_time))
+        logger.info(f"Found {flights_with_ot_only.count()} flights with OT but no OF - normal sequence")
+        return flights_with_ot_only.first()
     
-    # Priority 2: Fresh flights (OF before OT scenario)
+    # Priority 2: Fresh flights without any departure data (OF before OT scenario)
     fresh_flights = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=True
     )
     
     if fresh_flights.exists():
-        logger.info(f"Found {fresh_flights.count()} fresh flights for OF")
-        best_flight = find_best_std_match(fresh_flights, event_time, offset_minutes=-15)  # OF typically 15 min after STD
-        if best_flight:
-            return best_flight
-        return min(fresh_flights, key=lambda f: (f.std_utc or datetime.time(23, 59), f.id))
+        logger.info(f"Found {fresh_flights.count()} fresh flights for OF (OF before OT scenario)")
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
     
-    # Priority 3: All flights have takeoff data - overwrite closest
-    logger.warning(f"All {flights.count()} flights have OF data - selecting best for overwrite")
-    return min(flights, key=lambda f: (
-        abs_time_diff(f.takeoff_utc, event_time),
-        f.id
-    ))
+    # Priority 3: Fall back to closest flight by date
+    logger.warning("Complex OF scenario, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
 
 
-def select_flight_for_on(flights, email_received_date, event_time):
-    """Enhanced ON selection with smart logic for multiple records"""
+def select_flight_for_on(flights, email_received_date):
+    """Select flight for ON (landing) event"""
     
     # Priority 1: Flights with complete departure data (OT and OF)
     flights_with_complete_departure = flights.filter(
@@ -1012,9 +997,9 @@ def select_flight_for_on(flights, email_received_date, event_time):
     
     if flights_with_complete_departure.exists():
         logger.info(f"Found {flights_with_complete_departure.count()} flights with complete departure data")
-        return flights_with_complete_departure.first()  # Should be only one logical flight
+        return flights_with_complete_departure.first()
     
-    # Priority 2: Flights with partial departure data
+    # Priority 2: Flights with partial departure data (either OT or OF)
     flights_with_partial_departure = flights.filter(
         models.Q(atd_utc__isnull=False) | models.Q(takeoff_utc__isnull=False),
         touchdown_utc__isnull=True
@@ -1022,8 +1007,7 @@ def select_flight_for_on(flights, email_received_date, event_time):
     
     if flights_with_partial_departure.exists():
         logger.info(f"Found {flights_with_partial_departure.count()} flights with partial departure data")
-        # Pick the one with the most recent departure activity
-        return max(flights_with_partial_departure, key=lambda f: f.takeoff_utc or f.atd_utc or datetime.time(0, 0))
+        return flights_with_partial_departure.first()
     
     # Priority 3: Flights with only IN data (ON before IN scenario)
     flights_with_only_in = flights.filter(
@@ -1034,11 +1018,10 @@ def select_flight_for_on(flights, email_received_date, event_time):
     )
     
     if flights_with_only_in.exists():
-        logger.info(f"Found {flights_with_only_in.count()} flights with only IN data")
-        # Pick the one with IN time closest to ON time
-        return min(flights_with_only_in, key=lambda f: abs_time_diff(f.ata_utc, event_time))
+        logger.info(f"Found {flights_with_only_in.count()} flights with only IN data - ON before IN scenario")
+        return flights_with_only_in.first()
     
-    # Priority 4: Fresh flights
+    # Priority 4: Fresh flights (unusual but possible)
     fresh_flights = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=True,
@@ -1047,35 +1030,26 @@ def select_flight_for_on(flights, email_received_date, event_time):
     )
     
     if fresh_flights.exists():
-        logger.warning(f"Found {fresh_flights.count()} fresh flights for ON")
-        # Use STA as reference for landing time
-        best_flight = find_best_sta_match(fresh_flights, event_time)
-        if best_flight:
-            return best_flight
-        return min(fresh_flights, key=lambda f: (f.sta_utc or datetime.time(23, 59), f.id))
+        logger.warning(f"Found {fresh_flights.count()} fresh flights for ON (unusual scenario)")
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
     
-    # Priority 5: All flights have landing data - overwrite closest
-    logger.warning(f"All {flights.count()} flights have ON data - selecting best for overwrite")
-    return min(flights, key=lambda f: abs_time_diff(f.touchdown_utc, event_time))
+    # Priority 5: Fall back to closest flight by date
+    logger.warning("Complex ON scenario, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
 
 
-def select_flight_for_in(flights, email_received_date, event_time):
-    """Enhanced IN selection with smart logic for multiple records"""
+def select_flight_for_in(flights, email_received_date):
+    """Select flight for IN (gate arrival) event"""
     
-    # Priority 1: Flights with ON but no IN (normal sequence)
+    # Priority 1: Flights with landing data but no gate arrival
     flights_with_on_only = flights.filter(
         touchdown_utc__isnull=False,
         ata_utc__isnull=True
     )
     
     if flights_with_on_only.exists():
-        logger.info(f"Found {flights_with_on_only.count()} flights with ON but no IN")
-        
-        if flights_with_on_only.count() == 1:
-            return flights_with_on_only.first()
-        
-        # Multiple flights with ON - pick the one with ON closest to IN time
-        return min(flights_with_on_only, key=lambda f: abs_time_diff(f.touchdown_utc, event_time))
+        logger.info(f"Found {flights_with_on_only.count()} flights with ON but no IN - normal sequence")
+        return flights_with_on_only.first()
     
     # Priority 2: Flights with departure data but no arrival data
     flights_with_departure_only = flights.filter(
@@ -1086,8 +1060,7 @@ def select_flight_for_in(flights, email_received_date, event_time):
     
     if flights_with_departure_only.exists():
         logger.info(f"Found {flights_with_departure_only.count()} flights with departure but no arrival data")
-        # Pick the one with most recent departure activity
-        return max(flights_with_departure_only, key=lambda f: f.takeoff_utc or f.atd_utc or datetime.time(0, 0))
+        return flights_with_departure_only.first()
     
     # Priority 3: Fresh flights (IN before ON scenario)
     fresh_flights = flights.filter(
@@ -1098,62 +1071,12 @@ def select_flight_for_in(flights, email_received_date, event_time):
     )
     
     if fresh_flights.exists():
-        logger.warning(f"Found {fresh_flights.count()} fresh flights for IN")
-        best_flight = find_best_sta_match(fresh_flights, event_time)
-        if best_flight:
-            return best_flight
-        return min(fresh_flights, key=lambda f: (f.sta_utc or datetime.time(23, 59), f.id))
+        logger.warning(f"Found {fresh_flights.count()} fresh flights for IN (IN before ON scenario)")
+        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
     
-    # Priority 4: All flights have IN data - overwrite closest
-    logger.warning(f"All {flights.count()} flights have IN data - selecting best for overwrite")
-    return min(flights, key=lambda f: abs_time_diff(f.ata_utc, event_time))
-
-
-# Helper functions for smart flight selection
-
-def find_best_std_match(flights, event_time, offset_minutes=0):
-    """Find flight with STD closest to event time (with optional offset)"""
-    target_time = add_minutes(event_time, offset_minutes)
-    
-    flights_with_std = [f for f in flights if f.std_utc]
-    if not flights_with_std:
-        return None
-    
-    return min(flights_with_std, key=lambda f: abs_time_diff(f.std_utc, target_time))
-
-
-def find_best_sta_match(flights, event_time):
-    """Find flight with STA closest to event time"""
-    flights_with_sta = [f for f in flights if f.sta_utc]
-    if not flights_with_sta:
-        return None
-    
-    return min(flights_with_sta, key=lambda f: abs_time_diff(f.sta_utc, event_time))
-
-
-def abs_time_diff(time1, time2):
-    """Calculate absolute difference between two time objects in minutes"""
-    if not time1 or not time2:
-        return float('inf')
-    
-    # Convert to minutes since midnight
-    minutes1 = time1.hour * 60 + time1.minute
-    minutes2 = time2.hour * 60 + time2.minute
-    
-    # Handle day boundary crossings
-    diff = abs(minutes1 - minutes2)
-    return min(diff, 1440 - diff)  # 1440 = 24 * 60
-
-
-def add_minutes(time_obj, minutes):
-    """Add minutes to a time object, handling day boundaries"""
-    if not time_obj:
-        return time_obj
-    
-    total_minutes = time_obj.hour * 60 + time_obj.minute + minutes
-    total_minutes = total_minutes % 1440  # Handle day boundary
-    
-    return datetime.time(total_minutes // 60, total_minutes % 60)
+    # Priority 4: Fall back to closest flight by date
+    logger.warning("Complex IN scenario, selecting closest by date")
+    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
 
 
 
