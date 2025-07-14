@@ -55,6 +55,151 @@ def process_airport_file(attachment):
 
 
 
+# from datetime import datetime
+# from django.db import transaction
+# from .models import AirportData, FlightData
+# import logging
+
+# logger = logging.getLogger(__name__)
+
+# def process_flight_schedule_file(attachment):
+#     """
+#     Process the flight schedule file, preventing duplicates using logic checks and transaction handling.
+#     """
+#     try:
+#         content = attachment.content.decode('utf-8').splitlines()
+#         logger.info("Starting to process the flight schedule file...")
+
+#         for line_num, line in enumerate(content, start=1):
+#             try:
+#                 # Split the line based on comma delimiter
+#                 fields = line.split(',')
+
+#                 # Ensure all fields are stripped of surrounding quotes
+#                 fields = [field.strip().replace('"', '') for field in fields]
+
+#                 # Extract fields
+#                 flight_date = fields[0]
+#                 tail_no = fields[1]
+#                 flight_no = fields[2]
+#                 dep_code_icao = fields[3]
+#                 arr_code_icao = fields[4]
+#                 std = fields[5]
+#                 sta = fields[6]
+#                 flight_service_type = fields[7] if len(fields) > 7 else None
+#                 etd = fields[8] if len(fields) > 8 else None
+#                 eta = fields[9] if len(fields) > 9 else None
+#                 atd = fields[10] if len(fields) > 10 else None
+#                 takeoff = fields[11] if len(fields) > 11 else None
+#                 touchdown = fields[12] if len(fields) > 12 else None
+#                 ata = fields[13] if len(fields) > 13 else None
+#                 arrival_date = fields[14] if len(fields) > 14 else None
+
+#                 print("\n-------------------------------------------------------------\n")
+#                 print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
+#                 print("\n-------------------------------------------------------------\n")
+
+#                 # Parse dates and times
+#                 try:
+#                     # FIXED: Changed from "%m/%d/%Y" to "%m%d%Y" to match your CSV format
+#                     sd_date_utc = datetime.strptime(flight_date, "%m%d%Y").date()
+#                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
+#                     std_utc = datetime.strptime(std, "%H:%M").time()
+#                     sta_utc = datetime.strptime(sta, "%H:%M").time()
+#                     atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
+#                     takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
+#                     touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
+#                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
+#                     # Removed etd_utc and eta_utc parsing since they're not in your model
+#                 except ValueError:
+#                     logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
+#                     continue
+
+#                 # Fetch airport data
+#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
+#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
+
+#                 if not dep_airport or not arr_airport:
+#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
+#                     continue
+
+#                 dep_code_iata = dep_airport.iata_code
+#                 arr_code_iata = arr_airport.iata_code
+
+#                 # Define criteria to check for existing record
+#                 existing_record = FlightData.objects.filter(
+#                     flight_no=flight_no,
+#                     tail_no=tail_no,
+#                     sd_date_utc=sd_date_utc,
+#                     dep_code_icao=dep_code_icao,
+#                     arr_code_icao=arr_code_icao,
+#                     std_utc=std_utc,
+#                     sta_utc=sta_utc,
+#                 ).first()
+
+#                 # Prevent duplicate insertions using transaction.atomic()
+#                 with transaction.atomic():
+#                     if existing_record:
+#                         logger.info(f"Record already exists for flight {flight_no} on {sd_date_utc}. Checking for updates...")
+                        
+#                         # Check if any actual times need updating
+#                         updated = False
+#                         if std_utc and existing_record.std_utc != std_utc:
+#                             existing_record.std_utc = std_utc
+#                             updated = True
+#                         if sta_utc and existing_record.sta_utc != sta_utc:
+#                             existing_record.sta_utc = sta_utc
+#                             updated = True
+#                         # if atd_utc and existing_record.atd_utc != atd_utc:
+#                         #     existing_record.atd_utc = atd_utc
+#                         #     updated = True
+#                         # if takeoff_utc and existing_record.takeoff_utc != takeoff_utc:
+#                         #     existing_record.takeoff_utc = takeoff_utc
+#                         #     updated = True
+#                         # if touchdown_utc and existing_record.touchdown_utc != touchdown_utc:
+#                         #     existing_record.touchdown_utc = touchdown_utc
+#                         #     updated = True
+#                         # if ata_utc and existing_record.ata_utc != ata_utc:
+#                         #     existing_record.ata_utc = ata_utc
+#                         #     updated = True
+                     
+#                         if updated:
+#                             existing_record.save()
+#                             logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
+#                         else:
+#                             logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
+#                     else:
+#                         # Create a new record if no existing one matches
+#                         FlightData.objects.create(
+#                             flight_no=flight_no,
+#                             tail_no=tail_no,
+#                             dep_code_iata=dep_code_iata,
+#                             dep_code_icao=dep_code_icao,
+#                             arr_code_iata=arr_code_iata,
+#                             arr_code_icao=arr_code_icao,
+#                             sd_date_utc=sd_date_utc,
+#                             std_utc=std_utc,
+#                             sta_utc=sta_utc,
+#                             # atd_utc=atd_utc,
+#                             # takeoff_utc=takeoff_utc,
+#                             # touchdown_utc=touchdown_utc,
+#                             # ata_utc=ata_utc,
+#                             sa_date_utc=sa_date_utc,
+#                             source_type="FDM",
+#                             raw_content=",".join(fields),
+#                         )
+#                         logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}.")
+#             except Exception as e:
+#                 logger.error(f"Error processing line {line_num}: {e} - {fields}", exc_info=True)
+#                 continue
+
+#         logger.info("Flight schedule file processed successfully.")
+
+#     except Exception as e:
+#         logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+
+
+
 from datetime import datetime
 from django.db import transaction
 from .models import AirportData, FlightData
@@ -64,7 +209,8 @@ logger = logging.getLogger(__name__)
 
 def process_flight_schedule_file(attachment):
     """
-    Process the flight schedule file, preventing duplicates using logic checks and transaction handling.
+    Process the flight schedule file with proper duplicate prevention.
+    Ensures one unique flight number per day per route.
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -95,13 +241,10 @@ def process_flight_schedule_file(attachment):
                 ata = fields[13] if len(fields) > 13 else None
                 arrival_date = fields[14] if len(fields) > 14 else None
 
-                print("\n-------------------------------------------------------------\n")
-                print(f"\nFlight Date: {flight_date}\nTail No: {tail_no}\nFlight No: {flight_no}\n Dep Code ICAO: {dep_code_icao}\n Arr Code ICAO: {arr_code_icao}\nSTD: {std}\nSTA: {sta}\nflight service type: {flight_service_type}\n ED: {etd}\n ESTA: {eta}\n ATD: {atd}\n Takeoff: {takeoff}\n Touchdown: {touchdown}\n ATA: {ata}\n Arrival Date: {arrival_date}")
-                print("\n-------------------------------------------------------------\n")
+                logger.info(f"Processing: Flight {flight_no}, Tail {tail_no}, Date {flight_date}, Route {dep_code_icao}-{arr_code_icao}")
 
                 # Parse dates and times
                 try:
-                    # FIXED: Changed from "%m/%d/%Y" to "%m%d%Y" to match your CSV format
                     sd_date_utc = datetime.strptime(flight_date, "%m%d%Y").date()
                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
                     std_utc = datetime.strptime(std, "%H:%M").time()
@@ -110,9 +253,8 @@ def process_flight_schedule_file(attachment):
                     takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
                     touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
-                    # Removed etd_utc and eta_utc parsing since they're not in your model
-                except ValueError:
-                    logger.error(f"Skipping line {line_num} due to date/time format error: {line}")
+                except ValueError as e:
+                    logger.error(f"Skipping line {line_num} due to date/time format error: {e} - {line}")
                     continue
 
                 # Fetch airport data
@@ -126,51 +268,99 @@ def process_flight_schedule_file(attachment):
                 dep_code_iata = dep_airport.iata_code
                 arr_code_iata = arr_airport.iata_code
 
-                # Define criteria to check for existing record
+                # FIXED: Proper duplicate detection - flight number should be unique per day per route
+                # Don't include tail_no, std_utc, sta_utc in the filter as these can change during rescheduling
                 existing_record = FlightData.objects.filter(
                     flight_no=flight_no,
-                    tail_no=tail_no,
                     sd_date_utc=sd_date_utc,
                     dep_code_icao=dep_code_icao,
                     arr_code_icao=arr_code_icao,
-                    std_utc=std_utc,
-                    sta_utc=sta_utc,
                 ).first()
 
-                # Prevent duplicate insertions using transaction.atomic()
+                # Process record with transaction.atomic()
                 with transaction.atomic():
                     if existing_record:
-                        logger.info(f"Record already exists for flight {flight_no} on {sd_date_utc}. Checking for updates...")
+                        logger.info(f"Found existing record for flight {flight_no} on {sd_date_utc}. Updating...")
                         
-                        # Check if any actual times need updating
+                        # Always update scheduled data (this handles reschedules)
                         updated = False
-                        if std_utc and existing_record.std_utc != std_utc:
+                        
+                        # Update tail number (aircraft swap)
+                        if existing_record.tail_no != tail_no:
+                            logger.info(f"Updating tail number: {existing_record.tail_no} → {tail_no}")
+                            existing_record.tail_no = tail_no
+                            updated = True
+                        
+                        # Update scheduled times (reschedule)
+                        if existing_record.std_utc != std_utc:
+                            logger.info(f"Updating STD: {existing_record.std_utc} → {std_utc}")
                             existing_record.std_utc = std_utc
                             updated = True
-                        if sta_utc and existing_record.sta_utc != sta_utc:
+                            
+                        if existing_record.sta_utc != sta_utc:
+                            logger.info(f"Updating STA: {existing_record.sta_utc} → {sta_utc}")
                             existing_record.sta_utc = sta_utc
                             updated = True
-                        # if atd_utc and existing_record.atd_utc != atd_utc:
-                        #     existing_record.atd_utc = atd_utc
-                        #     updated = True
-                        # if takeoff_utc and existing_record.takeoff_utc != takeoff_utc:
-                        #     existing_record.takeoff_utc = takeoff_utc
-                        #     updated = True
-                        # if touchdown_utc and existing_record.touchdown_utc != touchdown_utc:
-                        #     existing_record.touchdown_utc = touchdown_utc
-                        #     updated = True
-                        # if ata_utc and existing_record.ata_utc != ata_utc:
-                        #     existing_record.ata_utc = ata_utc
-                        #     updated = True
-                     
+                        
+                        # Update scheduled arrival date
+                        if sa_date_utc and existing_record.sa_date_utc != sa_date_utc:
+                            logger.info(f"Updating SA date: {existing_record.sa_date_utc} → {sa_date_utc}")
+                            existing_record.sa_date_utc = sa_date_utc
+                            updated = True
+                        
+                        # Update IATA codes if they changed (unlikely but possible)
+                        if existing_record.dep_code_iata != dep_code_iata:
+                            existing_record.dep_code_iata = dep_code_iata
+                            updated = True
+                        if existing_record.arr_code_iata != arr_code_iata:
+                            existing_record.arr_code_iata = arr_code_iata
+                            updated = True
+                        
+                        # IMPORTANT: Only update actual times if they don't exist yet
+                        # This prevents overwriting ACARS data with schedule data
+                        if atd_utc and not existing_record.atd_utc:
+                            logger.info(f"Setting initial ATD from schedule: {atd_utc}")
+                            existing_record.atd_utc = atd_utc
+                            updated = True
+                        elif atd_utc and existing_record.atd_utc:
+                            logger.info(f"Preserving existing ATD: {existing_record.atd_utc} (ignoring schedule ATD: {atd_utc})")
+                        
+                        if takeoff_utc and not existing_record.takeoff_utc:
+                            logger.info(f"Setting initial takeoff from schedule: {takeoff_utc}")
+                            existing_record.takeoff_utc = takeoff_utc
+                            updated = True
+                        elif takeoff_utc and existing_record.takeoff_utc:
+                            logger.info(f"Preserving existing takeoff: {existing_record.takeoff_utc} (ignoring schedule: {takeoff_utc})")
+                        
+                        if touchdown_utc and not existing_record.touchdown_utc:
+                            logger.info(f"Setting initial touchdown from schedule: {touchdown_utc}")
+                            existing_record.touchdown_utc = touchdown_utc
+                            updated = True
+                        elif touchdown_utc and existing_record.touchdown_utc:
+                            logger.info(f"Preserving existing touchdown: {existing_record.touchdown_utc} (ignoring schedule: {touchdown_utc})")
+                        
+                        if ata_utc and not existing_record.ata_utc:
+                            logger.info(f"Setting initial ATA from schedule: {ata_utc}")
+                            existing_record.ata_utc = ata_utc
+                            updated = True
+                        elif ata_utc and existing_record.ata_utc:
+                            logger.info(f"Preserving existing ATA: {existing_record.ata_utc} (ignoring schedule: {ata_utc})")
+                        
+                        # Update raw content for audit trail
+                        new_raw_content = ",".join(fields)
+                        if existing_record.raw_content != new_raw_content:
+                            existing_record.raw_content = new_raw_content
+                            updated = True
+                        
                         if updated:
                             existing_record.save()
-                            logger.info(f"Updated FlightData record for flight {flight_no} on {sd_date_utc}.")
+                            logger.info(f"✅ Updated flight {flight_no} on {sd_date_utc}")
                         else:
-                            logger.info(f"No changes for FlightData record {flight_no} on {sd_date_utc}.")
+                            logger.info(f"ℹ️  No changes needed for flight {flight_no} on {sd_date_utc}")
+                    
                     else:
-                        # Create a new record if no existing one matches
-                        FlightData.objects.create(
+                        # Create a new record - this should only happen for truly new flights
+                        new_flight = FlightData.objects.create(
                             flight_no=flight_no,
                             tail_no=tail_no,
                             dep_code_iata=dep_code_iata,
@@ -178,25 +368,26 @@ def process_flight_schedule_file(attachment):
                             arr_code_iata=arr_code_iata,
                             arr_code_icao=arr_code_icao,
                             sd_date_utc=sd_date_utc,
+                            sa_date_utc=sa_date_utc,
                             std_utc=std_utc,
                             sta_utc=sta_utc,
-                            # atd_utc=atd_utc,
-                            # takeoff_utc=takeoff_utc,
-                            # touchdown_utc=touchdown_utc,
-                            # ata_utc=ata_utc,
-                            sa_date_utc=sa_date_utc,
+                            atd_utc=atd_utc,
+                            takeoff_utc=takeoff_utc,
+                            touchdown_utc=touchdown_utc,
+                            ata_utc=ata_utc,
                             source_type="FDM",
                             raw_content=",".join(fields),
                         )
-                        logger.info(f"Inserted new flight record: {flight_no} on {sd_date_utc}.")
+                        logger.info(f"✨ Created new flight record: {flight_no} on {sd_date_utc} (ID: {new_flight.id})")
+
             except Exception as e:
-                logger.error(f"Error processing line {line_num}: {e} - {fields}", exc_info=True)
+                logger.error(f"❌ Error processing line {line_num}: {e} - {fields}", exc_info=True)
                 continue
 
-        logger.info("Flight schedule file processed successfully.")
+        logger.info("✅ Flight schedule file processed successfully.")
 
     except Exception as e:
-        logger.error(f"Error processing flight schedule file: {e}", exc_info=True)
+        logger.error(f"❌ Error processing flight schedule file: {e}", exc_info=True)
 
 
 
@@ -616,7 +807,6 @@ def process_acars_message(item, file_path):
         event_time = datetime.strptime(event_time_str, "%H:%M").time()
 
         # Define comprehensive date range for flight matching
-        # Cover all possible scenarios: early/late arrivals, delays, cross-day operations
         search_dates = [
             email_received_date + timedelta(days=i) 
             for i in range(-3, 4)  # -3, -2, -1, 0, 1, 2, 3 days
@@ -665,14 +855,20 @@ def process_acars_message(item, file_path):
             )
             return
 
-        # Comprehensive flight selection logic covering all scenarios
-        selected_flight = select_best_flight_match(flights, acars_event, email_received_date)
+        # Log multiple flight scenario for debugging
+        if flights.count() > 1:
+            logger.warning(f"Found {flights.count()} matching flights for {flight_no} - applying smart selection")
+            for flight in flights:
+                logger.info(f"Candidate: ID={flight.id}, STD={flight.std_utc}, ATD={flight.atd_utc}, Takeoff={flight.takeoff_utc}")
+
+        # Comprehensive flight selection logic
+        selected_flight = select_best_flight_match(flights, acars_event, email_received_date, event_time)
 
         if not selected_flight:
             logger.error("No flight could be selected for update")
             return
 
-        logger.info(f"Selected flight: {selected_flight.flight_no} ({selected_flight.tail_no}) on {selected_flight.sd_date_utc} for {acars_event} event")
+        logger.info(f"Selected flight: ID={selected_flight.id}, {selected_flight.flight_no} ({selected_flight.tail_no}) STD={selected_flight.std_utc} for {acars_event} event")
 
         # Update the appropriate field based on ACARS event
         if acars_event == "OT":
@@ -697,49 +893,32 @@ def process_acars_message(item, file_path):
         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
 
 
-def select_best_flight_match(flights, acars_event, email_received_date):
+def select_best_flight_match(flights, acars_event, email_received_date, event_time):
     """
-    Comprehensive flight selection logic covering ALL possible scenarios:
-    
-    Departure Events (OT, OF):
-    - OT early, OF same day
-    - OT late night, OF next day
-    - OF received before OT
-    - Multiple flights same day
-    
-    Arrival Events (ON, IN):
-    - Same day arrival
-    - Next day arrival (long flights)
-    - ON/IN on different days
-    - Late arrival ACARS
-    
-    Mixed Scenarios:
-    - Out-of-order ACARS reception
-    - Multiple flights with same tail/route
-    - Delayed/cancelled flights
+    Enhanced flight selection logic that handles multiple records intelligently
     """
     
     logger.info(f"Selecting best flight from {flights.count()} candidates for {acars_event} event")
     
     if acars_event == "OT":  # Pushback from gate
-        return select_flight_for_ot(flights, email_received_date)
+        return select_flight_for_ot(flights, email_received_date, event_time)
     
     elif acars_event == "OF":  # Takeoff
-        return select_flight_for_of(flights, email_received_date)
+        return select_flight_for_of(flights, email_received_date, event_time)
     
     elif acars_event == "ON":  # Landing
-        return select_flight_for_on(flights, email_received_date)
+        return select_flight_for_on(flights, email_received_date, event_time)
     
     elif acars_event == "IN":  # Arrival at gate
-        return select_flight_for_in(flights, email_received_date)
+        return select_flight_for_in(flights, email_received_date, event_time)
     
     return None
 
 
-def select_flight_for_ot(flights, email_received_date):
-    """Select flight for OT (pushback) event"""
+def select_flight_for_ot(flights, email_received_date, event_time):
+    """Enhanced OT selection with smart logic for multiple records"""
     
-    # Priority 1: Flights without any departure data (fresh flight)
+    # Priority 1: Flights without any departure data (fresh flights)
     fresh_flights = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=True
@@ -747,54 +926,82 @@ def select_flight_for_ot(flights, email_received_date):
     
     if fresh_flights.exists():
         logger.info(f"Found {fresh_flights.count()} fresh flights for OT")
-        # Pick the closest scheduled date to email received date
-        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+        
+        if fresh_flights.count() == 1:
+            return fresh_flights.first()
+        
+        # Multiple fresh flights - use smart selection
+        # 1. Try to find STD closest to actual departure time
+        # 2. Fall back to earliest STD (most likely to be the actual flight)
+        best_flight = find_best_std_match(fresh_flights, event_time)
+        if best_flight:
+            logger.info(f"Selected fresh flight with STD closest to actual OT time")
+            return best_flight
+        
+        # Fallback: earliest STD
+        return min(fresh_flights, key=lambda f: (f.std_utc or datetime.time(23, 59), f.id))
     
-    # Priority 2: Flights with only takeoff data (OF received before OT scenario)
+    # Priority 2: Flights with only takeoff data (OF received before OT)
     flights_with_only_of = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=False
     )
     
     if flights_with_only_of.exists():
-        logger.info(f"Found {flights_with_only_of.count()} flights with only OF data - updating same flight")
-        return flights_with_only_of.first()
+        logger.info(f"Found {flights_with_only_of.count()} flights with only OF data")
+        # Pick the one with takeoff time closest to current OT + reasonable taxi time
+        return min(flights_with_only_of, key=lambda f: abs_time_diff(f.takeoff_utc, add_minutes(event_time, 15)))
     
-    # Priority 3: Fall back to closest flight by date
-    logger.warning("All flights have OT data, selecting closest by date")
-    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    # Priority 3: All flights have OT data - pick best candidate for overwrite
+    logger.warning(f"All {flights.count()} flights have OT data - selecting best for overwrite")
+    return min(flights, key=lambda f: (
+        abs((f.sd_date_utc - email_received_date).days),  # Closest date
+        abs_time_diff(f.atd_utc, event_time),  # Closest existing ATD to new time
+        f.id  # Consistent tiebreaker
+    ))
 
 
-def select_flight_for_of(flights, email_received_date):
-    """Select flight for OF (takeoff) event"""
+def select_flight_for_of(flights, email_received_date, event_time):
+    """Enhanced OF selection with smart logic for multiple records"""
     
-    # Priority 1: Flights that already have OT but no OF (normal sequence)
+    # Priority 1: Flights with OT but no OF (normal sequence)
     flights_with_ot_only = flights.filter(
         atd_utc__isnull=False,
         takeoff_utc__isnull=True
     )
     
     if flights_with_ot_only.exists():
-        logger.info(f"Found {flights_with_ot_only.count()} flights with OT but no OF - normal sequence")
-        return flights_with_ot_only.first()
+        logger.info(f"Found {flights_with_ot_only.count()} flights with OT but no OF")
+        
+        if flights_with_ot_only.count() == 1:
+            return flights_with_ot_only.first()
+        
+        # Multiple flights with OT - pick the one with OT closest to OF time (reasonable taxi time)
+        return min(flights_with_ot_only, key=lambda f: abs_time_diff(f.atd_utc, event_time))
     
-    # Priority 2: Fresh flights without any departure data (OF before OT scenario)
+    # Priority 2: Fresh flights (OF before OT scenario)
     fresh_flights = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=True
     )
     
     if fresh_flights.exists():
-        logger.info(f"Found {fresh_flights.count()} fresh flights for OF (OF before OT scenario)")
-        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+        logger.info(f"Found {fresh_flights.count()} fresh flights for OF")
+        best_flight = find_best_std_match(fresh_flights, event_time, offset_minutes=-15)  # OF typically 15 min after STD
+        if best_flight:
+            return best_flight
+        return min(fresh_flights, key=lambda f: (f.std_utc or datetime.time(23, 59), f.id))
     
-    # Priority 3: Fall back to closest flight by date
-    logger.warning("Complex OF scenario, selecting closest by date")
-    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    # Priority 3: All flights have takeoff data - overwrite closest
+    logger.warning(f"All {flights.count()} flights have OF data - selecting best for overwrite")
+    return min(flights, key=lambda f: (
+        abs_time_diff(f.takeoff_utc, event_time),
+        f.id
+    ))
 
 
-def select_flight_for_on(flights, email_received_date):
-    """Select flight for ON (landing) event"""
+def select_flight_for_on(flights, email_received_date, event_time):
+    """Enhanced ON selection with smart logic for multiple records"""
     
     # Priority 1: Flights with complete departure data (OT and OF)
     flights_with_complete_departure = flights.filter(
@@ -805,9 +1012,9 @@ def select_flight_for_on(flights, email_received_date):
     
     if flights_with_complete_departure.exists():
         logger.info(f"Found {flights_with_complete_departure.count()} flights with complete departure data")
-        return flights_with_complete_departure.first()
+        return flights_with_complete_departure.first()  # Should be only one logical flight
     
-    # Priority 2: Flights with partial departure data (either OT or OF)
+    # Priority 2: Flights with partial departure data
     flights_with_partial_departure = flights.filter(
         models.Q(atd_utc__isnull=False) | models.Q(takeoff_utc__isnull=False),
         touchdown_utc__isnull=True
@@ -815,7 +1022,8 @@ def select_flight_for_on(flights, email_received_date):
     
     if flights_with_partial_departure.exists():
         logger.info(f"Found {flights_with_partial_departure.count()} flights with partial departure data")
-        return flights_with_partial_departure.first()
+        # Pick the one with the most recent departure activity
+        return max(flights_with_partial_departure, key=lambda f: f.takeoff_utc or f.atd_utc or datetime.time(0, 0))
     
     # Priority 3: Flights with only IN data (ON before IN scenario)
     flights_with_only_in = flights.filter(
@@ -826,10 +1034,11 @@ def select_flight_for_on(flights, email_received_date):
     )
     
     if flights_with_only_in.exists():
-        logger.info(f"Found {flights_with_only_in.count()} flights with only IN data - ON before IN scenario")
-        return flights_with_only_in.first()
+        logger.info(f"Found {flights_with_only_in.count()} flights with only IN data")
+        # Pick the one with IN time closest to ON time
+        return min(flights_with_only_in, key=lambda f: abs_time_diff(f.ata_utc, event_time))
     
-    # Priority 4: Fresh flights (unusual but possible)
+    # Priority 4: Fresh flights
     fresh_flights = flights.filter(
         atd_utc__isnull=True,
         takeoff_utc__isnull=True,
@@ -838,26 +1047,35 @@ def select_flight_for_on(flights, email_received_date):
     )
     
     if fresh_flights.exists():
-        logger.warning(f"Found {fresh_flights.count()} fresh flights for ON (unusual scenario)")
-        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+        logger.warning(f"Found {fresh_flights.count()} fresh flights for ON")
+        # Use STA as reference for landing time
+        best_flight = find_best_sta_match(fresh_flights, event_time)
+        if best_flight:
+            return best_flight
+        return min(fresh_flights, key=lambda f: (f.sta_utc or datetime.time(23, 59), f.id))
     
-    # Priority 5: Fall back to closest flight by date
-    logger.warning("Complex ON scenario, selecting closest by date")
-    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    # Priority 5: All flights have landing data - overwrite closest
+    logger.warning(f"All {flights.count()} flights have ON data - selecting best for overwrite")
+    return min(flights, key=lambda f: abs_time_diff(f.touchdown_utc, event_time))
 
 
-def select_flight_for_in(flights, email_received_date):
-    """Select flight for IN (gate arrival) event"""
+def select_flight_for_in(flights, email_received_date, event_time):
+    """Enhanced IN selection with smart logic for multiple records"""
     
-    # Priority 1: Flights with landing data but no gate arrival
+    # Priority 1: Flights with ON but no IN (normal sequence)
     flights_with_on_only = flights.filter(
         touchdown_utc__isnull=False,
         ata_utc__isnull=True
     )
     
     if flights_with_on_only.exists():
-        logger.info(f"Found {flights_with_on_only.count()} flights with ON but no IN - normal sequence")
-        return flights_with_on_only.first()
+        logger.info(f"Found {flights_with_on_only.count()} flights with ON but no IN")
+        
+        if flights_with_on_only.count() == 1:
+            return flights_with_on_only.first()
+        
+        # Multiple flights with ON - pick the one with ON closest to IN time
+        return min(flights_with_on_only, key=lambda f: abs_time_diff(f.touchdown_utc, event_time))
     
     # Priority 2: Flights with departure data but no arrival data
     flights_with_departure_only = flights.filter(
@@ -868,7 +1086,8 @@ def select_flight_for_in(flights, email_received_date):
     
     if flights_with_departure_only.exists():
         logger.info(f"Found {flights_with_departure_only.count()} flights with departure but no arrival data")
-        return flights_with_departure_only.first()
+        # Pick the one with most recent departure activity
+        return max(flights_with_departure_only, key=lambda f: f.takeoff_utc or f.atd_utc or datetime.time(0, 0))
     
     # Priority 3: Fresh flights (IN before ON scenario)
     fresh_flights = flights.filter(
@@ -879,12 +1098,62 @@ def select_flight_for_in(flights, email_received_date):
     )
     
     if fresh_flights.exists():
-        logger.warning(f"Found {fresh_flights.count()} fresh flights for IN (IN before ON scenario)")
-        return min(fresh_flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+        logger.warning(f"Found {fresh_flights.count()} fresh flights for IN")
+        best_flight = find_best_sta_match(fresh_flights, event_time)
+        if best_flight:
+            return best_flight
+        return min(fresh_flights, key=lambda f: (f.sta_utc or datetime.time(23, 59), f.id))
     
-    # Priority 4: Fall back to closest flight by date
-    logger.warning("Complex IN scenario, selecting closest by date")
-    return min(flights, key=lambda f: abs((f.sd_date_utc - email_received_date).days))
+    # Priority 4: All flights have IN data - overwrite closest
+    logger.warning(f"All {flights.count()} flights have IN data - selecting best for overwrite")
+    return min(flights, key=lambda f: abs_time_diff(f.ata_utc, event_time))
+
+
+# Helper functions for smart flight selection
+
+def find_best_std_match(flights, event_time, offset_minutes=0):
+    """Find flight with STD closest to event time (with optional offset)"""
+    target_time = add_minutes(event_time, offset_minutes)
+    
+    flights_with_std = [f for f in flights if f.std_utc]
+    if not flights_with_std:
+        return None
+    
+    return min(flights_with_std, key=lambda f: abs_time_diff(f.std_utc, target_time))
+
+
+def find_best_sta_match(flights, event_time):
+    """Find flight with STA closest to event time"""
+    flights_with_sta = [f for f in flights if f.sta_utc]
+    if not flights_with_sta:
+        return None
+    
+    return min(flights_with_sta, key=lambda f: abs_time_diff(f.sta_utc, event_time))
+
+
+def abs_time_diff(time1, time2):
+    """Calculate absolute difference between two time objects in minutes"""
+    if not time1 or not time2:
+        return float('inf')
+    
+    # Convert to minutes since midnight
+    minutes1 = time1.hour * 60 + time1.minute
+    minutes2 = time2.hour * 60 + time2.minute
+    
+    # Handle day boundary crossings
+    diff = abs(minutes1 - minutes2)
+    return min(diff, 1440 - diff)  # 1440 = 24 * 60
+
+
+def add_minutes(time_obj, minutes):
+    """Add minutes to a time object, handling day boundaries"""
+    if not time_obj:
+        return time_obj
+    
+    total_minutes = time_obj.hour * 60 + time_obj.minute + minutes
+    total_minutes = total_minutes % 1440  # Handle day boundary
+    
+    return datetime.time(total_minutes // 60, total_minutes % 60)
 
 
 
