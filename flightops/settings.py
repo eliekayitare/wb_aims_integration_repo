@@ -335,20 +335,6 @@ CELERY_BEAT_SCHEDULE = {
     #     'schedule': crontab(minute='30'),  # Every hour at XX:30
     # },
 
-
-    # Cleanup old JOB1 backups - Runs every 24 hours
-    'cleanup-job1-backups-daily': {
-        'task': 'aimsintegration.tasks.cleanup_old_job1_backups',
-        'schedule': crontab(minute='*/25'),  
-    },
-
-
-     # NEW: Add these cleanup tasks
-    'cleanup-duplicates-daily-dry-run': {
-        'task': 'aimsintegration.tasks.cleanup_duplicate_flights',
-        'schedule': crontab(minute='*/3'),
-        'kwargs': {'dry_run': True}
-    },
     
     # 'cleanup-duplicates-weekly-live': {
     #     'task': 'aimsintegration.tasks.cleanup_duplicate_flights',
