@@ -331,10 +331,10 @@ CELERY_BEAT_SCHEDULE = {
     
     # Delete old flight  data 
 
-    'delete-old-emails-every-hour': {
-        'task': 'aimsintegration.tasks.delete_flights_no_actual_timings',
-        'schedule': crontab(minute='*/2'),  # Every hour
-    },
+    # 'delete-old-emails-every-hour': {
+    #     'task': 'aimsintegration.tasks.delete_flights_no_actual_timings',
+    #     'schedule': crontab(minute='*/2'),  # Every hour
+    # },
     
 }
 
