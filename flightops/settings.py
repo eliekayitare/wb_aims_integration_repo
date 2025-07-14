@@ -329,18 +329,12 @@ CELERY_BEAT_SCHEDULE = {
     #     'schedule': crontab(minute='0'),  # Every hour at XX:00
     # },
     
-    # # Add a monitor for stalled campaigns
-    # 'check-stalled-campaigns': {
-    #     'task': 'aimsintegration.tasks.check_stalled_campaigns',
-    #     'schedule': crontab(minute='30'),  # Every hour at XX:30
-    # },
+    # Delete old flight  data 
 
-    
-    # 'cleanup-duplicates-weekly-live': {
-    #     'task': 'aimsintegration.tasks.cleanup_duplicate_flights',
-    #     'schedule': crontab(hour=2, minute=0, day_of_week=1),  # Monday at 2 AM
-    #     'kwargs': {'dry_run': False}
-    # },
+    'delete-old-emails-every-hour': {
+        'task': 'aimsintegration.tasks.delete_flights_no_actual_timings',
+        'schedule': crontab(minute='*/2'),  # Every hour
+    },
     
 }
 

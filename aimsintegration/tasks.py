@@ -1724,3 +1724,60 @@ def cleanup_old_job1_backups():
         return {"status": "error", "message": str(e)}
     
 
+
+
+from celery import shared_task
+from aimsintegration.models import FlightData
+import logging
+
+logger = logging.getLogger(__name__)
+
+@shared_task(bind=True)
+def delete_flights_no_actual_timings(self, dry_run=True):
+    """
+    Delete all flight records that have no actual timing data.
+    
+    Args:
+        dry_run (bool): If True, only shows count without deleting
+    """
+    try:
+        logger.info("Starting delete flights with no actual timings...")
+        
+        # Find all flights with no actual timings
+        flights_to_delete = FlightData.objects.filter(
+            atd_utc__isnull=True,
+            takeoff_utc__isnull=True,
+            touchdown_utc__isnull=True,
+            ata_utc__isnull=True
+        )
+        
+        count = flights_to_delete.count()
+        logger.info(f"Found {count} flights with no actual timings")
+        
+        if dry_run:
+            logger.info(f"DRY RUN: Would delete {count} records")
+            return {
+                'status': 'success',
+                'mode': 'dry_run',
+                'records_found': count,
+                'records_deleted': 0
+            }
+        else:
+            # Delete the records
+            deleted_count = flights_to_delete.delete()[0]
+            logger.info(f"✅ Deleted {deleted_count} flight records")
+            
+            return {
+                'status': 'success',
+                'mode': 'live',
+                'records_found': count,
+                'records_deleted': deleted_count
+            }
+            
+    except Exception as e:
+        error_msg = f"❌ Error deleting flights: {e}"
+        logger.error(error_msg, exc_info=True)
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
