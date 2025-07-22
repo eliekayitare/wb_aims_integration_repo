@@ -584,6 +584,7 @@
               <option value="payment_mode">Generate Payslip by Payment Mode</option>
               <option value="by_bank">Generate Payslip by Bank</option>
               <option value="all_individual">Generate Individual Payslip</option>
+              <option value="simple_csv">📄 Export CSV</option>
             </select>
           
             {% comment %} <button type="button" class="btn-action go-button" onclick="handleGenerateInvoice()">
@@ -1419,6 +1420,28 @@ function handleGenerateInvoice() {
             setButtonLoading(false);
         }, 2000);
     }
+
+    else if (typeSelect.value === "simple_csv") {
+    // Simple CSV export
+    const urlParams = new URLSearchParams(window.location.search);
+    const monthParam = urlParams.get("month");
+    
+    let csvUrl = "/aims/generate_simple_csv/";
+    if (monthParam) {
+        csvUrl += `?month=${monthParam}`;
+    }
+    
+    showToast("Generating CSV export...", "info");
+    
+    // Download CSV
+    window.open(csvUrl, '_blank');
+    
+    setTimeout(() => {
+        setButtonLoading(false);
+        setButtonSuccess();
+        showToast("CSV file should be downloading!", "success");
+    }, 2000);
+}
 }
 
 // Button state management functions (keep existing ones)

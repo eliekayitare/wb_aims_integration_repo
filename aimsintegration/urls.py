@@ -47,5 +47,7 @@ urlpatterns = [
     path('airport/<int:airport_id>/update/', views.update_airport, name='update_airport'),
     path('airport/<int:airport_id>/delete/', views.delete_airport, name='delete_airport'),
 
+    # Quality Control Export
+    path('generate_simple_csv/', views.generate_simple_csv_export, name='generate_simple_csv'),
 
 ]

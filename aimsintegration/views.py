@@ -3299,3 +3299,429 @@ def add_airport(request, zone_id):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data"}, status=400)
     return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+
+
+
+# Start of Quality control
+
+# Add this simple function to your views.py
+
+# import csv
+# from django.http import HttpResponse
+# from django.contrib.auth.decorators import login_required
+# from datetime import date
+# from django.db.models import Max
+# from decimal import Decimal
+
+# @login_required(login_url='login')
+# def generate_simple_csv_export(request):
+#     """
+#     Generate a simple CSV file combining individual and general payslip data.
+#     """
+#     # Get month parameter
+#     month_str = request.GET.get('month')
+    
+#     if not month_str:
+#         # Find the latest month with invoices
+#         last_invoice = Invoice.objects.filter(total_amount__gt=0).aggregate(max_month=Max('month'))
+#         filter_month = last_invoice['max_month']
+#         if not filter_month:
+#             return HttpResponse("No invoices found", status=404)
+#     else:
+#         try:
+#             year, mo = map(int, month_str.split('-'))
+#             filter_month = date(year, mo, 1)
+#         except ValueError:
+#             return HttpResponse("Invalid month format", status=400)
+
+#     # Get all invoices for the month
+#     invoices = Invoice.objects.filter(
+#         month=filter_month, 
+#         total_amount__gt=0
+#     ).select_related('crew').order_by('crew__crew_id')
+
+#     if not invoices.exists():
+#         return HttpResponse(f"No data found for {filter_month.strftime('%B %Y')}", status=404)
+
+#     # Get exchange rate
+#     exchange_rate = get_exchange_rate()
+#     if not exchange_rate:
+#         exchange_rate = Decimal('1300.00')  # Default fallback
+
+#     # Get crew bank data
+#     crew_ids = [inv.crew.crew_id for inv in invoices]
+#     wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    
+#     employee_bank_data = {}
+#     if wb_formatted_ids:
+#         with connections['mssql'].cursor() as cursor:
+#             placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+#             query = f"""
+#                 SELECT [No_], [Bank Name], [Bank Account No]
+#                 FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+#                 WHERE [No_] IN ({placeholders})
+#             """
+#             cursor.execute(query, wb_formatted_ids)
+#             rows = cursor.fetchall()
+            
+#             for no_, bank_name, account_no in rows:
+#                 employee_bank_data[no_.strip()] = {
+#                     'bank_name': bank_name.strip() if bank_name else '',
+#                     'account_no': account_no.strip() if account_no else '',
+#                 }
+
+#     # Create CSV response
+#     response = HttpResponse(content_type='text/csv')
+#     filename = f"Crew_Allowance_Export_{filter_month.strftime('%Y-%m')}.csv"
+#     response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+#     writer = csv.writer(response)
+    
+#     # Write headers
+#     writer.writerow([
+#         'WB Number',
+#         # 'Crew ID', 
+#         'First Name',
+#         'Last Name', 
+#         'Position',
+#         # 'Bank Name',
+#         # 'Account Number',
+#         'Allowance USD',
+#         'Allowance RWF',
+#         'Payment Currency'
+#     ])
+    
+#     # Write data rows
+#     total_usd = Decimal('0.00')
+#     total_rwf = Decimal('0.00')
+    
+#     for invoice in invoices:
+#         crew = invoice.crew
+#         wb_formatted = f"WB{int(crew.crew_id):04d}"
+#         bank_data = employee_bank_data.get(wb_formatted, {'bank_name': '', 'account_no': ''})
+        
+#         usd_amount = invoice.total_amount
+#         rwf_amount = usd_amount * exchange_rate
+#         payment_currency = 'USD' if crew.position in ['CP', 'FO'] else 'RWF'
+        
+#         total_usd += usd_amount
+#         total_rwf += rwf_amount
+        
+#         writer.writerow([
+#             wb_formatted,
+#             # crew.crew_id,
+#             crew.first_name,
+#             crew.last_name,
+#             crew.position or '',
+#             # bank_data['bank_name'],
+#             # bank_data['account_no'],
+#             f"{usd_amount:.2f}",
+#             f"{rwf_amount:.2f}",
+#             payment_currency
+#         ])
+    
+#     # Write totals
+#     writer.writerow([])
+#     writer.writerow(['TOTALS', '', '', '', '', '', '', f"{total_usd:.2f}", f"{total_rwf:.2f}", ''])
+#     writer.writerow(['Exchange Rate:', f"1 USD = {exchange_rate} RWF", '', '', '', '', '', '', '', ''])
+#     writer.writerow(['Period:', filter_month.strftime('%B %Y'), '', '', '', '', '', '', '', ''])
+    
+#     return response
+
+
+# Add this function to your views.py
+
+import csv
+from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
+from datetime import date
+from django.db.models import Max
+from decimal import Decimal
+from django.db import connections
+
+def get_exchange_rate():
+    """
+    Get the latest USD exchange rate.
+    """
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
+        row = cursor.fetchone()
+             
+        return Decimal(str(row[0])) if row else None
+
+@login_required(login_url='login')
+def generate_simple_csv_export(request):
+    """
+    Generate a CSV file with one row per crew member and each EARNING flight in its own column.
+    Only includes flights that actually earn money (have layover time and zones).
+    Removes duplicates to ensure each unique flight appears only once.
+    """
+    # Get month parameter
+    month_str = request.GET.get('month')
+    
+    if not month_str:
+        # Find the latest month with invoices
+        last_invoice = Invoice.objects.filter(total_amount__gt=0).aggregate(max_month=Max('month'))
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found", status=404)
+    else:
+        try:
+            year, mo = map(int, month_str.split('-'))
+            filter_month = date(year, mo, 1)
+        except ValueError:
+            return HttpResponse("Invalid month format", status=400)
+
+    # Get exchange rate with debugging
+    exchange_rate = get_exchange_rate()
+    print(f"DEBUG: Exchange rate from database: {exchange_rate}")
+    
+    if not exchange_rate:
+        exchange_rate = Decimal('1430.00')  # Updated fallback to current rate
+        print(f"DEBUG: Using fallback exchange rate: {exchange_rate}")
+    else:
+        print(f"DEBUG: Using database exchange rate: {exchange_rate}")
+
+    # Get all crews who have duties in this month
+    year = filter_month.year
+    month = filter_month.month
+    
+    # Get ONLY duties that earn money (have layover time and zones)
+    # Fixed: Match DISTINCT ON expressions with ORDER BY expressions
+    earning_duties = Duty.objects.filter(
+        duty_date__year=year,
+        duty_date__month=month,
+        layover_time_minutes__gt=0,  # Must have layover time
+        arrival_airport__zone__isnull=False  # Must have a zone (to earn money)
+    ).select_related(
+        'crew',
+        'departure_airport',
+        'arrival_airport',
+        'arrival_airport__zone'
+    ).order_by(
+        'crew_id', 'duty_date', 'flight_number', 'departure_airport', 'arrival_airport'
+    ).distinct(
+        'crew_id', 'duty_date', 'flight_number', 'departure_airport', 'arrival_airport'
+    )
+
+    if not earning_duties.exists():
+        return HttpResponse(f"No earning flight duties found for {filter_month.strftime('%B %Y')}", status=404)
+
+    # Get crew bank data for all crews
+    crew_ids = list(set([duty.crew.crew_id for duty in earning_duties]))
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    
+    employee_bank_data = {}
+    if wb_formatted_ids:
+        with connections['mssql'].cursor() as cursor:
+            placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+            query = f"""
+                SELECT [No_], [Bank Name], [Bank Account No]
+                FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [No_] IN ({placeholders})
+            """
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+            
+            for no_, bank_name, account_no in rows:
+                employee_bank_data[no_.strip()] = {
+                    'bank_name': bank_name.strip() if bank_name else '',
+                    'account_no': account_no.strip() if account_no else '',
+                }
+
+    # Group earning duties by crew and remove duplicates manually as well
+    crew_duties = {}
+    max_earning_flights = 0
+    
+    for duty in earning_duties:
+        crew_id = duty.crew.crew_id
+        if crew_id not in crew_duties:
+            crew_duties[crew_id] = {
+                'crew': duty.crew,
+                'duties': [],
+                'seen_flights': set()  # Track unique flights
+            }
+        
+        # Create a unique identifier for this flight
+        flight_key = (
+            duty.duty_date,
+            duty.flight_number,
+            duty.departure_airport.iata_code if duty.departure_airport else None,
+            duty.arrival_airport.iata_code if duty.arrival_airport else None
+        )
+        
+        # Only add if we haven't seen this exact flight before
+        if flight_key not in crew_duties[crew_id]['seen_flights']:
+            crew_duties[crew_id]['duties'].append(duty)
+            crew_duties[crew_id]['seen_flights'].add(flight_key)
+            
+            # Track maximum earning flights for any crew member
+            if len(crew_duties[crew_id]['duties']) > max_earning_flights:
+                max_earning_flights = len(crew_duties[crew_id]['duties'])
+
+    # Create CSV response
+    response = HttpResponse(content_type='text/csv')
+    filename = f"Crew_Earning_Flights_{filter_month.strftime('%Y-%m')}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
+    writer = csv.writer(response)
+    
+    # Write header information
+    writer.writerow([f"RwandAir Crew Earning Flights - {filter_month.strftime('%B %Y')}"])
+    writer.writerow([f"Exchange Rate: 1 USD = {exchange_rate} RWF"])
+    writer.writerow([f"Generated: {date.today().strftime('%Y-%m-%d')}"])
+    writer.writerow([f"Note: Only unique flights that earn allowance money are included"])
+    writer.writerow([])  # Empty row
+    
+    # Build dynamic headers - crew info + earning flight columns + totals
+    headers = [
+        'WB Number',
+        'First Name', 
+        'Last Name',
+        'Position',
+        # 'Bank Name',
+        # 'Account Number'
+    ]
+    
+    # Add earning flight columns (each earning flight gets its own column)
+    for i in range(1, max_earning_flights + 1):
+        headers.extend([
+            f'Flight {i} Date',
+            f'Flight {i} No',
+            f'Flight {i} Route', 
+            f'Flight {i} Layover (Hrs)',
+            f'Flight {i} Rate (USD)',
+            f'Flight {i} Amount (USD)'
+        ])
+    
+    # Add total columns
+    headers.extend([
+        'Total Earning Flights',
+        'Total Allowance USD',
+        'Total Allowance RWF', 
+        'Payment Currency'
+    ])
+    
+    writer.writerow(headers)
+    
+    # Track totals
+    grand_total_usd = Decimal('0.00')
+    total_crew_count = 0
+    
+    # Debug: Track calculations
+    debug_crew_totals = []
+    
+    # Write crew rows
+    for crew_id, crew_data in crew_duties.items():
+        crew = crew_data['crew']
+        duties = crew_data['duties']
+        
+        wb_formatted = f"WB{int(crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {'bank_name': '', 'account_no': ''})
+        
+        # Start building the row with crew info
+        row = [
+            wb_formatted,
+            crew.first_name,
+            crew.last_name,
+            crew.position or '',
+            # bank_data['bank_name'],
+            # bank_data['account_no']
+        ]
+        
+        # Calculate totals for this crew
+        total_usd = Decimal('0.00')
+        
+        # Add earning flight data columns
+        for i in range(max_earning_flights):
+            if i < len(duties):
+                duty = duties[i]
+                
+                # Calculate layover hours and amount (all these flights should earn money)
+                layover_hours = Decimal(duty.layover_time_minutes) / Decimal(60)
+                hourly_rate = duty.arrival_airport.zone.hourly_rate
+                line_amount = layover_hours * hourly_rate
+                total_usd += line_amount
+                
+                # Debug: Print first few calculations
+                if len(debug_crew_totals) < 3:
+                    print(f"DEBUG Crew {crew.crew_id}: {layover_hours:.2f}h × ${hourly_rate:.2f} = ${line_amount:.2f}")
+                
+                # Create route string
+                route = f"{duty.departure_airport.iata_code if duty.departure_airport else '---'}-{duty.arrival_airport.iata_code if duty.arrival_airport else '---'}"
+                
+                # Add flight data to row
+                row.extend([
+                    duty.duty_date.strftime('%Y-%m-%d'),
+                    duty.flight_number or 'SIM',
+                    route,
+                    f"{layover_hours:.2f}",
+                    f"{hourly_rate:.2f}",
+                    f"{line_amount:.2f}"
+                ])
+            else:
+                # Empty columns for crews with fewer earning flights
+                row.extend(['', '', '', '', '', ''])
+        
+        # Convert to RWF
+        total_rwf = total_usd * exchange_rate
+        payment_currency = 'USD' if crew.position in ['CP', 'FO'] else 'RWF'
+        
+        # Debug: Track this crew's totals
+        debug_crew_totals.append({
+            'crew_id': crew.crew_id,
+            'total_usd': total_usd,
+            'total_rwf': total_rwf
+        })
+        
+        # Print first few crew totals for debugging
+        if len(debug_crew_totals) <= 3:
+            print(f"DEBUG Crew {crew.crew_id}: Total USD = ${total_usd:.2f}, Total RWF = {total_rwf:.2f}")
+        
+        # Add totals to row
+        row.extend([
+            len(duties),  # Total earning flights
+            f"{total_usd:.2f}",
+            f"{total_rwf:.2f}",
+            payment_currency
+        ])
+        
+        writer.writerow(row)
+        
+        grand_total_usd += total_usd
+        total_crew_count += 1
+    
+    # Write summary
+    writer.writerow([])  # Empty row
+    writer.writerow(['SUMMARY'])
+    writer.writerow(['Total Crew Members with Earnings:', total_crew_count])
+    writer.writerow(['Maximum Earning Flights per Crew:', max_earning_flights])
+    
+    # Calculate final totals with explicit precision
+    final_rwf_total = grand_total_usd * exchange_rate
+    
+    # Debug what we're about to write
+    usd_value = f"{grand_total_usd:.2f}"
+    rwf_value = f"{final_rwf_total:.2f}"
+    print(f"DEBUG: About to write USD: '{usd_value}'")
+    print(f"DEBUG: About to write RWF: '{rwf_value}'")
+    
+    writer.writerow(['Grand Total USD:', usd_value])
+    writer.writerow(['Grand Total RWF:', rwf_value])
+    
+    # Debug final calculation
+    print(f"DEBUG FINAL: {grand_total_usd:.2f} USD × {exchange_rate:.2f} = {final_rwf_total:.2f} RWF")
+    
+    return response
+#End of Quality control
