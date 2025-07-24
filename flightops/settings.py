@@ -342,16 +342,6 @@ CELERY_BEAT_SCHEDULE = {
     #     'schedule': crontab(minute='*/2'),  # Every hour
     # },
 
-  
-    # Pull / refresh Crew Master (JOB1008) once a day (tune to your needs)
-     'qatar-apis-job1008-daily': {
-        'task': 'aimsintegration.tasks.fetch_job1008_store_master',
-        'schedule': crontab(minute='*/2'),
-    },
-    'qatar-apis-job97-and-generate-every-2-mins': {
-        'task': 'aimsintegration.tasks.fetch_job97_and_generate_qatar_apis',
-        'schedule': crontab(minute='*/3'),
-    },
 }
 
 CORS_ALLOWED_ORIGINS = [
