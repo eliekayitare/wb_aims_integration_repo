@@ -2075,48 +2075,83 @@ def _process_email_attachment(item, process_fn):
 # Celery tasks
 # ---------------------------------------------------------------------------
 
+from datetime import timedelta
+from django.utils import timezone
+
 @shared_task
 def fetch_job1008_store_master():
     """
-    Pull the latest JOB1008 (Crew master) mail, parse and store CrewAPISMaster.
+    Pull JOB1008 (Crew master) mails, parse and store CrewAPISMaster.
+    No dependency on settings for the subject filter.
     """
     from .tasks import get_exchange_account  # reuse your existing function
     account = get_exchange_account()
 
-    subject = getattr(settings, "QATAR_APIS_JOB1008_SUBJECT",
-                      "AIMS JOB : #1008 Feeds APIS interface")
+    SUBJECT_KEYWORDS = [
+        "AIMS JOB : #1008 Feeds APIS interface",
+        "AIMS JOB : #1008",
+        "JOB 1008",
+        "JOB1008",
+        "APIS interface",
+        "Crew APIS",
+    ]
 
-    emails = account.inbox.filter(
-        subject__contains=subject
-    ).order_by('-datetime_received')
+    since = timezone.now() - timedelta(days=30)
+    emails_qs = account.inbox.filter(datetime_received__gte=since).order_by('-datetime_received')
+
+    # Filter in Python to avoid OR-chains with exchangelib
+    emails = [
+        item for item in emails_qs
+        if item.subject and any(k.lower() in item.subject.lower() for k in SUBJECT_KEYWORDS)
+    ]
 
     if not emails:
-        logger.info("No JOB1008 email found.")
+        logger.info("No JOB1008 email found (matched subjects in last 30 days).")
         return "No JOB1008"
 
-    email = emails[0]
-    inserted = _process_email_attachment(email, _parse_job1008_attachment) or 0
-    logger.info(f"JOB1008 processed. Inserted/Updated rows: {inserted}")
-    return f"JOB1008 rows: {inserted}"
+    inserted_total = 0
+    for email in emails:
+        inserted = _process_email_attachment(email, _parse_job1008_attachment) or 0
+        inserted_total += inserted
 
+    logger.info(f"JOB1008 processed. Inserted/Updated rows: {inserted_total}")
+    return f"JOB1008 rows: {inserted_total}"
+
+
+
+from datetime import timedelta
+from django.utils import timezone
 
 @shared_task
 def fetch_job97_and_generate_qatar_apis():
     """
-    Poll JOB97 mails (DOH-KGL or KGL-DOH in subject/body), insert Job97Record rows,
-    then for each flight, build the EDIFACT APIS message using CrewAPISMaster
-    and flight STD/STA from FlightData.
-    Save files to MEDIA_ROOT/qatar_apis with the requested name format.
+    Poll JOB97 mails (subjects usually contain DOH KGL or KGL DOH),
+    insert Job97Record rows, then for each flight build and SAVE (not send)
+    the EDIFACT APIS message.
     """
     from .tasks import get_exchange_account
     account = get_exchange_account()
 
-    keyword = getattr(settings, "QATAR_APIS_JOB97_SUBJECT_KEYWORD", "JOB 97")
+    # Subjects you've said you see for JOB 97
+    SUBJECT_KEYWORDS = [
+        "DOH KGL",
+        "KGL DOH",
+        "DOH-KGL",
+        "KGL-DOH",
+        "JOB 97",      # keep as fallback
+        "JOB97",       # just in case
+        "GD ",         # the GD extract sometimes
+    ]
 
-    # 1) Parse new JOB97 mails
-    emails = account.inbox.filter(
-        subject__icontains=keyword
-    ).order_by('-datetime_received')
+    # Limit the window we scan (optional, remove if you want *all* emails)
+    since = timezone.now() - timedelta(days=7)
+    emails_qs = account.inbox.filter(datetime_received__gte=since).order_by('-datetime_received')
+
+    # Filter in Python to avoid OR gymnastics on exchangelib filters
+    emails = [
+        item for item in emails_qs
+        if item.subject and any(k.lower() in item.subject.lower() for k in SUBJECT_KEYWORDS)
+    ]
 
     total_rows = 0
     for email in emails:
@@ -2147,12 +2182,13 @@ def fetch_job97_and_generate_qatar_apis():
                 )
                 total_rows += 1
 
-    logger.info(f"Inserted/updated {total_rows} JOB97 rows")
+    logger.info(f"Inserted/updated {total_rows} JOB97 rows (subjects matched: {len(emails)})")
 
     # 2) Group by flight to generate EDIFACT
     _generate_qatar_apis_messages()
 
     return f"Processed JOB97 rows: {total_rows}"
+
 
 
 def _generate_qatar_apis_messages():
