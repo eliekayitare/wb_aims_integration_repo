@@ -184,43 +184,6 @@ class CrewMember(models.Model):
         ]
 
 
-# Tableau Project models
-
-
-# class TableauData(models.Model):
-#     operation_day = models.DateField(null=False, blank=False)
-#     departure_station = models.CharField(max_length=100, null=False, blank=False)
-#     flight_no = models.CharField(max_length=100, null=False, blank=False)
-#     flight_leg_code = models.CharField(max_length=100, null=False, blank=False)
-#     cancelled_deleted = models.BooleanField(default=0)
-#     arrival_station = models.CharField(max_length=100, null=False, blank=False)
-#     aircraft_reg_id = models.CharField(max_length=100, null=True, blank=True)
-#     aircraft_type_index = models.CharField(max_length=100, null=True, blank=True)
-#     aircraft_category = models.CharField(max_length=100, null=True, blank=True)
-#     flight_service_type = models.CharField(max_length=100, null=True, blank=True)
-#     std = models.TimeField(null=True, blank=True)
-#     sta = models.TimeField(null=True, blank=True)
-#     original_operation_day = models.DateField(null=True, blank=True)
-#     original_std = models.TimeField(null=True, blank=True)
-#     original_sta = models.TimeField(null=True, blank=True)
-#     departure_delay_time = models.IntegerField(null=True, blank=True)  # Removed max_length
-#     delay_code_kind = models.CharField(max_length=100, null=True, blank=True)
-#     delay_number = models.CharField(max_length=100, null=True, blank=True)
-#     aircraft_config = models.CharField(max_length=100, null=True, blank=True)
-#     seat_type_config = models.CharField(max_length=100, null=True, blank=True)
-#     atd = models.TimeField(null=True, blank=True)
-#     takeoff = models.TimeField(null=True, blank=True)
-#     touchdown = models.TimeField(null=True, blank=True)
-#     ata = models.TimeField(null=True, blank=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     class Meta:
-#         db_table = 'tableau_data'
-#         indexes = [
-#             models.Index(fields=['updated_at']),
-#         ]
-
 
 # Tableau Project models
 
@@ -467,3 +430,179 @@ class DreamilesEmailRecord(models.Model):
         ]
 
 
+
+# aimsintegration/models.py
+
+from django.db import models
+from django.utils import timezone
+
+
+# -------------------------------------------------
+# 1) Master data coming from JOB1008 (one row / crew)
+# -------------------------------------------------
+class CrewAPISMaster(models.Model):
+    SEX_CHOICES = (('M', 'Male'), ('F', 'Female'))
+    DOC_TYPES = (('P', 'Passport'),)  # extend if needed
+
+    crew_id = models.CharField(max_length=20, unique=True, db_index=True)
+
+    # Identity
+    surname = models.CharField(max_length=100)
+    given_name = models.CharField(max_length=100, blank=True, null=True)
+    middle_name = models.CharField(max_length=100, blank=True, null=True)
+
+    sex = models.CharField(max_length=1, choices=SEX_CHOICES)
+    birth_date = models.DateField()
+    birth_country = models.CharField(max_length=3)          # ISO alpha‑3
+
+    nationality = models.CharField(max_length=3)            # ISO alpha‑3
+
+    # Document
+    document_type = models.CharField(max_length=1, choices=DOC_TYPES, default='P')
+    passport_number = models.CharField(max_length=32, db_index=True)
+    issuing_state = models.CharField(max_length=3)          # ISO alpha‑3
+    passport_issue_date = models.DateField(blank=True, null=True)
+    passport_expiry_date = models.DateField()
+
+    # Book-keeping
+    source_job = models.CharField(max_length=16, default='1008')
+    raw_content = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'crew_apis_master'
+        indexes = [
+            models.Index(fields=['crew_id']),
+            models.Index(fields=['passport_number']),
+        ]
+
+    def __str__(self):
+        return f"{self.crew_id} - {self.surname} {self.given_name or ''}".strip()
+
+
+# --------------------------------------------------------------------
+# 2) Raw JOB97 rows (so you can re-process / audit exactly what came)
+#    One row per crew member per flight leg appearing in JOB97 email.
+# --------------------------------------------------------------------
+class Job97Record(models.Model):
+    DIRECTION_CHOICES = (('I', 'Inbound'), ('O', 'Outbound'))
+    TYPE_CHOICES = (('C', 'Crew'),)
+
+    email_message_id = models.CharField(max_length=128, db_index=True)  # exchangelib item.id (or similar)
+    received_at = models.DateTimeField(default=timezone.now)
+
+    # High level
+    rec_type = models.CharField(max_length=1, choices=TYPE_CHOICES, default='C')
+    direction = models.CharField(max_length=1, choices=DIRECTION_CHOICES)
+
+    # Flight
+    flight_no = models.CharField(max_length=8)
+    dep_port = models.CharField(max_length=3)
+    arr_port = models.CharField(max_length=3)
+    dep_date = models.DateField()
+    dep_time = models.TimeField()
+    arr_date = models.DateField()
+    arr_time = models.TimeField()
+
+    # Crew link (used to join to CrewAPISMaster)
+    crew_id = models.CharField(max_length=20, db_index=True)
+
+    # Minimal bio fields that JOB97 supplies (so you can compare with 1008)
+    birth_date = models.DateField(blank=True, null=True)
+    sex = models.CharField(max_length=1, blank=True, null=True)
+    nationality = models.CharField(max_length=3, blank=True, null=True)
+
+    raw_line = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'job97_record'
+        indexes = [
+            models.Index(fields=['flight_no', 'dep_date', 'dep_port', 'arr_port']),
+            models.Index(fields=['crew_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.flight_no} {self.dep_port}-{self.arr_port} {self.dep_date} {self.crew_id}"
+
+
+# -------------------------------------------------------------------
+# 3) A generated APIS (EDIFACT PAXLST) message header + file reference
+# -------------------------------------------------------------------
+class QatarAPISMessage(models.Model):
+    STATUS_CHOICES = (
+        ('generated', 'Generated'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    )
+    DIRECTION_CHOICES = (('I', 'Inbound'), ('O', 'Outbound'))
+
+    # Interchange / message ids (so you can reproduce the envelope)
+    interchange_ref = models.CharField(max_length=20, db_index=True)
+    group_ref = models.CharField(max_length=20)
+    message_ref = models.CharField(max_length=20)
+
+    # Flight-level info
+    direction = models.CharField(max_length=1, choices=DIRECTION_CHOICES)
+    flight_no = models.CharField(max_length=8)
+    dep_port = models.CharField(max_length=3)
+    arr_port = models.CharField(max_length=3)
+    std_utc = models.DateTimeField()
+    sta_utc = models.DateTimeField()
+
+    # Counts
+    persons_count = models.PositiveIntegerField()
+
+    # Output
+    file_path = models.CharField(max_length=512)
+    raw_message = models.TextField()  # whole EDIFACT for audit
+
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='generated')
+    error_message = models.TextField(blank=True, null=True)
+
+    generated_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'qatar_apis_message'
+        indexes = [
+            models.Index(fields=['flight_no', 'std_utc']),
+            models.Index(fields=['interchange_ref']),
+            models.Index(fields=['direction', 'dep_port', 'arr_port', 'std_utc']),
+        ]
+
+    def __str__(self):
+        return f"{self.flight_no} {self.dep_port}-{self.arr_port} {self.std_utc.date()} [{self.direction}]"
+
+
+# -------------------------------------------------------------------------
+# 4) Snapshot of each person included in the APIS message (for full audit)
+# -------------------------------------------------------------------------
+class QatarAPISMessagePerson(models.Model):
+    message = models.ForeignKey(QatarAPISMessage, on_delete=models.CASCADE, related_name='people')
+    crew_id = models.CharField(max_length=20, db_index=True)
+
+    surname = models.CharField(max_length=100)
+    given_name = models.CharField(max_length=100, blank=True, null=True)
+    sex = models.CharField(max_length=1)
+    birth_date = models.DateField()
+    nationality = models.CharField(max_length=3)
+    document_type = models.CharField(max_length=1, default='P')
+    passport_number = models.CharField(max_length=32)
+    issuing_state = models.CharField(max_length=3)
+    passport_expiry_date = models.DateField()
+    birth_country = models.CharField(max_length=3, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'qatar_apis_message_person'
+        indexes = [
+            models.Index(fields=['crew_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.crew_id} - {self.surname} {self.given_name or ''}"
