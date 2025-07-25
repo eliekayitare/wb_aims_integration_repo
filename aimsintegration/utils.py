@@ -2056,3 +2056,381 @@ def process_tableau_data_email_attachment(item, process_function):
 
 
 
+
+
+#=================================================================================
+
+# QATAR APIS UTILS 
+
+#==================================================================================
+
+
+# Add these utility functions to your utils.py file
+
+import re
+import csv
+import os
+from datetime import datetime
+from django.conf import settings
+from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
+
+logger = logging.getLogger(__name__)
+
+
+def parse_job97_subject(subject):
+    """
+    Parse JOB 97 subject to extract flight details
+    Format: 300/KGL DOH/25072025 or 301/DOH KGL/24072025
+    Returns: (flight_no, origin, destination, flight_date)
+    """
+    try:
+        # Remove extra spaces and normalize
+        subject = subject.strip()
+        
+        # Pattern to match: flight_no/origin destination/date
+        pattern = r'(\d+)/([A-Z]{3})\s+([A-Z]{3})/(\d{8})'
+        match = re.search(pattern, subject)
+        
+        if match:
+            flight_no = match.group(1)
+            origin = match.group(2)
+            destination = match.group(3)
+            date_str = match.group(4)
+            
+            # Parse date from DDMMYYYY format
+            flight_date = datetime.strptime(date_str, "%d%m%Y").date()
+            
+            return flight_no, origin, destination, flight_date
+        else:
+            logger.error(f"Could not parse JOB 97 subject: {subject}")
+            return None, None, None, None
+            
+    except Exception as e:
+        logger.error(f"Error parsing JOB 97 subject '{subject}': {e}")
+        return None, None, None, None
+
+
+def process_job97_file(attachment):
+    """
+    Process JOB 97 file containing basic crew information
+    """
+    try:
+        # Parse the subject to get flight details
+        subject = attachment.parent_item.subject if hasattr(attachment, 'parent_item') else ""
+        flight_no, origin, destination, flight_date = parse_job97_subject(subject)
+        
+        if not all([flight_no, origin, destination, flight_date]):
+            logger.error(f"Could not extract flight details from subject: {subject}")
+            return
+        
+        # Check if this is a DOHA-KGL or KGL-DOHA flight
+        if not ((origin == 'DOH' and destination == 'KGL') or (origin == 'KGL' and destination == 'DOH')):
+            logger.info(f"Skipping flight {flight_no} - not a DOH-KGL or KGL-DOH route")
+            return
+            
+        content = attachment.content.decode('utf-8').splitlines()
+        logger.info(f"Processing JOB 97 for flight {flight_no} from {origin} to {destination} on {flight_date}")
+        
+        for line_num, line in enumerate(content, start=1):
+            try:
+                # Skip empty lines or headers
+                if not line.strip():
+                    continue
+                    
+                # Parse the line - adjust field positions based on your actual file format
+                fields = line.split()
+                if len(fields) < 10:  # Ensure minimum required fields
+                    continue
+                
+                # Extract fields (adjust indices based on actual file format)
+                crew_id = fields[0]
+                passport_number = fields[1]
+                # Skip name fields as they'll come from JOB 1008
+                position = fields[2]  # PS field
+                birth_date_str = fields[3]
+                gender = fields[4]
+                nationality_code = fields[5]
+                tail_no = fields[6] if len(fields) > 6 else None
+                
+                # Parse birth date
+                try:
+                    birth_date = datetime.strptime(birth_date_str, "%d/%m/%Y").date()
+                except ValueError:
+                    try:
+                        birth_date = datetime.strptime(birth_date_str, "%d%m%Y").date()
+                    except ValueError:
+                        logger.error(f"Invalid birth date format: {birth_date_str}")
+                        continue
+                
+                # Create or update record
+                QatarCrewBasic.objects.update_or_create(
+                    flight_no=flight_no,
+                    flight_date=flight_date,
+                    origin=origin,
+                    destination=destination,
+                    crew_id=crew_id,
+                    defaults={
+                        'tail_no': tail_no,
+                        'position': position,
+                        'passport_number': passport_number,
+                        'birth_date': birth_date,
+                        'gender': gender,
+                        'nationality_code': nationality_code,
+                    }
+                )
+                
+                logger.info(f"Processed crew record: {crew_id} for flight {flight_no}")
+                
+            except Exception as e:
+                logger.error(f"Error processing line {line_num} in JOB 97: {e} - Line: {line}")
+                continue
+                
+        logger.info(f"JOB 97 processing completed for flight {flight_no}")
+        
+    except Exception as e:
+        logger.error(f"Error processing JOB 97 file: {e}")
+
+
+def process_job1008_file(attachment):
+    """
+    Process JOB 1008 file containing detailed crew passport information
+    """
+    try:
+        content = attachment.content.decode('utf-8').splitlines()
+        logger.info("Processing JOB 1008 - Detailed crew passport information")
+        
+        for line_num, line in enumerate(content, start=1):
+            try:
+                # Skip empty lines or headers
+                if not line.strip():
+                    continue
+                
+                # Parse CSV format - adjust based on actual file format
+                fields = [field.strip() for field in line.split(',')]
+                if len(fields) < 8:  # Ensure minimum required fields
+                    continue
+                
+                # Extract fields (adjust indices based on actual file format)
+                crew_id = fields[0]
+                passport_number = fields[1]
+                surname = fields[2]
+                given_name = fields[3]
+                middle_name = fields[4] if len(fields) > 4 and fields[4] else None
+                nationality = fields[5]
+                issuing_date_str = fields[6] if len(fields) > 6 and fields[6] else None
+                issuing_state = fields[7]
+                nationality_country_code = fields[8] if len(fields) > 8 else nationality[:3]
+                
+                # Parse issuing date if provided
+                passport_issuing_date = None
+                if issuing_date_str:
+                    try:
+                        passport_issuing_date = datetime.strptime(issuing_date_str, "%d/%m/%Y").date()
+                    except ValueError:
+                        try:
+                            passport_issuing_date = datetime.strptime(issuing_date_str, "%d%m%Y").date()
+                        except ValueError:
+                            logger.warning(f"Invalid passport issuing date: {issuing_date_str}")
+                
+                # Create or update record
+                QatarCrewDetailed.objects.update_or_create(
+                    crew_id=crew_id,
+                    passport_number=passport_number,
+                    defaults={
+                        'surname': surname,
+                        'given_name': given_name,
+                        'middle_name': middle_name,
+                        'nationality': nationality,
+                        'passport_issuing_date': passport_issuing_date,
+                        'passport_issuing_state': issuing_state,
+                        'nationality_country_code': nationality_country_code,
+                    }
+                )
+                
+                logger.info(f"Processed detailed crew record: {crew_id} - {given_name} {surname}")
+                
+            except Exception as e:
+                logger.error(f"Error processing line {line_num} in JOB 1008: {e} - Line: {line}")
+                continue
+                
+        logger.info("JOB 1008 processing completed")
+        
+    except Exception as e:
+        logger.error(f"Error processing JOB 1008 file: {e}")
+
+
+def generate_qatar_apis_file():
+    """
+    Generate Qatar APIS file by combining data from all sources
+    """
+    try:
+        # Create output directory
+        output_dir = os.path.join(settings.MEDIA_ROOT, "qatar_apis")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"QATAR_APIS_{timestamp}.txt"
+        file_path = os.path.join(output_dir, filename)
+        
+        # Get all basic crew records for DOH-KGL and KGL-DOH flights
+        basic_crew_records = QatarCrewBasic.objects.filter(
+            models.Q(origin='DOH', destination='KGL') | 
+            models.Q(origin='KGL', destination='DOH')
+        ).select_related()
+        
+        apis_records = []
+        processed_count = 0
+        missing_details_count = 0
+        
+        for basic_record in basic_crew_records:
+            try:
+                # Get detailed information for this crew member
+                detailed_record = QatarCrewDetailed.objects.filter(
+                    crew_id=basic_record.crew_id,
+                    passport_number=basic_record.passport_number
+                ).first()
+                
+                if not detailed_record:
+                    logger.warning(f"No detailed record found for crew {basic_record.crew_id}")
+                    missing_details_count += 1
+                    continue
+                
+                # Get flight schedule information for timing
+                flight_data = FlightData.objects.filter(
+                    flight_no=basic_record.flight_no,
+                    sd_date_utc=basic_record.flight_date,
+                    dep_code_icao=basic_record.origin,
+                    arr_code_icao=basic_record.destination
+                ).first()
+                
+                if not flight_data:
+                    logger.warning(f"No flight schedule found for {basic_record.flight_no} on {basic_record.flight_date}")
+                    continue
+                
+                # Determine direction
+                direction = 'O' if basic_record.origin == 'KGL' else 'I'  # Outbound from KGL, Inbound to KGL
+                
+                # Calculate document expiry (assuming 10 years from issue date if available)
+                document_expiry = None
+                if detailed_record.passport_issuing_date:
+                    document_expiry = detailed_record.passport_issuing_date.replace(
+                        year=detailed_record.passport_issuing_date.year + 10
+                    )
+                else:
+                    # Default to a future date if no issue date available
+                    document_expiry = datetime(2030, 12, 31).date()
+                
+                # Create APIS record
+                apis_record = QatarApisRecord.objects.update_or_create(
+                    flight_no=basic_record.flight_no,
+                    dep_date=basic_record.flight_date,
+                    crew_id=basic_record.crew_id,
+                    direction=direction,
+                    defaults={
+                        'dep_port': basic_record.origin,
+                        'dep_time': flight_data.std_utc or datetime.time(12, 0),  # Default time if not available
+                        'arr_port': basic_record.destination,
+                        'arr_date': flight_data.sa_date_utc or basic_record.flight_date,
+                        'arr_time': flight_data.sta_utc or datetime.time(14, 0),  # Default time if not available
+                        'document_number': basic_record.passport_number,
+                        'nationality': detailed_record.nationality_country_code,
+                        'document_type': 'P',  # Passport
+                        'issuing_state': detailed_record.passport_issuing_state,
+                        'family_name': detailed_record.surname,
+                        'given_name': detailed_record.given_name,
+                        'date_of_birth': basic_record.birth_date,
+                        'sex': basic_record.gender,
+                        'country_of_birth': basic_record.nationality_code,
+                        'document_expiry_date': document_expiry,
+                        'file_generated': filename,
+                    }
+                )[0]
+                
+                apis_records.append(apis_record)
+                processed_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing crew record {basic_record.crew_id}: {e}")
+                continue
+        
+        # Write APIS file
+        if apis_records:
+            with open(file_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                
+                # Write header
+                writer.writerow([
+                    'TYPE', 'DIRECTION', 'FLIGHT', 'DEP_PORT', 'DEP_DATE', 'DEP_TIME',
+                    'ARR_PORT', 'ARR_DATE', 'ARR_TIME', 'DOCUMENT_NUMBER', 'NATIONALITY',
+                    'DOCUMENT_TYPE', 'ISSUING_STATE', 'FAMILY_NAME', 'GIVEN_NAME',
+                    'DATE_OF_BIRTH', 'SEX', 'COUNTRY_OF_BIRTH', 'DOCUMENT_EXPIRY_DATE'
+                ])
+                
+                # Write data rows
+                for record in apis_records:
+                    writer.writerow([
+                        'C',  # Always 'C' for Crew
+                        record.direction,
+                        record.flight_no,
+                        record.dep_port,
+                        record.dep_date.strftime('%Y%m%d'),
+                        record.dep_time.strftime('%H%M'),
+                        record.arr_port,
+                        record.arr_date.strftime('%Y%m%d'),
+                        record.arr_time.strftime('%H%M'),
+                        record.document_number,
+                        record.nationality,
+                        record.document_type,
+                        record.issuing_state,
+                        record.family_name,
+                        record.given_name,
+                        record.date_of_birth.strftime('%Y%m%d'),
+                        record.sex,
+                        record.country_of_birth,
+                        record.document_expiry_date.strftime('%Y%m%d'),
+                    ])
+            
+            logger.info(f"Generated Qatar APIS file: {filename}")
+            logger.info(f"Processed {processed_count} crew records")
+            if missing_details_count > 0:
+                logger.warning(f"Missing detailed information for {missing_details_count} crew members")
+            
+            return file_path
+        else:
+            logger.warning("No APIS records to generate")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error generating Qatar APIS file: {e}")
+        return None
+
+
+def process_qatar_job97_email_attachment(item, process_function):
+    """
+    Process JOB 97 email attachments
+    """
+    try:
+        if item.attachments:
+            for attachment in item.attachments:
+                if isinstance(attachment, FileAttachment):
+                    # Store reference to parent item for subject parsing
+                    attachment.parent_item = item
+                    logger.info(f"Processing JOB 97 attachment: {attachment.name}")
+                    process_function(attachment)
+    except Exception as e:
+        logger.error(f"Error processing JOB 97 email attachment: {e}")
+
+
+def process_qatar_job1008_email_attachment(item, process_function):
+    """
+    Process JOB 1008 email attachments
+    """
+    try:
+        if item.attachments:
+            for attachment in item.attachments:
+                if isinstance(attachment, FileAttachment):
+                    logger.info(f"Processing JOB 1008 attachment: {attachment.name}")
+                    process_function(attachment)
+    except Exception as e:
+        logger.error(f"Error processing JOB 1008 email attachment: {e}")

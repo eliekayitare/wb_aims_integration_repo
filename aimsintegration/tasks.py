@@ -1786,3 +1786,238 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 
 
 
+#=================================================================================================================
+
+# QATAR APIS TASKS
+
+#=================================================================================================================
+
+from .utils import (
+    process_job97_file, 
+    process_job1008_file, 
+    generate_qatar_apis_file,
+    process_qatar_job97_email_attachment,
+    process_qatar_job1008_email_attachment
+)
+
+@shared_task
+def fetch_qatar_job97_data():
+    """
+    Fetch JOB 97 emails containing basic crew information for DOH-KGL and KGL-DOH flights
+    """
+    account = get_exchange_account()
+    logger.info("Fetching Qatar JOB 97 crew data emails...")
+
+    # Look for emails with subjects containing DOHA KGL or KGL DOHA
+    emails_doh_kgl = account.inbox.filter(
+        subject__icontains='DOH KGL'
+    ).order_by('-datetime_received')
+    
+    emails_kgl_doh = account.inbox.filter(
+        subject__icontains='KGL DOH'
+    ).order_by('-datetime_received')
+    
+    # Combine and get the most recent emails
+    all_emails = []
+    
+    # Get recent DOH-KGL emails
+    for email in emails_doh_kgl[:5]:  # Process last 5 emails
+        all_emails.append(email)
+    
+    # Get recent KGL-DOH emails  
+    for email in emails_kgl_doh[:5]:  # Process last 5 emails
+        all_emails.append(email)
+    
+    if not all_emails:
+        logger.info("No Qatar JOB 97 emails found.")
+        return {"status": "no_emails", "message": "No JOB 97 emails found"}
+    
+    processed_count = 0
+    
+    for email in all_emails:
+        try:
+            logger.info(f"Processing Qatar JOB 97 email with subject: {email.subject}")
+            process_qatar_job97_email_attachment(email, process_job97_file)
+            processed_count += 1
+        except Exception as e:
+            logger.error(f"Error processing JOB 97 email '{email.subject}': {e}")
+            continue
+    
+    logger.info(f"Processed {processed_count} Qatar JOB 97 emails")
+    
+    # After processing JOB 97, trigger JOB 1008 processing
+    fetch_qatar_job1008_data.delay()
+    
+    return {
+        "status": "success", 
+        "processed_emails": processed_count,
+        "message": f"Processed {processed_count} JOB 97 emails"
+    }
+
+
+@shared_task
+def fetch_qatar_job1008_data():
+    """
+    Fetch JOB 1008 emails containing detailed crew passport information
+    """
+    account = get_exchange_account()
+    logger.info("Fetching Qatar JOB 1008 crew passport data...")
+
+    emails = account.inbox.filter(
+        subject__contains="AIMS JOB : #1008 Feeds APIS interface + ' file attached"
+    ).order_by('-datetime_received')
+    
+    if not emails.exists():
+        logger.info("No Qatar JOB 1008 email found.")
+        return {"status": "no_emails", "message": "No JOB 1008 emails found"}
+    
+    try:
+        # Process the most recent email
+        email = emails[0]
+        logger.info(f"Processing Qatar JOB 1008 email with subject: {email.subject}")
+        process_qatar_job1008_email_attachment(email, process_job1008_file)
+        
+        # After processing both JOB 97 and JOB 1008, generate the APIS file
+        generate_qatar_apis_file_task.delay()
+        
+        return {
+            "status": "success", 
+            "message": "Processed JOB 1008 email successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing JOB 1008 email: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task
+def generate_qatar_apis_file_task():
+    """
+    Generate Qatar APIS file from processed crew data
+    """
+    try:
+        logger.info("Generating Qatar APIS file...")
+        
+        file_path = generate_qatar_apis_file()
+        
+        if file_path:
+            logger.info(f"Qatar APIS file generated successfully: {file_path}")
+            return {
+                "status": "success",
+                "file_path": file_path,
+                "message": "Qatar APIS file generated successfully"
+            }
+        else:
+            logger.warning("No Qatar APIS file generated - no data available")
+            return {
+                "status": "no_data",
+                "message": "No data available to generate APIS file"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error generating Qatar APIS file: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task 
+def process_qatar_apis_complete_workflow():
+    """
+    Complete workflow: Fetch JOB 97 -> Fetch JOB 1008 -> Generate APIS file
+    This task can be used to manually trigger the complete process
+    """
+    try:
+        logger.info("Starting complete Qatar APIS workflow...")
+        
+        # Step 1: Fetch JOB 97 data
+        result_97 = fetch_qatar_job97_data()
+        if result_97["status"] == "error":
+            return result_97
+        
+        # Step 2: Fetch JOB 1008 data (with small delay)
+        from time import sleep
+        sleep(5)  # Give some time for JOB 97 processing
+        
+        result_1008 = fetch_qatar_job1008_data()
+        if result_1008["status"] == "error":
+            return result_1008
+        
+        # Step 3: Generate APIS file (with small delay)
+        sleep(5)  # Give some time for JOB 1008 processing
+        
+        result_apis = generate_qatar_apis_file_task()
+        
+        return {
+            "status": "completed",
+            "job97_result": result_97,
+            "job1008_result": result_1008,
+            "apis_result": result_apis,
+            "message": "Complete Qatar APIS workflow finished"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in Qatar APIS complete workflow: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task
+def cleanup_old_qatar_apis_files():
+    """
+    Clean up old Qatar APIS files (older than 30 days)
+    """
+    try:
+        from datetime import timedelta
+        import os
+        
+        output_dir = os.path.join(settings.MEDIA_ROOT, "qatar_apis")
+        
+        if not os.path.exists(output_dir):
+            logger.info("Qatar APIS directory does not exist. No cleanup needed.")
+            return {"status": "skipped", "message": "Directory not found"}
+        
+        cutoff_date = datetime.now() - timedelta(days=30)
+        deleted_files = []
+        total_size_freed = 0
+        
+        for filename in os.listdir(output_dir):
+            file_path = os.path.join(output_dir, filename)
+            
+            if not os.path.isfile(file_path) or not filename.startswith("QATAR_APIS_"):
+                continue
+            
+            try:
+                file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                
+                if file_mtime < cutoff_date:
+                    file_size = os.path.getsize(file_path)
+                    os.remove(file_path)
+                    
+                    deleted_files.append({
+                        "filename": filename,
+                        "size": file_size,
+                        "date": file_mtime.strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    total_size_freed += file_size
+                    
+                    logger.info(f"Deleted old Qatar APIS file: {filename}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing file {filename}: {str(e)}")
+                continue
+        
+        if deleted_files:
+            logger.info(f"Qatar APIS cleanup completed: {len(deleted_files)} files deleted, "
+                       f"{total_size_freed:,} bytes freed")
+        else:
+            logger.info("No old Qatar APIS files found to delete")
+        
+        return {
+            "status": "success",
+            "deleted_files": len(deleted_files),
+            "total_size_freed": total_size_freed,
+            "files": deleted_files
+        }
+        
+    except Exception as e:
+        logger.error(f"Error during Qatar APIS file cleanup: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
