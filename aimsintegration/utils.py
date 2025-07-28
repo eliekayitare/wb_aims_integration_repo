@@ -2074,11 +2074,40 @@ from django.db import models
 from exchangelib import FileAttachment, Credentials, Configuration, Account
 from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
 import logging
-from aimsintegration.tasks import get_exchange_account
 
 logger = logging.getLogger(__name__)
 
 
+
+
+#Tasks for ACARS project
+
+from celery import shared_task, chain
+from exchangelib import Credentials, Account, Configuration, EWSDateTime, EWSTimeZone
+from .utils import process_email_attachment, process_airport_file, process_flight_schedule_file, process_acars_message, process_cargo_email_attachment, process_cargo_flight_schedule_file,process_fdm_email_attachment,process_fdm_flight_schedule_file,process_fdm_crew_email_attachment,process_crew_details_file,process_tableau_data_email_attachment,process_tableau_data_file
+import logging
+from django.conf import settings
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+def get_exchange_account():
+    credentials = Credentials(
+        username=settings.EXCHANGE_EMAIL_USER,
+        password=settings.EXCHANGE_EMAIL_PASSWORD
+    )
+    config = Configuration(
+        server=settings.EXCHANGE_EMAIL_SERVER,
+        credentials=credentials
+    )
+    account = Account(
+        primary_smtp_address=settings.EXCHANGE_EMAIL_USER,
+        credentials=credentials,
+        autodiscover=False,
+        config=config,
+        access_type='delegate'
+    )
+    return account
 
 
 def parse_job97_subject(subject: str):
