@@ -2063,9 +2063,7 @@ def process_tableau_data_email_attachment(item, process_function):
 # QATAR APIS UTILS 
 
 #==================================================================================
-#=================================================================================
-# QATAR APIS UTILS - UPDATED VERSION FOR RWANDAIR TO DOHA (3-LETTER CODES)
-#==================================================================================
+
 
 import re
 import csv
@@ -2270,15 +2268,16 @@ def process_job97_file(attachment):
         logger.info(f"File has {len(lines)} lines, {len(content)} characters")
         
         # Debug: Show first few lines to understand format
-        logger.info("First 5 lines of file:")
-        for i, line in enumerate(lines[:5]):
+        logger.info("First 10 lines of file:")
+        for i, line in enumerate(lines[:10]):
             logger.info(f"  Line {i+1}: {repr(line)}")
         
         # Analyze file format
         is_csv_format = ',' in content and content.count(',') > len(lines)
         is_tab_separated = '\t' in content
+        has_pipes = '|' in content
         
-        logger.info(f"File format detected: {'CSV' if is_csv_format else 'Tab-separated' if is_tab_separated else 'Space-separated or Fixed-width'}")
+        logger.info(f"File format detected: {'CSV' if is_csv_format else 'Tab-separated' if is_tab_separated else 'Pipe-separated' if has_pipes else 'Space-separated or Fixed-width'}")
         
         processed_crew_count = 0
         
@@ -2294,11 +2293,14 @@ def process_job97_file(attachment):
                     'FLIGHT', 'CREW', 'NAME', 'PASSPORT', 'ID', 'NO', 'TYPE', 
                     'GENERAL DECLARATION', 'STAFF', 'EMPLOYEE', 'POSITION', 
                     'BIRTH', 'GENDER', 'NATIONALITY', 'DATE', 'SURNAME', 'FIRSTNAME',
-                    'DOCUMENT', 'NUMBER', 'EXPIRY', 'ISSUING'
+                    'DOCUMENT', 'NUMBER', 'EXPIRY', 'ISSUING', 'DEPARTURE', 'ARRIVAL',
+                    'APPENDIX', 'OFFICIAL', 'DECLARATION', 'DELETE', 'AUTHORIZED'
                 ]
                 
-                if any(keyword in line_upper for keyword in header_keywords):
-                    logger.info(f"Skipping header line {line_num}: {line[:50]}...")
+                # Skip lines that are mostly header keywords
+                keyword_count = sum(1 for keyword in header_keywords if keyword in line_upper)
+                if keyword_count >= 2 or len(line.strip()) < 10:
+                    logger.info(f"Skipping header/short line {line_num}: {line[:50]}...")
                     continue
                 
                 # Parse based on detected format
@@ -2306,6 +2308,8 @@ def process_job97_file(attachment):
                     fields = [field.strip().strip('"') for field in line.split(',')]
                 elif is_tab_separated:
                     fields = [field.strip() for field in line.split('\t')]
+                elif has_pipes:
+                    fields = [field.strip() for field in line.split('|')]
                 else:
                     # Space-separated or fixed-width - handle multiple spaces
                     fields = [field for field in line.split() if field.strip()]
@@ -2326,43 +2330,52 @@ def process_job97_file(attachment):
                 surname = None
                 given_name = None
                 
-                # Enhanced field detection with multiple strategies
+                # Enhanced field detection with multiple strategies - IMPROVED
                 for i, field in enumerate(fields):
                     field = field.strip()
                     if not field or field == '-' or field.lower() == 'null':
                         continue
                     
-                    # Strategy 1: Crew ID - look for patterns like staff numbers
+                    # Skip obvious header/label words
+                    if field.upper() in ['FLIGHT', 'CREW', 'NAME', 'PASSPORT', 'ID', 'DEPARTURE', 'ARRIVAL', 'DECLARATION', 'OFFICIAL', 'APPENDIX', 'DELETE', 'AUTHORIZED', 'FOLLOWING', 'IMPAIRED', 'BLEEDING', 'LIKELIHOOD', 'DISEMBARKED', 'RECENT', 'COURIER', 'COLUMN', 'AND']:
+                        continue
+                    
+                    # Strategy 1: Crew ID - look for patterns like staff numbers (more specific)
                     if not crew_id and (
-                        (field.isdigit() and len(field) >= 3) or 
-                        (field.isalnum() and any(c.isdigit() for c in field) and len(field) >= 3)
+                        (field.isdigit() and 3 <= len(field) <= 8) or  # Pure numbers 3-8 digits
+                        (field.startswith(('EMP', 'STF', 'CR', 'ID')) and len(field) >= 4)  # Employee IDs
                     ):
                         crew_id = field
                         logger.debug(f"  Found crew_id: {crew_id}")
                     
-                    # Strategy 2: Passport number - various formats
+                    # Strategy 2: Passport number - more specific patterns
                     elif not passport_number and (
-                        (field.startswith(('PC', 'PP', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')) and len(field) >= 6 and field.isalnum()) or
-                        (len(field) >= 8 and field.isalnum())  # Generic alphanumeric passport
+                        (field.startswith(('PC', 'PP', 'RP')) and len(field) >= 6 and field[2:].isalnum()) or  # Rwanda passports
+                        (len(field) >= 8 and field.isalnum() and any(c.isdigit() for c in field) and any(c.isalpha() for c in field))  # Mixed alphanumeric
                     ):
                         passport_number = field
                         logger.debug(f"  Found passport: {passport_number}")
                     
-                    # Strategy 3: Crew position codes
+                    # Strategy 3: Crew position codes (more specific)
                     elif not position and field.upper() in [
-                        'CP', 'FO', 'FP', 'SA', 'FA', 'AC', 'FE', 'CC', 'PIC', 'SIC', 
-                        'CAPTAIN', 'PILOT', 'CREW', 'ATTENDANT', 'CR'
+                        'CP', 'FO', 'FP', 'SA', 'FA', 'AC', 'FE', 'CC', 'PIC', 'SIC', 'CAPT', 'PILOT'
                     ]:
-                        position = field.upper()[:10]  # Limit length
+                        position = field.upper()[:10]
                         logger.debug(f"  Found position: {position}")
                     
-                    # Strategy 4: Gender
-                    elif not gender and field.upper() in ['M', 'F', 'MALE', 'FEMALE']:
+                    # Strategy 4: Gender - be more specific
+                    elif not gender and len(field) == 1 and field.upper() in ['M', 'F']:
+                        gender = field.upper()
+                        logger.debug(f"  Found gender: {gender}")
+                    elif not gender and field.upper() in ['MALE', 'FEMALE']:
                         gender = field.upper()[:1]
                         logger.debug(f"  Found gender: {gender}")
                     
-                    # Strategy 5: Date parsing (birth date)
-                    elif not birth_date and ('/' in field or (field.isdigit() and len(field) == 8)):
+                    # Strategy 5: Date parsing (birth date) - more specific
+                    elif not birth_date and (
+                        ('/' in field and len(field) >= 8) or 
+                        (field.isdigit() and len(field) == 8)
+                    ):
                         try:
                             if '/' in field:
                                 # Try different date formats
@@ -2391,30 +2404,40 @@ def process_job97_file(attachment):
                             pass
                     
                     # Strategy 6: Nationality/Country code
-                    elif not nationality_code and len(field) == 3 and field.isalpha():
+                    elif not nationality_code and len(field) == 3 and field.isalpha() and field.upper() in ['RWA', 'UGA', 'KEN', 'TZA', 'BDI', 'COD']:
                         nationality_code = field.upper()
                         logger.debug(f"  Found nationality: {nationality_code}")
                     
-                    # Strategy 7: Names (if they contain only letters and some punctuation)
-                    elif field.replace(' ', '').replace('-', '').replace("'", '').replace('.', '').isalpha():
-                        if not surname and len(field) > 1:
+                    # Strategy 7: Names - must be actual names (not random words)
+                    elif field.replace(' ', '').replace('-', '').replace("'", '').replace('.', '').isalpha() and len(field) >= 3:
+                        # Check if it looks like a real name (common Rwandan surnames)
+                        common_rwandan_names = [
+                            'UWIMANA', 'BIZIMANA', 'HABIMANA', 'NKURUNZIZA', 'NSENGIMANA', 
+                            'MUKAMANA', 'UWINEZA', 'RWIGEMA', 'KANYAMANZA', 'NTAWUKURIRYAYO',
+                            'MUNYAKAZI', 'NZEYIMANA', 'KAMBANDA', 'KAYITESI', 'UWAYEZU',
+                            'MUKARUGWIZA', 'NSABIMANA', 'MUHOZA', 'TUYISENGE', 'UWIZEYE',
+                            'MURAYA', 'KAMANZI', 'MURUNGI', 'BISANGWA', 'MUTONI', 'NKUBANA',
+                            'KALISA', 'KANENE', 'MUGISHA'
+                        ]
+                        
+                        if not surname and (any(name in field.upper() for name in common_rwandan_names) or len(field) >= 4):
                             surname = field.upper()
                             logger.debug(f"  Found surname: {surname}")
-                        elif not given_name and len(field) > 1 and field != surname:
+                        elif not given_name and field != surname and len(field) >= 3:
                             given_name = field.upper()
                             logger.debug(f"  Found given_name: {given_name}")
                 
                 # Fallback: Try positional parsing if we're missing critical fields
-                if (not crew_id or not passport_number) and len(fields) >= 2:
+                if (not crew_id or not passport_number) and len(fields) >= 3:
                     logger.debug(f"  Attempting positional parsing for line {line_num}")
                     
-                    # Try to identify crew_id and passport in first few positions
-                    for i, field in enumerate(fields[:5]):
+                    # Look for the most likely crew_id and passport in first positions
+                    for i, field in enumerate(fields[:6]):
                         field = field.strip()
-                        if not field:
+                        if not field or field.upper() in ['FLIGHT', 'CREW', 'NAME', 'PASSPORT', 'ID', 'DEPARTURE']:
                             continue
                             
-                        # First numeric or alphanumeric field could be crew_id
+                        # First reasonable field could be crew_id
                         if not crew_id and (field.isdigit() or (field.isalnum() and len(field) >= 3)):
                             crew_id = field
                             logger.debug(f"  Positional crew_id: {crew_id}")
@@ -2423,13 +2446,14 @@ def process_job97_file(attachment):
                             passport_number = field
                             logger.debug(f"  Positional passport: {passport_number}")
                 
-                # Generate crew_id if still missing
-                if not crew_id:
+                # Final validation and defaults
+                if not crew_id or crew_id.upper() in ['FLIGHT', 'CREW', 'NAME', 'PASSPORT']:
                     crew_id = f"CREW_{line_num:03d}"
                     logger.warning(f"  Generated crew_id: {crew_id} for line {line_num}")
                     
-                if not passport_number:
-                    logger.warning(f"  No passport number found for line {line_num}, skipping")
+                # Skip if passport is obviously wrong
+                if not passport_number or passport_number.upper() in ['DISEMBARKED', 'RECENT', 'COURIER', 'APPENDIX', 'COLUMN', 'DEPARTURE', 'ARRIVAL', 'DECLARATION']:
+                    logger.warning(f"  Invalid passport number '{passport_number}' for line {line_num}, skipping")
                     continue
                     
                 # Set defaults for missing fields
