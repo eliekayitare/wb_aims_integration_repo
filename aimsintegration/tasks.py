@@ -1804,58 +1804,84 @@ from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightDa
 from django.db import models
 
 @shared_task
-def fetch_qatar_job97_data():
+def fetch_qatar_job97_data_recent():
     """
-    Fetch JOB 97 emails containing basic crew information for DOH-KGL and KGL-DOH flights
+    Fetch recent JOB 97 emails (last 30 days) containing basic crew information for DOH-KGL and KGL-DOH flights
     """
+    from datetime import datetime, timedelta
+    
     account = get_exchange_account()
-    logger.info("Fetching Qatar JOB 97 crew data emails...")
+    logger.info("Fetching recent Qatar JOB 97 crew data emails...")
 
-    # Look for emails with subjects containing DOHA KGL or KGL DOHA
-    emails_doh_kgl = account.inbox.filter(
-        subject__icontains='DOH KGL'
-    ).order_by('-datetime_received')
-    
-    emails_kgl_doh = account.inbox.filter(
-        subject__icontains='KGL DOH'
-    ).order_by('-datetime_received')
-    
-    # Combine and get the most recent emails
-    all_emails = []
-    
-    # Get recent DOH-KGL emails
-    for email in emails_doh_kgl[:5]:  # Process last 5 emails
-        all_emails.append(email)
-    
-    # Get recent KGL-DOH emails  
-    for email in emails_kgl_doh[:5]:  # Process last 5 emails
-        all_emails.append(email)
-    
-    if not all_emails:
-        logger.info("No Qatar JOB 97 emails found.")
-        return {"status": "no_emails", "message": "No JOB 97 emails found"}
-    
-    processed_count = 0
-    
-    for email in all_emails:
-        try:
-            logger.info(f"Processing Qatar JOB 97 email with subject: {email.subject}")
-            process_qatar_job97_email_attachment(email, process_job97_file)
-            processed_count += 1
-        except Exception as e:
-            logger.error(f"Error processing JOB 97 email '{email.subject}': {e}")
-            continue
-    
-    logger.info(f"Processed {processed_count} Qatar JOB 97 emails")
-    
-    # After processing JOB 97, trigger JOB 1008 processing
-    fetch_qatar_job1008_data.delay()
-    
-    return {
-        "status": "success", 
-        "processed_emails": processed_count,
-        "message": f"Processed {processed_count} JOB 97 emails"
-    }
+    try:
+        # Get emails from the last 30 days
+        start_date = datetime.now() - timedelta(days=30)
+        
+        # Get recent emails
+        recent_emails = list(account.inbox.filter(
+            datetime_received__gte=start_date
+        ).order_by('-datetime_received'))
+        
+        logger.info(f"Found {len(recent_emails)} emails in the last 30 days")
+        
+        # Filter for JOB 97 emails
+        job97_emails = []
+        
+        for email in recent_emails:
+            subject_upper = email.subject.upper() if email.subject else ""
+            if ('DOH' in subject_upper and 'KGL' in subject_upper):
+                job97_emails.append(email)
+        
+        logger.info(f"Found {len(job97_emails)} JOB 97 emails for DOH-KGL route")
+        
+        if not job97_emails:
+            logger.info("No Qatar JOB 97 emails found in the last 30 days.")
+            return {"status": "no_emails", "message": "No recent JOB 97 emails found"}
+        
+        processed_count = 0
+        errors = []
+        
+        # Process up to 10 most recent emails
+        for email in job97_emails[:10]:
+            try:
+                logger.info(f"Processing Qatar JOB 97 email with subject: {email.subject}")
+                logger.info(f"Email date: {email.datetime_received}")
+                
+                # Check if email has attachments
+                if hasattr(email, 'attachments') and email.attachments:
+                    attachment_count = len(list(email.attachments))
+                    logger.info(f"Email has {attachment_count} attachment(s)")
+                    process_qatar_job97_email_attachment(email, process_job97_file)
+                    processed_count += 1
+                else:
+                    logger.warning(f"Email '{email.subject}' has no attachments")
+                    
+            except Exception as e:
+                error_msg = f"Error processing JOB 97 email '{email.subject}': {e}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+                continue
+        
+        logger.info(f"Processed {processed_count} Qatar JOB 97 emails")
+        
+        # After processing JOB 97, trigger JOB 1008 processing
+        if processed_count > 0:
+            fetch_qatar_job1008_data.delay()
+        
+        return {
+            "status": "success", 
+            "processed_emails": processed_count,
+            "total_found": len(job97_emails),
+            "errors": errors,
+            "message": f"Processed {processed_count} JOB 97 emails"
+        }
+        
+    except Exception as e:
+        logger.error(f"Fatal error in fetch_qatar_job97_data_recent: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 @shared_task
