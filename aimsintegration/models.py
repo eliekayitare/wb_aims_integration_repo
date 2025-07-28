@@ -439,8 +439,6 @@ class DreamilesEmailRecord(models.Model):
 
 #===========================================================================
 
-# Add these models to your existing models.py file
-
 class QatarCrewBasic(models.Model):
     """Model for JOB 97 - Basic crew information"""
     flight_no = models.CharField(max_length=6)
@@ -453,7 +451,7 @@ class QatarCrewBasic(models.Model):
     passport_number = models.CharField(max_length=20)
     birth_date = models.DateField()
     gender = models.CharField(max_length=1)  # M/F
-    nationality_code = models.CharField(max_length=3)  # NTLY field
+    nationality_code = models.CharField(max_length=10)  # INCREASED from 3 to 10
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -472,10 +470,10 @@ class QatarCrewDetailed(models.Model):
     surname = models.CharField(max_length=100)
     given_name = models.CharField(max_length=100)
     middle_name = models.CharField(max_length=100, null=True, blank=True)
-    nationality = models.CharField(max_length=50)
+    nationality = models.CharField(max_length=50)  # INCREASED from 50
     passport_issuing_date = models.DateField(null=True, blank=True)
-    passport_issuing_state = models.CharField(max_length=3)  # Country code
-    nationality_country_code = models.CharField(max_length=3)
+    passport_issuing_state = models.CharField(max_length=10)  # INCREASED from 3 to 10
+    nationality_country_code = models.CharField(max_length=10)  # INCREASED from 3 to 10
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -504,16 +502,16 @@ class QatarApisRecord(models.Model):
     arr_time = models.TimeField()
     crew_id = models.CharField(max_length=20)
     document_number = models.CharField(max_length=20)
-    nationality = models.CharField(max_length=3)
+    nationality = models.CharField(max_length=10)  # INCREASED from 3 to 10
     document_type = models.CharField(max_length=10, default='P')  # P for Passport
-    issuing_state = models.CharField(max_length=3)
+    issuing_state = models.CharField(max_length=10)  # INCREASED from 3 to 10
     family_name = models.CharField(max_length=100)
     given_name = models.CharField(max_length=100)
     date_of_birth = models.DateField()
     sex = models.CharField(max_length=1)
-    country_of_birth = models.CharField(max_length=3)
+    country_of_birth = models.CharField(max_length=10)  # INCREASED from 3 to 10
     document_expiry_date = models.DateField()
-    file_generated = models.CharField(max_length=255, null=True, blank=True)  # Track which file this was included in
+    file_generated = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

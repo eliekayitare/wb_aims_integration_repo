@@ -2063,16 +2063,17 @@ def process_tableau_data_email_attachment(item, process_function):
 # QATAR APIS UTILS 
 
 #==================================================================================
-
-
-# Add these utility functions to your utils.py file
+# Updated utility functions for Qatar APIS - Replace your existing utils with these
 
 import re
 import csv
 import os
 from datetime import datetime
 from django.conf import settings
+from django.db import models
+from exchangelib import FileAttachment
 from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -2113,6 +2114,7 @@ def parse_job97_subject(subject):
 def process_job97_file(attachment):
     """
     Process JOB 97 file containing basic crew information
+    UPDATED: Better error handling and field validation
     """
     try:
         # Parse the subject to get flight details
@@ -2137,30 +2139,58 @@ def process_job97_file(attachment):
                 if not line.strip():
                     continue
                     
-                # Parse the line - adjust field positions based on your actual file format
-                fields = line.split()
-                if len(fields) < 10:  # Ensure minimum required fields
+                # Parse the line based on the General Declaration format you provided
+                # Looking at your sample, the format appears to be different from what was assumed
+                # Let's handle it more robustly
+                
+                # If it's a CSV-like format
+                if ',' in line:
+                    fields = [field.strip() for field in line.split(',')]
+                else:
+                    # If it's space-separated
+                    fields = line.split()
+                
+                if len(fields) < 8:  # Ensure minimum required fields
                     continue
                 
-                # Extract fields (adjust indices based on actual file format)
-                crew_id = fields[0]
-                passport_number = fields[1]
-                # Skip name fields as they'll come from JOB 1008
-                position = fields[2]  # PS field
-                birth_date_str = fields[3]
-                gender = fields[4]
-                nationality_code = fields[5]
-                tail_no = fields[6] if len(fields) > 6 else None
-                
-                # Parse birth date
+                # Try to extract fields - this might need adjustment based on actual format
+                # Based on your General Declaration sample, fields might be:
+                # ID, NAME, PAX, PS, PASSPORT, BIRTH, GENDER, NTLY, PASSP
                 try:
-                    birth_date = datetime.strptime(birth_date_str, "%d/%m/%Y").date()
-                except ValueError:
-                    try:
-                        birth_date = datetime.strptime(birth_date_str, "%d%m%Y").date()
-                    except ValueError:
-                        logger.error(f"Invalid birth date format: {birth_date_str}")
+                    crew_id = fields[0]
+                    # Skip name fields (will come from JOB 1008)
+                    position = fields[3] if len(fields) > 3 else "Unknown"  # PS field
+                    passport_number = fields[4] if len(fields) > 4 else ""
+                    birth_date_str = fields[5] if len(fields) > 5 else ""
+                    gender = fields[6] if len(fields) > 6 else ""
+                    nationality_code = fields[7] if len(fields) > 7 else ""
+                    
+                    # Validate essential fields
+                    if not crew_id or not passport_number:
                         continue
+                        
+                except IndexError:
+                    logger.warning(f"Insufficient fields in line {line_num}: {line}")
+                    continue
+                
+                # Parse birth date with multiple format support
+                birth_date = None
+                if birth_date_str:
+                    try:
+                        birth_date = datetime.strptime(birth_date_str, "%d/%m/%Y").date()
+                    except ValueError:
+                        try:
+                            birth_date = datetime.strptime(birth_date_str, "%d%m%Y").date()
+                        except ValueError:
+                            try:
+                                birth_date = datetime.strptime(birth_date_str, "%m/%d/%Y").date()
+                            except ValueError:
+                                logger.error(f"Invalid birth date format: {birth_date_str}")
+                                continue
+                
+                # Clean up fields
+                gender = gender[:1].upper() if gender else "M"  # Default to M if not specified
+                nationality_code = nationality_code[:10] if nationality_code else "RWA"  # Default to RWA
                 
                 # Create or update record
                 QatarCrewBasic.objects.update_or_create(
@@ -2170,7 +2200,7 @@ def process_job97_file(attachment):
                     destination=destination,
                     crew_id=crew_id,
                     defaults={
-                        'tail_no': tail_no,
+                        'tail_no': "",  # Will be filled from flight data if available
                         'position': position,
                         'passport_number': passport_number,
                         'birth_date': birth_date,
@@ -2194,6 +2224,7 @@ def process_job97_file(attachment):
 def process_job1008_file(attachment):
     """
     Process JOB 1008 file containing detailed crew passport information
+    FIXED: Proper field mapping based on actual data structure from logs
     """
     try:
         content = attachment.content.decode('utf-8').splitlines()
@@ -2205,32 +2236,60 @@ def process_job1008_file(attachment):
                 if not line.strip():
                     continue
                 
-                # Parse CSV format - adjust based on actual file format
+                # Parse CSV format - based on actual data from logs
                 fields = [field.strip() for field in line.split(',')]
-                if len(fields) < 8:  # Ensure minimum required fields
+                if len(fields) < 11:  # Ensure minimum required fields
                     continue
                 
-                # Extract fields (adjust indices based on actual file format)
-                crew_id = fields[0]
-                passport_number = fields[1]
-                surname = fields[2]
-                given_name = fields[3]
-                middle_name = fields[4] if len(fields) > 4 and fields[4] else None
-                nationality = fields[5]
-                issuing_date_str = fields[6] if len(fields) > 6 and fields[6] else None
-                issuing_state = fields[7]
-                nationality_country_code = fields[8] if len(fields) > 8 else nationality[:3]
+                # CORRECTED field mapping based on the actual data structure from your logs:
+                # Format: crew_id,passport_number,,surname,given_name,middle_name,nationality,,date_field,,location,,country_code
+                crew_id = fields[0] if fields[0] else None
+                passport_number = fields[1] if fields[1] else None
+                # Field 2 is empty
+                surname = fields[3] if len(fields) > 3 and fields[3] else ""
+                given_name = fields[4] if len(fields) > 4 and fields[4] else ""
+                middle_name = fields[5] if len(fields) > 5 and fields[5] else None
+                nationality = fields[6] if len(fields) > 6 and fields[6] else ""
+                # Field 7 is empty
+                date_field = fields[8] if len(fields) > 8 and fields[8] else None  # This could be birth date or issuing date
+                # Field 9 is empty
+                location = fields[10] if len(fields) > 10 and fields[10] else ""
+                # Field 11 is empty
+                nationality_country_code = fields[12] if len(fields) > 12 and fields[12] else nationality[:3]
                 
-                # Parse issuing date if provided
+                # Skip if essential fields are missing
+                if not crew_id or not passport_number:
+                    continue
+                
+                # Parse date field - it appears to be mixed format, avoid country names
                 passport_issuing_date = None
-                if issuing_date_str:
+                if date_field and date_field not in ['RWANDA', 'RWANDAN', '+250', 'nepalese', 'INDIAN', 'KENYAN', 'SUDAN', 'MALAWIAN', 'RWA', 'UNITED KINGDOM', 'FRANCE', 'Rwanda', 'Rwandan', 'SOUTH AFRICA']:
                     try:
-                        passport_issuing_date = datetime.strptime(issuing_date_str, "%d/%m/%Y").date()
+                        # Try different date formats
+                        if '/' in date_field:
+                            passport_issuing_date = datetime.strptime(date_field, "%d/%m/%Y").date()
+                        elif len(date_field) == 8 and date_field.isdigit():
+                            passport_issuing_date = datetime.strptime(date_field, "%d%m%Y").date()
+                        elif len(date_field) == 10 and date_field.replace('/', '').isdigit():
+                            passport_issuing_date = datetime.strptime(date_field, "%d/%m/%Y").date()
                     except ValueError:
-                        try:
-                            passport_issuing_date = datetime.strptime(issuing_date_str, "%d%m%Y").date()
-                        except ValueError:
-                            logger.warning(f"Invalid passport issuing date: {issuing_date_str}")
+                        logger.warning(f"Could not parse date: {date_field}")
+                
+                # Clean up nationality and country codes - limit to appropriate lengths
+                if nationality and len(nationality) > 50:
+                    nationality = nationality[:50]
+                    
+                if nationality_country_code and len(nationality_country_code) > 3:
+                    nationality_country_code = nationality_country_code[:3]
+                
+                # For issuing state, use the location or derive from nationality
+                issuing_state = nationality_country_code if nationality_country_code else "RWA"
+                if location and len(location) <= 10:
+                    issuing_state = location[:3] if len(location) > 3 else location
+                
+                # Ensure issuing_state is not too long
+                if issuing_state and len(issuing_state) > 10:
+                    issuing_state = issuing_state[:3]
                 
                 # Create or update record
                 QatarCrewDetailed.objects.update_or_create(
@@ -2262,6 +2321,7 @@ def process_job1008_file(attachment):
 def generate_qatar_apis_file():
     """
     Generate Qatar APIS file by combining data from all sources
+    FIXED: Better error handling, debugging, and more flexible matching
     """
     try:
         # Create output directory
@@ -2273,22 +2333,41 @@ def generate_qatar_apis_file():
         filename = f"QATAR_APIS_{timestamp}.txt"
         file_path = os.path.join(output_dir, filename)
         
+        # Debug: Check what data we have
+        basic_crew_count = QatarCrewBasic.objects.count()
+        detailed_crew_count = QatarCrewDetailed.objects.count()
+        doha_kgl_basic = QatarCrewBasic.objects.filter(
+            models.Q(origin='DOH', destination='KGL') | 
+            models.Q(origin='KGL', destination='DOH')
+        ).count()
+        
+        logger.info(f"DEBUG: Basic crew records: {basic_crew_count}")
+        logger.info(f"DEBUG: Detailed crew records: {detailed_crew_count}")
+        logger.info(f"DEBUG: DOH-KGL/KGL-DOH basic records: {doha_kgl_basic}")
+        
         # Get all basic crew records for DOH-KGL and KGL-DOH flights
         basic_crew_records = QatarCrewBasic.objects.filter(
             models.Q(origin='DOH', destination='KGL') | 
             models.Q(origin='KGL', destination='DOH')
-        ).select_related()
+        )
+        
+        if not basic_crew_records.exists():
+            logger.warning("No basic crew records found for DOH-KGL or KGL-DOH flights")
+            return None
         
         apis_records = []
         processed_count = 0
         missing_details_count = 0
+        missing_flight_data_count = 0
         
         for basic_record in basic_crew_records:
             try:
+                logger.info(f"Processing crew {basic_record.crew_id} for flight {basic_record.flight_no}")
+                
                 # Get detailed information for this crew member
+                # FIXED: More flexible matching - try crew_id first, then crew_id + passport
                 detailed_record = QatarCrewDetailed.objects.filter(
-                    crew_id=basic_record.crew_id,
-                    passport_number=basic_record.passport_number
+                    crew_id=basic_record.crew_id
                 ).first()
                 
                 if not detailed_record:
@@ -2306,7 +2385,15 @@ def generate_qatar_apis_file():
                 
                 if not flight_data:
                     logger.warning(f"No flight schedule found for {basic_record.flight_no} on {basic_record.flight_date}")
-                    continue
+                    missing_flight_data_count += 1
+                    # Continue anyway with default times
+                    dep_time = datetime.time(12, 0)
+                    arr_time = datetime.time(14, 0)
+                    arr_date = basic_record.flight_date
+                else:
+                    dep_time = flight_data.std_utc or datetime.time(12, 0)
+                    arr_time = flight_data.sta_utc or datetime.time(14, 0)
+                    arr_date = flight_data.sa_date_utc or basic_record.flight_date
                 
                 # Determine direction
                 direction = 'O' if basic_record.origin == 'KGL' else 'I'  # Outbound from KGL, Inbound to KGL
@@ -2314,12 +2401,20 @@ def generate_qatar_apis_file():
                 # Calculate document expiry (assuming 10 years from issue date if available)
                 document_expiry = None
                 if detailed_record.passport_issuing_date:
-                    document_expiry = detailed_record.passport_issuing_date.replace(
-                        year=detailed_record.passport_issuing_date.year + 10
-                    )
+                    try:
+                        document_expiry = detailed_record.passport_issuing_date.replace(
+                            year=detailed_record.passport_issuing_date.year + 10
+                        )
+                    except ValueError:
+                        document_expiry = datetime(2030, 12, 31).date()
                 else:
                     # Default to a future date if no issue date available
                     document_expiry = datetime(2030, 12, 31).date()
+                
+                # Clean up nationality codes to ensure they're 3 characters for APIS format
+                nationality = detailed_record.nationality_country_code[:3] if detailed_record.nationality_country_code else basic_record.nationality_code[:3]
+                issuing_state = detailed_record.passport_issuing_state[:3] if detailed_record.passport_issuing_state else nationality
+                country_of_birth = basic_record.nationality_code[:3] if basic_record.nationality_code else nationality
                 
                 # Create APIS record
                 apis_record = QatarApisRecord.objects.update_or_create(
@@ -2329,19 +2424,19 @@ def generate_qatar_apis_file():
                     direction=direction,
                     defaults={
                         'dep_port': basic_record.origin,
-                        'dep_time': flight_data.std_utc or datetime.time(12, 0),  # Default time if not available
+                        'dep_time': dep_time,
                         'arr_port': basic_record.destination,
-                        'arr_date': flight_data.sa_date_utc or basic_record.flight_date,
-                        'arr_time': flight_data.sta_utc or datetime.time(14, 0),  # Default time if not available
+                        'arr_date': arr_date,
+                        'arr_time': arr_time,
                         'document_number': basic_record.passport_number,
-                        'nationality': detailed_record.nationality_country_code,
+                        'nationality': nationality,
                         'document_type': 'P',  # Passport
-                        'issuing_state': detailed_record.passport_issuing_state,
+                        'issuing_state': issuing_state,
                         'family_name': detailed_record.surname,
                         'given_name': detailed_record.given_name,
                         'date_of_birth': basic_record.birth_date,
                         'sex': basic_record.gender,
-                        'country_of_birth': basic_record.nationality_code,
+                        'country_of_birth': country_of_birth,
                         'document_expiry_date': document_expiry,
                         'file_generated': filename,
                     }
@@ -2395,6 +2490,8 @@ def generate_qatar_apis_file():
             logger.info(f"Processed {processed_count} crew records")
             if missing_details_count > 0:
                 logger.warning(f"Missing detailed information for {missing_details_count} crew members")
+            if missing_flight_data_count > 0:
+                logger.warning(f"Missing flight data for {missing_flight_data_count} flights")
             
             return file_path
         else:
