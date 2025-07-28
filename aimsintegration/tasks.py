@@ -1793,97 +1793,112 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 #=================================================================================================================
 
 
+from celery import shared_task
+from datetime import timedelta
+from django.utils import timezone
+import logging
+
 from .utils import (
-    process_job97_file, 
-    process_job1008_file, 
-    generate_qatar_apis_file,
+    parse_job97_subject,
     process_qatar_job97_email_attachment,
-    process_qatar_job1008_email_attachment
+    process_job97_file,
 )
-from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
-from django.db import models
+# if fetch_qatar_job1008_data is in the same module you can import directly;
+# otherwise import lazily inside the function to avoid circular imports.
+from .tasks import fetch_qatar_job1008_data  # adjust if needed
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
 def fetch_qatar_job97_data():
     """
-    Fetch recent JOB 97 emails (last 30 days) containing basic crew information for DOH-KGL and KGL-DOH flights
+    Fetch recent JOB 97 emails (last 30 days) containing basic crew information
+    for DOH-KGL and KGL-DOH flights. Subjects look like '300/KGL DOH/25072025'.
     """
-    from datetime import timedelta
-    from django.utils import timezone
-    
     account = get_exchange_account()
     logger.info("Fetching recent Qatar JOB 97 crew data emails...")
 
     try:
-        # Get emails from the last 30 days (timezone-aware)
         start_date = timezone.now() - timedelta(days=30)
-        
-        # Get recent emails
-        recent_emails = list(account.inbox.filter(
-            datetime_received__gte=start_date
-        ).order_by('-datetime_received'))
-        
-        logger.info(f"Found {len(recent_emails)} emails in the last 30 days")
-        
-        # Filter for JOB 97 emails
+
+        # Pull recent emails (newest first)
+        recent_emails = list(
+            account.inbox.filter(
+                datetime_received__gte=start_date
+            ).order_by('-datetime_received')
+        )
+        logger.info("Found %d emails in the last 30 days", len(recent_emails))
+
         job97_emails = []
-        
+
+        # Select candidates by actually parsing the subject, not just string contains
         for email in recent_emails:
-            subject_upper = email.subject.upper() if email.subject else ""
-            if ('DOH' in subject_upper and 'KGL' in subject_upper):
+            subject = email.subject or ""
+            fno, org, dst, fdate = parse_job97_subject(subject)
+
+            if all([fno, org, dst, fdate]) and (
+                (org == 'DOH' and dst == 'KGL') or (org == 'KGL' and dst == 'DOH')
+            ):
                 job97_emails.append(email)
-        
-        logger.info(f"Found {len(job97_emails)} JOB 97 emails for DOH-KGL route")
-        
+
+        logger.info("Found %d parsed JOB 97 emails for DOH↔KGL", len(job97_emails))
+
         if not job97_emails:
             logger.info("No Qatar JOB 97 emails found in the last 30 days.")
             return {"status": "no_emails", "message": "No recent JOB 97 emails found"}
-        
+
         processed_count = 0
         errors = []
-        
+
         # Process up to 10 most recent emails
         for email in job97_emails[:10]:
             try:
-                logger.info(f"Processing Qatar JOB 97 email with subject: {email.subject}")
-                logger.info(f"Email date: {email.datetime_received}")
-                
-                # Check if email has attachments
-                if hasattr(email, 'attachments') and email.attachments:
-                    attachment_count = len(list(email.attachments))
-                    logger.info(f"Email has {attachment_count} attachment(s)")
+                logger.info("Processing JOB 97 email: '%s' | received: %s",
+                            email.subject, email.datetime_received)
+
+                if getattr(email, 'attachments', None):
+                    # Count attachments (attachment collection can be a generator)
+                    try:
+                        attachment_count = len(list(email.attachments))
+                        logger.info("Email has %d attachment(s)", attachment_count)
+                    except Exception:
+                        logger.info("Email has attachments (count unknown)")
+
+                    # This helper sets attachment.parent_item and calls process_job97_file
                     process_qatar_job97_email_attachment(email, process_job97_file)
                     processed_count += 1
                 else:
-                    logger.warning(f"Email '{email.subject}' has no attachments")
-                    
+                    logger.warning("Email '%s' has no attachments", email.subject)
+
             except Exception as e:
-                error_msg = f"Error processing JOB 97 email '{email.subject}': {e}"
-                logger.error(error_msg)
-                errors.append(error_msg)
+                msg = f"Error processing JOB 97 email '{email.subject}': {e}"
+                logger.error(msg)
+                errors.append(msg)
                 continue
-        
-        logger.info(f"Processed {processed_count} Qatar JOB 97 emails")
-        
-        # After processing JOB 97, trigger JOB 1008 processing
+
+        logger.info("Processed %d Qatar JOB 97 emails", processed_count)
+
+        # Trigger JOB 1008 only if at least one email was processed
         if processed_count > 0:
-            fetch_qatar_job1008_data.delay()
-        
+            try:
+                fetch_qatar_job1008_data.delay()
+            except Exception as e:
+                logger.error("Failed to queue JOB 1008 fetch: %s", e)
+                errors.append(f"Failed to queue JOB 1008: {e}")
+
         return {
-            "status": "success", 
+            "status": "success",
             "processed_emails": processed_count,
             "total_found": len(job97_emails),
             "errors": errors,
             "message": f"Processed {processed_count} JOB 97 emails"
         }
-        
+
     except Exception as e:
-        logger.error(f"Fatal error in fetch_qatar_job97_data_recent: {e}")
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        logger.error("Fatal error in fetch_qatar_job97_data: %s", e)
+        return {"status": "error", "message": str(e)}
+
 
 
 @shared_task
@@ -2052,360 +2067,3 @@ def cleanup_old_qatar_apis_files():
         logger.error(f"Error during Qatar APIS file cleanup: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-
-#=================================================================================================================
-# DEBUG TASKS - ADD THESE TO YOUR EXISTING TASKS
-#=================================================================================================================
-
-@shared_task
-def debug_job97_emails():
-    """
-    Debug task to check JOB 97 emails and their subjects
-    """
-    try:
-        account = get_exchange_account()
-        logger.info("=== DEBUGGING JOB 97 EMAILS ===")
-        
-        # Look for emails with subjects containing DOHA KGL or KGL DOHA
-        emails_doh_kgl = account.inbox.filter(
-            subject__icontains='DOH KGL'
-        ).order_by('-datetime_received')[:10]  # Get last 10
-        
-        emails_kgl_doh = account.inbox.filter(
-            subject__icontains='KGL DOH'
-        ).order_by('-datetime_received')[:10]  # Get last 10
-        
-        logger.info(f"Found {emails_doh_kgl.count()} emails with 'DOH KGL' in subject")
-        logger.info(f"Found {emails_kgl_doh.count()} emails with 'KGL DOH' in subject")
-        
-        # Log actual subjects
-        logger.info("=== DOH KGL EMAIL SUBJECTS ===")
-        for i, email in enumerate(emails_doh_kgl):
-            logger.info(f"{i+1}. {email.subject}")
-            logger.info(f"   Received: {email.datetime_received}")
-            logger.info(f"   Has attachments: {bool(email.attachments)}")
-            if email.attachments:
-                for att in email.attachments:
-                    logger.info(f"   Attachment: {att.name}")
-        
-        logger.info("=== KGL DOH EMAIL SUBJECTS ===")
-        for i, email in enumerate(emails_kgl_doh):
-            logger.info(f"{i+1}. {email.subject}")
-            logger.info(f"   Received: {email.datetime_received}")
-            logger.info(f"   Has attachments: {bool(email.attachments)}")
-            if email.attachments:
-                for att in email.attachments:
-                    logger.info(f"   Attachment: {att.name}")
-        
-        # Test subject parsing on actual subjects
-        logger.info("=== TESTING SUBJECT PARSING ===")
-        from .utils import parse_job97_subject
-        
-        all_emails = list(emails_doh_kgl) + list(emails_kgl_doh)
-        for email in all_emails[:5]:  # Test first 5
-            subject = email.subject
-            flight_no, origin, destination, flight_date = parse_job97_subject(subject)
-            logger.info(f"Subject: {subject}")
-            logger.info(f"Parsed: Flight {flight_no}, {origin}-{destination}, {flight_date}")
-            logger.info("---")
-        
-        # Check if we have any basic crew records at all
-        all_basic = QatarCrewBasic.objects.all()
-        logger.info(f"Total basic crew records in database: {all_basic.count()}")
-        
-        if all_basic.count() > 0:
-            sample = all_basic.first()
-            logger.info(f"Sample basic record: Flight {sample.flight_no}, {sample.origin}-{sample.destination}, Date: {sample.flight_date}")
-        
-        return {
-            "status": "success",
-            "doh_kgl_emails": emails_doh_kgl.count(),
-            "kgl_doh_emails": emails_kgl_doh.count(),
-            "total_basic_records": all_basic.count()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in debug_job97_emails: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@shared_task 
-def test_manual_job97_processing():
-    """
-    Manually test JOB 97 processing on the most recent email
-    """
-    try:
-        from .utils import process_qatar_job97_email_attachment, process_job97_file
-        
-        account = get_exchange_account()
-        logger.info("=== MANUAL JOB 97 PROCESSING TEST ===")
-        
-        # Get the most recent DOH-KGL or KGL-DOH email
-        emails = account.inbox.filter(
-            models.Q(subject__icontains='DOH KGL') | models.Q(subject__icontains='KGL DOH')
-        ).order_by('-datetime_received')
-        
-        if not emails.exists():
-            logger.error("No DOH-KGL or KGL-DOH emails found")
-            return {"status": "no_emails", "message": "No relevant emails found"}
-        
-        email = emails[0]
-        logger.info(f"Testing with email: {email.subject}")
-        logger.info(f"Received: {email.datetime_received}")
-        
-        # Test subject parsing
-        from .utils import parse_job97_subject
-        flight_no, origin, destination, flight_date = parse_job97_subject(email.subject)
-        logger.info(f"Subject parsing result: Flight {flight_no}, {origin}-{destination}, {flight_date}")
-        
-        if not all([flight_no, origin, destination, flight_date]):
-            logger.error("Subject parsing failed!")
-            return {"status": "parsing_failed", "message": "Could not parse email subject"}
-        
-        # Check if it's a relevant route
-        if not ((origin == 'DOH' and destination == 'KGL') or (origin == 'KGL' and destination == 'DOH')):
-            logger.error(f"Not a DOH-KGL route: {origin}-{destination}")
-            return {"status": "wrong_route", "message": f"Route {origin}-{destination} not DOH-KGL"}
-        
-        # Process the email
-        logger.info("Processing email attachments...")
-        
-        if email.attachments:
-            for attachment in email.attachments:
-                logger.info(f"Processing attachment: {attachment.name}")
-                # Store reference to parent item for subject parsing
-                attachment.parent_item = email
-                
-                # Try to read and process the attachment
-                try:
-                    content = attachment.content.decode('utf-8')
-                    logger.info(f"Attachment content length: {len(content)} characters")
-                    logger.info(f"First 500 characters: {content[:500]}")
-                    
-                    # Process the file
-                    process_job97_file(attachment)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing attachment: {e}")
-        else:
-            logger.error("No attachments found in email")
-            return {"status": "no_attachments", "message": "Email has no attachments"}
-        
-        # Check if records were created
-        basic_count_after = QatarCrewBasic.objects.filter(
-            flight_no=flight_no,
-            flight_date=flight_date,
-            origin=origin,
-            destination=destination
-        ).count()
-        
-        logger.info(f"Basic crew records created: {basic_count_after}")
-        
-        return {
-            "status": "success",
-            "email_subject": email.subject,
-            "parsed_flight": f"{flight_no} {origin}-{destination} {flight_date}",
-            "records_created": basic_count_after
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in test_manual_job97_processing: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@shared_task
-def check_actual_job97_file_format():
-    """
-    Check the actual format of JOB 97 files to understand the structure
-    """
-    try:
-        account = get_exchange_account()
-        logger.info("=== CHECKING JOB 97 FILE FORMAT ===")
-        
-        # Get the most recent email with attachment
-        emails = account.inbox.filter(
-            models.Q(subject__icontains='DOH KGL') | models.Q(subject__icontains='KGL DOH')
-        ).order_by('-datetime_received')
-        
-        if not emails.exists():
-            return {"status": "no_emails", "message": "No emails found"}
-        
-        for email in emails[:3]:  # Check first 3 emails
-            logger.info(f"=== EMAIL: {email.subject} ===")
-            
-            if email.attachments:
-                for attachment in email.attachments:
-                    logger.info(f"--- ATTACHMENT: {attachment.name} ---")
-                    try:
-                        content = attachment.content.decode('utf-8')
-                        lines = content.splitlines()
-                        
-                        logger.info(f"Total lines: {len(lines)}")
-                        logger.info(f"File size: {len(content)} characters")
-                        
-                        # Show first 10 lines
-                        logger.info("First 10 lines:")
-                        for i, line in enumerate(lines[:10]):
-                            logger.info(f"Line {i+1}: {line}")
-                        
-                        # Check if it looks like CSV
-                        if ',' in content:
-                            logger.info("File appears to be CSV format")
-                        else:
-                            logger.info("File appears to be space-separated format")
-                        
-                        # Look for patterns that might indicate crew data
-                        crew_patterns = ['CP', 'FO', 'FP', 'SA', 'FA', 'PC', 'passport']
-                        for pattern in crew_patterns:
-                            if pattern in content.upper():
-                                logger.info(f"Found pattern '{pattern}' in file")
-                        
-                    except Exception as e:
-                        logger.error(f"Error reading attachment: {e}")
-            else:
-                logger.info("No attachments in this email")
-        
-        return {"status": "success", "message": "File format analysis completed"}
-        
-    except Exception as e:
-        logger.error(f"Error in check_actual_job97_file_format: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@shared_task
-def debug_qatar_apis_data():
-    """
-    Debug task to check what data we have in the Qatar APIS tables
-    """
-    try:
-        # Check basic crew data
-        basic_total = QatarCrewBasic.objects.count()
-        basic_doha = QatarCrewBasic.objects.filter(
-            models.Q(origin='DOH', destination='KGL') | 
-            models.Q(origin='KGL', destination='DOH')
-        ).count()
-        
-        # Check detailed crew data
-        detailed_total = QatarCrewDetailed.objects.count()
-        
-        # Check flight data
-        flight_total = FlightData.objects.count()
-        flight_doha = FlightData.objects.filter(
-            models.Q(dep_code_icao='DOH', arr_code_icao='KGL') | 
-            models.Q(dep_code_icao='KGL', arr_code_icao='DOH')
-        ).count()
-        
-        # Sample some data
-        basic_sample = QatarCrewBasic.objects.first()
-        detailed_sample = QatarCrewDetailed.objects.first()
-        
-        logger.info("=== QATAR APIS DEBUG INFO ===")
-        logger.info(f"Basic crew records: {basic_total}")
-        logger.info(f"Basic crew DOH-KGL records: {basic_doha}")
-        logger.info(f"Detailed crew records: {detailed_total}")
-        logger.info(f"Flight data records: {flight_total}")
-        logger.info(f"Flight data DOH-KGL records: {flight_doha}")
-        
-        if basic_sample:
-            logger.info(f"Basic sample: Flight {basic_sample.flight_no}, {basic_sample.origin}-{basic_sample.destination}, Crew {basic_sample.crew_id}")
-        
-        if detailed_sample:
-            logger.info(f"Detailed sample: Crew {detailed_sample.crew_id}, {detailed_sample.given_name} {detailed_sample.surname}")
-        
-        # Check for matching crew IDs
-        basic_crew_ids = set(QatarCrewBasic.objects.filter(
-            models.Q(origin='DOH', destination='KGL') | 
-            models.Q(origin='KGL', destination='DOH')
-        ).values_list('crew_id', flat=True))
-        
-        detailed_crew_ids = set(QatarCrewDetailed.objects.values_list('crew_id', flat=True))
-        
-        matching_crew_ids = basic_crew_ids.intersection(detailed_crew_ids)
-        
-        logger.info(f"Basic crew IDs (DOH-KGL): {len(basic_crew_ids)}")
-        logger.info(f"Detailed crew IDs: {len(detailed_crew_ids)}")
-        logger.info(f"Matching crew IDs: {len(matching_crew_ids)}")
-        
-        if len(matching_crew_ids) > 0:
-            logger.info(f"Sample matching crew IDs: {list(matching_crew_ids)[:5]}")
-        
-        return {
-            "status": "success",
-            "basic_total": basic_total,
-            "basic_doha": basic_doha,
-            "detailed_total": detailed_total,
-            "flight_total": flight_total,
-            "flight_doha": flight_doha,
-            "matching_crew_ids": len(matching_crew_ids)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in debug task: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@shared_task
-def manual_generate_apis_with_debug():
-    """
-    Manual APIS generation with extensive debugging
-    """
-    try:
-        logger.info("=== MANUAL APIS GENERATION WITH DEBUG ===")
-        
-        # Step 1: Check basic data
-        basic_records = QatarCrewBasic.objects.filter(
-            models.Q(origin='DOH', destination='KGL') | 
-            models.Q(origin='KGL', destination='DOH')
-        )
-        
-        logger.info(f"Found {basic_records.count()} basic crew records for DOH-KGL/KGL-DOH")
-        
-        if basic_records.count() == 0:
-            # Check if we have any basic records at all
-            all_basic = QatarCrewBasic.objects.all()
-            logger.info(f"Total basic records: {all_basic.count()}")
-            if all_basic.count() > 0:
-                sample = all_basic.first()
-                logger.info(f"Sample basic record: {sample.origin}-{sample.destination}")
-            return {"status": "no_basic_data", "message": "No basic crew data for DOH-KGL flights"}
-        
-        # Step 2: Try to find matches
-        for basic_record in basic_records[:5]:  # Check first 5 records
-            logger.info(f"Checking crew {basic_record.crew_id}")
-            
-            # Look for detailed record
-            detailed_record = QatarCrewDetailed.objects.filter(
-                crew_id=basic_record.crew_id
-            ).first()
-            
-            if detailed_record:
-                logger.info(f"  ✓ Found detailed record: {detailed_record.given_name} {detailed_record.surname}")
-            else:
-                logger.info(f"  ✗ No detailed record found")
-                
-            # Look for flight data
-            flight_data = FlightData.objects.filter(
-                flight_no=basic_record.flight_no,
-                sd_date_utc=basic_record.flight_date,
-                dep_code_icao=basic_record.origin,
-                arr_code_icao=basic_record.destination
-            ).first()
-            
-            if flight_data:
-                logger.info(f"  ✓ Found flight data: {flight_data.std_utc} - {flight_data.sta_utc}")
-            else:
-                logger.info(f"  ✗ No flight data found")
-        
-        # Step 3: Try to generate file
-        result = generate_qatar_apis_file()
-        
-        if result:
-            logger.info(f"✓ APIS file generated: {result}")
-            return {"status": "success", "file_path": result}
-        else:
-            logger.info("✗ No APIS file generated")
-            return {"status": "no_file", "message": "File generation failed"}
-            
-    except Exception as e:
-        logger.error(f"Error in manual APIS generation: {e}")
-        return {"status": "error", "message": str(e)}

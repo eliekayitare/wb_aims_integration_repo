@@ -2078,37 +2078,56 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def parse_job97_subject(subject):
+import re
+from datetime import datetime
+
+def parse_job97_subject(subject: str):
     """
-    Parse JOB 97 subject to extract flight details
-    Format: 300/KGL DOH/25072025 or 301/DOH KGL/24072025
-    Returns: (flight_no, origin, destination, flight_date)
+    Parse subjects like:
+      - 300/KGL DOH/25072025
+      - 301/DOH KGL/24072025
+      - 300 / KGL-DOH / 25/07/2025
+      - WB300/KGL DOH/25072025
+    Returns: (flight_no, origin, destination, flight_date) or (None, None, None, None)
     """
-    try:
-        # Remove extra spaces and normalize
-        subject = subject.strip()
-        
-        # Pattern to match: flight_no/origin destination/date
-        pattern = r'(\d+)/([A-Z]{3})\s+([A-Z]{3})/(\d{8})'
-        match = re.search(pattern, subject)
-        
-        if match:
-            flight_no = match.group(1)
-            origin = match.group(2)
-            destination = match.group(3)
-            date_str = match.group(4)
-            
-            # Parse date from DDMMYYYY format
-            flight_date = datetime.strptime(date_str, "%d%m%Y").date()
-            
-            return flight_no, origin, destination, flight_date
-        else:
-            logger.error(f"Could not parse JOB 97 subject: {subject}")
-            return None, None, None, None
-            
-    except Exception as e:
-        logger.error(f"Error parsing JOB 97 subject '{subject}': {e}")
+    if not subject:
         return None, None, None, None
+
+    # Normalize
+    s = subject.strip().upper()
+    s = re.sub(r'\s+', ' ', s)  # collapse multiple spaces
+    s = s.replace('-', ' ')     # treat hyphen like a space between IATA codes
+
+    # Pattern: <optional WB><flight>/<ORG> <DST>/<date>
+    m = re.search(
+        r'(?:WB)?(\d{2,4})\s*/\s*([A-Z]{3})\s+([A-Z]{3})\s*/\s*(\d{8}|\d{2}/\d{2}/\d{4})',
+        s
+    )
+    if not m:
+        # No match -> log and bail
+        try:
+            logger.error(f"Could not parse JOB 97 subject: {subject}")
+        except NameError:
+            pass
+        return None, None, None, None
+
+    flight_no, origin, destination, date_str = m.groups()
+
+    # Parse date (DDMMYYYY or DD/MM/YYYY)
+    try:
+        if len(date_str) == 8 and date_str.isdigit():
+            flight_date = datetime.strptime(date_str, "%d%m%Y").date()
+        else:
+            flight_date = datetime.strptime(date_str, "%d/%m/%Y").date()
+    except ValueError:
+        try:
+            logger.error(f"JOB 97 subject date parse failed: {date_str} in '{subject}'")
+        except NameError:
+            pass
+        return None, None, None, None
+
+    return flight_no, origin, destination, flight_date
+
 
 # Replace the process_job97_file function in your utils.py with this improved version
 
