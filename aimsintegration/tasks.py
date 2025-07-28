@@ -1809,11 +1809,20 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
+# tasks.py
+from celery import shared_task
+from datetime import timedelta
+from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 @shared_task
 def fetch_qatar_job97_data():
     """
-    Fetch recent JOB 97 emails (last 30 days) containing basic crew information
-    for DOH-KGL and KGL-DOH flights. Subjects look like '300/KGL DOH/25072025'.
+    Fetch recent JOB 97 emails (last 30 days) containing basic crew info
+    for DOH↔KGL flights. Subjects like: '300/KGL DOH/25072025'.
     """
     account = get_exchange_account()
     logger.info("Fetching recent Qatar JOB 97 crew data emails...")
@@ -1821,50 +1830,56 @@ def fetch_qatar_job97_data():
     try:
         start_date = timezone.now() - timedelta(days=30)
 
-        # Pull recent emails (newest first)
+        # Lean header fetch to reduce EWS chatter; full item fetched when we touch attachments
         recent_emails = list(
-            account.inbox.filter(
-                datetime_received__gte=start_date
-            ).order_by('-datetime_received')
+            account.inbox.only('subject', 'datetime_received', 'has_attachments')
+            .filter(datetime_received__gte=start_date)
+            .order_by('-datetime_received')
         )
         logger.info("Found %d emails in the last 30 days", len(recent_emails))
 
-        job97_emails = []
-
-        # Select candidates by actually parsing the subject, not just string contains
+        # Parse subjects and keep only DOH↔KGL
+        candidates = []
         for email in recent_emails:
-            subject = email.subject or ""
-            fno, org, dst, fdate = parse_job97_subject(subject)
-
+            subj = email.subject or ""
+            fno, org, dst, fdate = parse_job97_subject(subj)
             if all([fno, org, dst, fdate]) and (
                 (org == 'DOH' and dst == 'KGL') or (org == 'KGL' and dst == 'DOH')
             ):
-                job97_emails.append(email)
+                candidates.append(email)
 
-        logger.info("Found %d parsed JOB 97 emails for DOH↔KGL", len(job97_emails))
+        logger.info("Found %d parsed JOB 97 emails for DOH↔KGL", len(candidates))
 
-        if not job97_emails:
+        if not candidates:
             logger.info("No Qatar JOB 97 emails found in the last 30 days.")
             return {"status": "no_emails", "message": "No recent JOB 97 emails found"}
 
-        processed_count = 0
-        errors = []
+        # (Optional) simple dedupe by EWS id/message-id (keeps first seen)
+        seen = set()
+        job97_emails = []
+        for email in candidates:
+            key = getattr(email, 'internet_message_id', None) or getattr(email, 'message_id', None) or getattr(email, 'id', None)
+            if key in seen:
+                continue
+            seen.add(key)
+            job97_emails.append(email)
 
-        # Process up to 10 most recent emails
+        processed_count, errors = 0, []
+
+        # Process up to 10 most recent candidate emails
         for email in job97_emails[:10]:
             try:
                 logger.info("Processing JOB 97 email: '%s' | received: %s",
                             email.subject, email.datetime_received)
 
                 if getattr(email, 'attachments', None):
-                    # Count attachments (attachment collection can be a generator)
                     try:
-                        attachment_count = len(list(email.attachments))
-                        logger.info("Email has %d attachment(s)", attachment_count)
+                        _ = len(list(email.attachments))   # forces a GetItem; count for logging
+                        logger.info("Email has attachments")
                     except Exception:
                         logger.info("Email has attachments (count unknown)")
 
-                    # This helper sets attachment.parent_item and calls process_job97_file
+                    # Sets attachment.parent_item and calls process_job97_file for each file
                     process_qatar_job97_email_attachment(email, process_job97_file)
                     processed_count += 1
                 else:
@@ -1874,13 +1889,14 @@ def fetch_qatar_job97_data():
                 msg = f"Error processing JOB 97 email '{email.subject}': {e}"
                 logger.error(msg)
                 errors.append(msg)
-                continue
 
         logger.info("Processed %d Qatar JOB 97 emails", processed_count)
 
-        # Trigger JOB 1008 only if at least one email was processed
+        # Trigger JOB 1008 only if we processed at least one email
         if processed_count > 0:
             try:
+                # Lazy import to avoid circulars if this lives in the same module
+                from .tasks import fetch_qatar_job1008_data
                 fetch_qatar_job1008_data.delay()
             except Exception as e:
                 logger.error("Failed to queue JOB 1008 fetch: %s", e)
@@ -1897,6 +1913,7 @@ def fetch_qatar_job97_data():
     except Exception as e:
         logger.error("Fatal error in fetch_qatar_job97_data: %s", e)
         return {"status": "error", "message": str(e)}
+
 
 
 
