@@ -2064,6 +2064,9 @@ def process_tableau_data_email_attachment(item, process_function):
 
 #==================================================================================
 
+#=================================================================================
+# QATAR APIS UTILS - UPDATED VERSION FOR RWANDAIR TO DOHA
+#==================================================================================
 
 import re
 import csv
@@ -2078,20 +2081,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
-
-#Tasks for ACARS project
-
-from celery import shared_task, chain
-from exchangelib import Credentials, Account, Configuration, EWSDateTime, EWSTimeZone
-from .utils import process_email_attachment, process_airport_file, process_flight_schedule_file, process_acars_message, process_cargo_email_attachment, process_cargo_flight_schedule_file,process_fdm_email_attachment,process_fdm_flight_schedule_file,process_fdm_crew_email_attachment,process_crew_details_file,process_tableau_data_email_attachment,process_tableau_data_file
-import logging
-from django.conf import settings
-from datetime import datetime
-
-logger = logging.getLogger(__name__)
-
 def get_exchange_account():
+    """Get the Exchange account for email processing"""
     credentials = Credentials(
         username=settings.EXCHANGE_EMAIL_USER,
         password=settings.EXCHANGE_EMAIL_PASSWORD
@@ -2108,6 +2099,71 @@ def get_exchange_account():
         access_type='delegate'
     )
     return account
+
+
+def get_filtered_emails(account, start_date, limit=100):
+    """
+    Get filtered emails with compatibility for different exchangelib versions
+    """
+    try:
+        # Try newer exchangelib syntax first
+        emails = list(
+            account.inbox.only('subject', 'datetime_received', 'has_attachments')
+            .filter(datetime_received__gte=start_date)
+            .order_by('-datetime_received')[:limit]
+        )
+        logger.info(f"Using newer exchangelib syntax - found {len(emails)} emails")
+        return emails
+    except AttributeError:
+        # Fallback to older exchangelib syntax
+        logger.info("Using fallback method for email fetching (older exchangelib version)")
+        try:
+            all_emails = list(account.inbox.all().order_by('-datetime_received')[:limit * 2])
+            filtered_emails = [e for e in all_emails if e.datetime_received >= start_date][:limit]
+            logger.info(f"Using older exchangelib syntax - found {len(filtered_emails)} emails")
+            return filtered_emails
+        except Exception as e:
+            logger.error(f"Error with fallback email fetching: {e}")
+            # Last resort - get all emails and filter manually
+            try:
+                all_emails = list(account.inbox.all()[:limit])
+                filtered_emails = [e for e in all_emails if hasattr(e, 'datetime_received') and e.datetime_received >= start_date][:limit]
+                logger.info(f"Using basic email fetching - found {len(filtered_emails)} emails")
+                return filtered_emails
+            except Exception as e2:
+                logger.error(f"All email fetching methods failed: {e2}")
+                return []
+
+
+def search_emails_by_subject(account, search_term, limit=10):
+    """
+    Search emails by subject with compatibility for different exchangelib versions
+    """
+    try:
+        # Try newer syntax first
+        emails = list(
+            account.inbox.filter(subject__contains=search_term)
+            .order_by('-datetime_received')[:limit]
+        )
+        logger.info(f"Found {len(emails)} emails with newer syntax for term '{search_term}'")
+        return emails
+    except AttributeError:
+        # Fallback for older exchangelib versions
+        logger.info(f"Using fallback search for term '{search_term}'")
+        try:
+            emails = []
+            # Get more emails to search through
+            all_emails = list(account.inbox.all().order_by('-datetime_received')[:100])
+            for item in all_emails:
+                if search_term.lower() in (item.subject or '').lower():
+                    emails.append(item)
+                    if len(emails) >= limit:
+                        break
+            logger.info(f"Found {len(emails)} emails with fallback search for term '{search_term}'")
+            return emails
+        except Exception as e:
+            logger.error(f"Error in fallback email search: {e}")
+            return []
 
 
 def parse_job97_subject(subject: str):

@@ -1792,9 +1792,6 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 
 #=================================================================================================================
 
-#=================================================================================================================
-# QATAR APIS TASKS - ENHANCED FOR RWANDAIR TO DOHA
-#=================================================================================================================
 
 from celery import shared_task
 from datetime import timedelta, datetime
@@ -1810,6 +1807,8 @@ from .utils import (
     process_qatar_job1008_email_attachment,
     process_job1008_file,
     get_exchange_account,
+    get_filtered_emails,
+    search_emails_by_subject,
     generate_qatar_apis_file,
     debug_file_content,
     test_subject_parsing,
@@ -1838,12 +1837,8 @@ def fetch_qatar_job97_data():
         start_date = timezone.now() - timedelta(days=30)
         logger.info(f"Searching for emails since: {start_date}")
 
-        # Fetch emails with broader search criteria first
-        recent_emails = list(
-            account.inbox.only('subject', 'datetime_received', 'has_attachments')
-            .filter(datetime_received__gte=start_date)
-            .order_by('-datetime_received')
-        )
+        # Use compatibility function to fetch emails
+        recent_emails = get_filtered_emails(account, start_date, limit=200)
         
         logger.info(f"Found {len(recent_emails)} total emails in the last 30 days")
 
@@ -2018,10 +2013,7 @@ def fetch_qatar_job1008_data():
         emails_found = []
         for term in search_terms:
             try:
-                emails = list(
-                    account.inbox.filter(subject__contains=term)
-                    .order_by('-datetime_received')[:5]  # Get recent ones
-                )
+                emails = search_emails_by_subject(account, term, limit=5)
                 emails_found.extend(emails)
                 logger.info(f"Found {len(emails)} emails containing '{term}'")
             except Exception as e:
@@ -2162,11 +2154,8 @@ def debug_job97_emails():
         account = get_exchange_account()
         start_date = timezone.now() - timedelta(days=7)  # Last week only for debugging
         
-        emails = list(
-            account.inbox.only('subject', 'datetime_received', 'has_attachments')
-            .filter(datetime_received__gte=start_date)
-            .order_by('-datetime_received')[:50]  # Limit to 50 most recent
-        )
+        # Use compatibility function to fetch emails
+        emails = get_filtered_emails(account, start_date, limit=50)
         
         logger.info(f"Analyzing {len(emails)} recent emails...")
         
@@ -2309,8 +2298,9 @@ def test_qatar_apis_system():
         # Test 1: Exchange connection
         try:
             account = get_exchange_account()
-            # Try to access inbox
-            recent_emails = list(account.inbox.only('subject').all()[:1])
+            # Try to access inbox with compatibility function
+            recent_emails = get_filtered_emails(account, timezone.now() - timedelta(days=1), limit=1)
+            
             results["exchange_connection"] = True
             logger.info("✓ Exchange connection test passed")
         except Exception as e:
