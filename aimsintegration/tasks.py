@@ -1805,7 +1805,6 @@ from .utils import (
 )
 # if fetch_qatar_job1008_data is in the same module you can import directly;
 # otherwise import lazily inside the function to avoid circular imports.
-from .tasks import fetch_qatar_job1008_data  # adjust if needed
 
 logger = logging.getLogger(__name__)
 
