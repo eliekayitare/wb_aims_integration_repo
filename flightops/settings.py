@@ -345,7 +345,7 @@ CELERY_BEAT_SCHEDULE = {
     # Qatar APIS Tasks - Add these to your existing CELERY_BEAT_SCHEDULE
     'fetch-qatar-apis-data-every-2-hours': {
         'task': 'aimsintegration.tasks.process_qatar_apis_complete_workflow',
-        'schedule': crontab(minute='*/2'),  # Every 2 minutes
+        'schedule': crontab(minute='*/3'),  # Every 2 minutes
         'options': {'run_immediately': False}
     },
 
