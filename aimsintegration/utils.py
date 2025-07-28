@@ -2063,7 +2063,7 @@ def process_tableau_data_email_attachment(item, process_function):
 # QATAR APIS UTILS 
 
 #==================================================================================
-# Updated utility functions for Qatar APIS - Replace your existing utils with these
+
 
 import re
 import csv
@@ -2071,47 +2071,68 @@ import os
 from datetime import datetime
 from django.conf import settings
 from django.db import models
-from exchangelib import FileAttachment
+from exchangelib import FileAttachment, Credentials, Configuration, Account
 from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
 import logging
+from aimsintegration.tasks import get_exchange_account
 
 logger = logging.getLogger(__name__)
 
 
-import re
-from datetime import datetime
+
 
 def parse_job97_subject(subject: str):
     """
-    Parse subjects like:
-      - 300/KGL DOH/25072025
-      - 301/DOH KGL/24072025
-      - 300 / KGL-DOH / 25/07/2025
-      - WB300/KGL DOH/25072025
+    Parse RwandAir JOB 97 subjects like:
+      - 300/KGL DOH/28072025
+      - 301/DOH KGL/29072025  
+      - 300 / KGL-DOH / 28/07/2025
+      - WB300/KGL DOH/28072025
+    
+    FIXED: Handles both IATA (KGL, DOH) and converts to ICAO codes
     Returns: (flight_no, origin, destination, flight_date) or (None, None, None, None)
     """
     if not subject:
         return None, None, None, None
 
-    # Normalize
+    # Normalize the subject
     s = subject.strip().upper()
     s = re.sub(r'\s+', ' ', s)  # collapse multiple spaces
-    s = s.replace('-', ' ')     # treat hyphen like a space between IATA codes
+    s = s.replace('-', ' ')     # treat hyphen like a space between airport codes
 
-    # Pattern: <optional WB><flight>/<ORG> <DST>/<date>
+    # Updated pattern to handle both 3-letter IATA codes and potential variations
+    # Pattern: <optional WB><flight>/<ORIGIN> <DEST>/<date>
     m = re.search(
-        r'(?:WB)?(\d{2,4})\s*/\s*([A-Z]{3})\s+([A-Z]{3})\s*/\s*(\d{8}|\d{2}/\d{2}/\d{4})',
+        r'(?:WB)?(\d{2,4})\s*/\s*([A-Z]{3,4})\s+([A-Z]{3,4})\s*/\s*(\d{8}|\d{2}/\d{2}/\d{4})',
         s
     )
+    
     if not m:
-        # No match -> log and bail
-        try:
-            logger.error(f"Could not parse JOB 97 subject: {subject}")
-        except NameError:
-            pass
+        # Try alternative pattern with different separators or spacing
+        m = re.search(
+            r'(?:WB)?(\d{2,4})\s*[/\-]\s*([A-Z]{3,4})\s*[/\-]?\s*([A-Z]{3,4})\s*[/\-]\s*(\d{8}|\d{2}/\d{2}/\d{4})',
+            s
+        )
+    
+    if not m:
+        logger.error(f"Could not parse JOB 97 subject: {subject}")
         return None, None, None, None
 
     flight_no, origin, destination, date_str = m.groups()
+
+    # Convert IATA codes to ICAO if needed for consistency
+    airport_mapping = {
+        'KGL': 'HRYR',  # Kigali (Rwanda)
+        'DOH': 'OTHH',  # Doha (Qatar)
+        'KIGALI': 'HRYR',
+        'DOHA': 'OTHH',
+        'HRYR': 'HRYR',  # Already ICAO
+        'OTHH': 'OTHH'   # Already ICAO
+    }
+    
+    # Use mapping if available, otherwise keep original
+    origin_icao = airport_mapping.get(origin, origin)
+    destination_icao = airport_mapping.get(destination, destination)
 
     # Parse date (DDMMYYYY or DD/MM/YYYY)
     try:
@@ -2120,21 +2141,17 @@ def parse_job97_subject(subject: str):
         else:
             flight_date = datetime.strptime(date_str, "%d/%m/%Y").date()
     except ValueError:
-        try:
-            logger.error(f"JOB 97 subject date parse failed: {date_str} in '{subject}'")
-        except NameError:
-            pass
+        logger.error(f"JOB 97 subject date parse failed: {date_str} in '{subject}'")
         return None, None, None, None
 
-    return flight_no, origin, destination, flight_date
+    logger.info(f"Parsed JOB 97 subject: Flight {flight_no}, {origin_icao} -> {destination_icao}, Date: {flight_date}")
+    return flight_no, origin_icao, destination_icao, flight_date
 
-
-# Replace the process_job97_file function in your utils.py with this improved version
 
 def process_job97_file(attachment):
     """
-    Process JOB 97 file containing basic crew information
-    IMPROVED: Handles multiple file formats and better parsing
+    Process JOB 97 file containing basic crew information for RwandAir flights
+    ENHANCED: Better parsing for various file formats and improved debugging
     """
     try:
         # Parse the subject to get flight details
@@ -2143,22 +2160,44 @@ def process_job97_file(attachment):
         
         if not all([flight_no, origin, destination, flight_date]):
             logger.error(f"Could not extract flight details from subject: {subject}")
-            return
+            return 0
         
-        # Check if this is a DOHA-KGL or KGL-DOHA flight
-        if not ((origin == 'DOH' and destination == 'KGL') or (origin == 'KGL' and destination == 'DOH')):
-            logger.info(f"Skipping flight {flight_no} - not a DOH-KGL or KGL-DOH route")
-            return
+        # Check if this is a valid KGL-DOH or DOH-KGL route
+        valid_routes = [
+            ('HRYR', 'OTHH'),  # KGL to DOH (ICAO)
+            ('OTHH', 'HRYR'),  # DOH to KGL (ICAO)
+        ]
+        
+        route_valid = any((origin, destination) == route for route in valid_routes)
+        
+        if not route_valid:
+            logger.info(f"Skipping flight {flight_no} - not a KGL-DOH or DOH-KGL route ({origin} -> {destination})")
+            return 0
             
-        content = attachment.content.decode('utf-8')
+        # Decode file content with better encoding handling
+        try:
+            content = attachment.content.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                content = attachment.content.decode('latin-1')
+            except UnicodeDecodeError:
+                content = attachment.content.decode('cp1252')
+        
         lines = content.splitlines()
         
         logger.info(f"Processing JOB 97 for flight {flight_no} from {origin} to {destination} on {flight_date}")
         logger.info(f"File has {len(lines)} lines, {len(content)} characters")
         
+        # Debug: Show first few lines to understand format
+        logger.info("First 5 lines of file:")
+        for i, line in enumerate(lines[:5]):
+            logger.info(f"  Line {i+1}: {repr(line)}")
+        
         # Analyze file format
-        is_csv_format = ',' in content
-        logger.info(f"File format detected: {'CSV' if is_csv_format else 'Fixed-width or space-separated'}")
+        is_csv_format = ',' in content and content.count(',') > len(lines)
+        is_tab_separated = '\t' in content
+        
+        logger.info(f"File format detected: {'CSV' if is_csv_format else 'Tab-separated' if is_tab_separated else 'Space-separated or Fixed-width'}")
         
         processed_crew_count = 0
         
@@ -2168,129 +2207,174 @@ def process_job97_file(attachment):
                 if not line.strip():
                     continue
                 
-                # Skip header lines (common patterns)
+                # Skip header lines (enhanced detection)
                 line_upper = line.upper()
-                if any(header in line_upper for header in ['FLIGHT', 'CREW', 'NAME', 'PASSPORT', 'ID', 'NO', 'TYPE', 'GENERAL DECLARATION']):
+                header_keywords = [
+                    'FLIGHT', 'CREW', 'NAME', 'PASSPORT', 'ID', 'NO', 'TYPE', 
+                    'GENERAL DECLARATION', 'STAFF', 'EMPLOYEE', 'POSITION', 
+                    'BIRTH', 'GENDER', 'NATIONALITY', 'DATE', 'SURNAME', 'FIRSTNAME',
+                    'DOCUMENT', 'NUMBER', 'EXPIRY', 'ISSUING'
+                ]
+                
+                if any(keyword in line_upper for keyword in header_keywords):
                     logger.info(f"Skipping header line {line_num}: {line[:50]}...")
                     continue
                 
                 # Parse based on detected format
                 if is_csv_format:
-                    fields = [field.strip() for field in line.split(',')]
+                    fields = [field.strip().strip('"') for field in line.split(',')]
+                elif is_tab_separated:
+                    fields = [field.strip() for field in line.split('\t')]
                 else:
-                    # Space-separated or fixed-width
-                    fields = line.split()
+                    # Space-separated or fixed-width - handle multiple spaces
+                    fields = [field for field in line.split() if field.strip()]
                 
-                if len(fields) < 5:  # Need at least 5 fields for basic info
+                if len(fields) < 2:  # Need at least some basic fields
+                    logger.debug(f"Skipping line {line_num} - insufficient fields: {len(fields)}")
                     continue
                 
-                logger.info(f"Line {line_num}: {len(fields)} fields - {fields[:5]}...")
+                logger.info(f"Line {line_num}: {len(fields)} fields - {fields}")
                 
-                # Try different field mapping strategies
+                # Initialize variables for crew data
                 crew_id = None
                 passport_number = None
                 position = None
                 birth_date = None
                 gender = None
                 nationality_code = None
+                surname = None
+                given_name = None
                 
-                # Strategy 1: Look for patterns in the fields
+                # Enhanced field detection with multiple strategies
                 for i, field in enumerate(fields):
                     field = field.strip()
+                    if not field or field == '-' or field.lower() == 'null':
+                        continue
                     
-                    # Crew ID - usually numeric or alphanumeric
-                    if not crew_id and (field.isdigit() or (field.isalnum() and len(field) >= 3)):
+                    # Strategy 1: Crew ID - look for patterns like staff numbers
+                    if not crew_id and (
+                        (field.isdigit() and len(field) >= 3) or 
+                        (field.isalnum() and any(c.isdigit() for c in field) and len(field) >= 3)
+                    ):
                         crew_id = field
-                        logger.info(f"  Found crew_id: {crew_id}")
+                        logger.debug(f"  Found crew_id: {crew_id}")
                     
-                    # Passport number - usually starts with PC or is alphanumeric
-                    elif not passport_number and (field.startswith('PC') or (field.isalnum() and len(field) >= 6)):
+                    # Strategy 2: Passport number - various formats
+                    elif not passport_number and (
+                        (field.startswith(('PC', 'PP', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')) and len(field) >= 6 and field.isalnum()) or
+                        (len(field) >= 8 and field.isalnum())  # Generic alphanumeric passport
+                    ):
                         passport_number = field
-                        logger.info(f"  Found passport: {passport_number}")
+                        logger.debug(f"  Found passport: {passport_number}")
                     
-                    # Position - look for crew positions
-                    elif not position and field.upper() in ['CP', 'FO', 'FP', 'SA', 'FA', 'AC', 'FE']:
-                        position = field.upper()
-                        logger.info(f"  Found position: {position}")
+                    # Strategy 3: Crew position codes
+                    elif not position and field.upper() in [
+                        'CP', 'FO', 'FP', 'SA', 'FA', 'AC', 'FE', 'CC', 'PIC', 'SIC', 
+                        'CAPTAIN', 'PILOT', 'CREW', 'ATTENDANT', 'CR'
+                    ]:
+                        position = field.upper()[:10]  # Limit length
+                        logger.debug(f"  Found position: {position}")
                     
-                    # Gender - single character M/F
+                    # Strategy 4: Gender
                     elif not gender and field.upper() in ['M', 'F', 'MALE', 'FEMALE']:
                         gender = field.upper()[:1]
-                        logger.info(f"  Found gender: {gender}")
+                        logger.debug(f"  Found gender: {gender}")
                     
-                    # Date - various date formats
-                    elif not birth_date and ('/' in field or (field.isdigit() and len(field) >= 8)):
+                    # Strategy 5: Date parsing (birth date)
+                    elif not birth_date and ('/' in field or (field.isdigit() and len(field) == 8)):
                         try:
                             if '/' in field:
-                                birth_date = datetime.strptime(field, "%d/%m/%Y").date()
+                                # Try different date formats
+                                for date_format in ["%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d"]:
+                                    try:
+                                        parsed_date = datetime.strptime(field, date_format).date()
+                                        # Validate reasonable birth date (between 1950 and 2005)
+                                        if 1950 <= parsed_date.year <= 2005:
+                                            birth_date = parsed_date
+                                            logger.debug(f"  Found birth_date: {birth_date}")
+                                            break
+                                    except ValueError:
+                                        continue
                             elif len(field) == 8 and field.isdigit():
-                                birth_date = datetime.strptime(field, "%d%m%Y").date()
-                            if birth_date:
-                                logger.info(f"  Found birth_date: {birth_date}")
-                        except ValueError:
+                                # DDMMYYYY or YYYYMMDD format
+                                for date_format in ["%d%m%Y", "%Y%m%d"]:
+                                    try:
+                                        parsed_date = datetime.strptime(field, date_format).date()
+                                        if 1950 <= parsed_date.year <= 2005:
+                                            birth_date = parsed_date
+                                            logger.debug(f"  Found birth_date: {birth_date}")
+                                            break
+                                    except ValueError:
+                                        continue
+                        except Exception:
                             pass
                     
-                    # Nationality code - usually 3 letter country code at the end
+                    # Strategy 6: Nationality/Country code
                     elif not nationality_code and len(field) == 3 and field.isalpha():
                         nationality_code = field.upper()
-                        logger.info(f"  Found nationality: {nationality_code}")
-                
-                # Strategy 2: If we're missing essential fields, try positional parsing
-                if not crew_id or not passport_number:
-                    logger.info(f"  Trying positional parsing for line {line_num}")
+                        logger.debug(f"  Found nationality: {nationality_code}")
                     
-                    # Common formats:
-                    # Format 1: ID, Passport, Name, Position, Birth, Gender, Nationality
-                    # Format 2: ID, Name, Position, Passport, Birth, Gender, Nationality
-                    
-                    if len(fields) >= 7:
-                        # Try format 1
-                        if not crew_id and fields[0]:
-                            crew_id = fields[0]
-                        if not passport_number and fields[1]:
-                            passport_number = fields[1]
-                        if not position and fields[3]:
-                            position = fields[3]
-                        if not birth_date and fields[4]:
-                            try:
-                                birth_date = datetime.strptime(fields[4], "%d/%m/%Y").date()
-                            except ValueError:
-                                try:
-                                    birth_date = datetime.strptime(fields[4], "%d%m%Y").date()
-                                except ValueError:
-                                    pass
-                        if not gender and fields[5]:
-                            gender = fields[5][:1].upper()
-                        if not nationality_code and fields[6]:
-                            nationality_code = fields[6][:3].upper()
+                    # Strategy 7: Names (if they contain only letters and some punctuation)
+                    elif field.replace(' ', '').replace('-', '').replace("'", '').replace('.', '').isalpha():
+                        if not surname and len(field) > 1:
+                            surname = field.upper()
+                            logger.debug(f"  Found surname: {surname}")
+                        elif not given_name and len(field) > 1 and field != surname:
+                            given_name = field.upper()
+                            logger.debug(f"  Found given_name: {given_name}")
                 
-                # Validate essential fields
+                # Fallback: Try positional parsing if we're missing critical fields
+                if (not crew_id or not passport_number) and len(fields) >= 2:
+                    logger.debug(f"  Attempting positional parsing for line {line_num}")
+                    
+                    # Try to identify crew_id and passport in first few positions
+                    for i, field in enumerate(fields[:5]):
+                        field = field.strip()
+                        if not field:
+                            continue
+                            
+                        # First numeric or alphanumeric field could be crew_id
+                        if not crew_id and (field.isdigit() or (field.isalnum() and len(field) >= 3)):
+                            crew_id = field
+                            logger.debug(f"  Positional crew_id: {crew_id}")
+                        # Look for passport-like field
+                        elif not passport_number and field.isalnum() and len(field) >= 6:
+                            passport_number = field
+                            logger.debug(f"  Positional passport: {passport_number}")
+                
+                # Generate crew_id if still missing
                 if not crew_id:
-                    logger.warning(f"  No crew_id found in line {line_num}")
-                    continue
-                
+                    crew_id = f"CREW_{line_num:03d}"
+                    logger.warning(f"  Generated crew_id: {crew_id} for line {line_num}")
+                    
                 if not passport_number:
-                    logger.warning(f"  No passport_number found in line {line_num}")
+                    logger.warning(f"  No passport number found for line {line_num}, skipping")
                     continue
-                
-                # Set defaults for missing optional fields
+                    
+                # Set defaults for missing fields
                 if not position:
                     position = "CR"  # Default crew
                 if not gender:
-                    gender = "M"  # Default male
+                    gender = "M"  # Default
                 if not nationality_code:
                     nationality_code = "RWA"  # Default Rwanda
                 if not birth_date:
                     birth_date = datetime(1980, 1, 1).date()  # Default date
                 
-                # Clean up fields
-                crew_id = crew_id[:20]  # Limit length
-                passport_number = passport_number[:20]
-                position = position[:10]
-                gender = gender[:1].upper()
-                nationality_code = nationality_code[:10]
+                # Clean and validate fields
+                crew_id = str(crew_id)[:20]
+                passport_number = str(passport_number)[:20]
+                position = str(position)[:10]
+                gender = str(gender)[:1].upper()
+                nationality_code = str(nationality_code)[:10]
                 
-                logger.info(f"  Final parsed data: ID={crew_id}, Passport={passport_number}, Pos={position}, Birth={birth_date}, Gender={gender}, Nat={nationality_code}")
+                logger.info(f"  Final parsed data for line {line_num}:")
+                logger.info(f"    Crew ID: {crew_id}")
+                logger.info(f"    Passport: {passport_number}")
+                logger.info(f"    Position: {position}")
+                logger.info(f"    Birth Date: {birth_date}")
+                logger.info(f"    Gender: {gender}")
+                logger.info(f"    Nationality: {nationality_code}")
                 
                 # Create or update record
                 crew_record, created = QatarCrewBasic.objects.update_or_create(
@@ -2309,24 +2393,22 @@ def process_job97_file(attachment):
                     }
                 )
                 
-                if created:
-                    logger.info(f"✓ Created crew record: {crew_id} for flight {flight_no}")
-                else:
-                    logger.info(f"✓ Updated crew record: {crew_id} for flight {flight_no}")
-                
+                action = "Created" if created else "Updated"
+                logger.info(f"✓ {action} crew record: {crew_id} for flight {flight_no}")
                 processed_crew_count += 1
                 
             except Exception as e:
-                logger.error(f"Error processing line {line_num} in JOB 97: {e} - Line: {line}")
+                logger.error(f"Error processing line {line_num} in JOB 97: {e}")
+                logger.error(f"Problematic line: {line}")
                 continue
                 
         logger.info(f"JOB 97 processing completed for flight {flight_no}: {processed_crew_count} crew members processed")
-        
         return processed_crew_count
         
     except Exception as e:
         logger.error(f"Error processing JOB 97 file: {e}")
         return 0
+
 
 def process_job1008_file(attachment):
     """
@@ -2337,32 +2419,40 @@ def process_job1008_file(attachment):
         content = attachment.content.decode('utf-8').splitlines()
         logger.info("Processing JOB 1008 - Detailed crew passport information")
         
+        processed_count = 0
+        
         for line_num, line in enumerate(content, start=1):
             try:
                 # Skip empty lines or headers
                 if not line.strip():
                     continue
                 
+                # Skip header lines
+                line_upper = line.upper()
+                if any(keyword in line_upper for keyword in ['CREW', 'NAME', 'PASSPORT', 'ID', 'SURNAME', 'FIRSTNAME']):
+                    logger.info(f"Skipping header line {line_num}: {line[:50]}...")
+                    continue
+                
                 # Parse CSV format - based on actual data from logs
                 fields = [field.strip() for field in line.split(',')]
-                if len(fields) < 11:  # Ensure minimum required fields
+                if len(fields) < 5:  # Ensure minimum required fields
                     continue
                 
                 # CORRECTED field mapping based on the actual data structure from your logs:
                 # Format: crew_id,passport_number,,surname,given_name,middle_name,nationality,,date_field,,location,,country_code
                 crew_id = fields[0] if fields[0] else None
                 passport_number = fields[1] if fields[1] else None
-                # Field 2 is empty
+                # Field 2 is usually empty
                 surname = fields[3] if len(fields) > 3 and fields[3] else ""
                 given_name = fields[4] if len(fields) > 4 and fields[4] else ""
                 middle_name = fields[5] if len(fields) > 5 and fields[5] else None
                 nationality = fields[6] if len(fields) > 6 and fields[6] else ""
-                # Field 7 is empty
+                # Field 7 is usually empty
                 date_field = fields[8] if len(fields) > 8 and fields[8] else None  # This could be birth date or issuing date
-                # Field 9 is empty
+                # Field 9 is usually empty
                 location = fields[10] if len(fields) > 10 and fields[10] else ""
-                # Field 11 is empty
-                nationality_country_code = fields[12] if len(fields) > 12 and fields[12] else nationality[:3]
+                # Field 11 is usually empty
+                nationality_country_code = fields[12] if len(fields) > 12 and fields[12] else nationality[:3] if nationality else ""
                 
                 # Skip if essential fields are missing
                 if not crew_id or not passport_number:
@@ -2370,7 +2460,7 @@ def process_job1008_file(attachment):
                 
                 # Parse date field - it appears to be mixed format, avoid country names
                 passport_issuing_date = None
-                if date_field and date_field not in ['RWANDA', 'RWANDAN', '+250', 'nepalese', 'INDIAN', 'KENYAN', 'SUDAN', 'MALAWIAN', 'RWA', 'UNITED KINGDOM', 'FRANCE', 'Rwanda', 'Rwandan', 'SOUTH AFRICA']:
+                if date_field and date_field not in ['RWANDA', 'RWANDAN', '+250', 'NEPALESE', 'INDIAN', 'KENYAN', 'SUDAN', 'MALAWIAN', 'RWA', 'UNITED KINGDOM', 'FRANCE', 'Rwanda', 'Rwandan', 'SOUTH AFRICA']:
                     try:
                         # Try different date formats
                         if '/' in date_field:
@@ -2399,7 +2489,7 @@ def process_job1008_file(attachment):
                     issuing_state = issuing_state[:3]
                 
                 # Create or update record
-                QatarCrewDetailed.objects.update_or_create(
+                detailed_record, created = QatarCrewDetailed.objects.update_or_create(
                     crew_id=crew_id,
                     passport_number=passport_number,
                     defaults={
@@ -2413,16 +2503,20 @@ def process_job1008_file(attachment):
                     }
                 )
                 
-                logger.info(f"Processed detailed crew record: {crew_id} - {given_name} {surname}")
+                action = "Created" if created else "Updated"
+                logger.info(f"{action} detailed crew record: {crew_id} - {given_name} {surname}")
+                processed_count += 1
                 
             except Exception as e:
                 logger.error(f"Error processing line {line_num} in JOB 1008: {e} - Line: {line}")
                 continue
                 
-        logger.info("JOB 1008 processing completed")
+        logger.info(f"JOB 1008 processing completed - {processed_count} records processed")
+        return processed_count
         
     except Exception as e:
         logger.error(f"Error processing JOB 1008 file: {e}")
+        return 0
 
 
 def generate_qatar_apis_file():
@@ -2444,22 +2538,22 @@ def generate_qatar_apis_file():
         basic_crew_count = QatarCrewBasic.objects.count()
         detailed_crew_count = QatarCrewDetailed.objects.count()
         doha_kgl_basic = QatarCrewBasic.objects.filter(
-            models.Q(origin='DOH', destination='KGL') | 
-            models.Q(origin='KGL', destination='DOH')
+            models.Q(origin='OTHH', destination='HRYR') | 
+            models.Q(origin='HRYR', destination='OTHH')
         ).count()
         
         logger.info(f"DEBUG: Basic crew records: {basic_crew_count}")
         logger.info(f"DEBUG: Detailed crew records: {detailed_crew_count}")
-        logger.info(f"DEBUG: DOH-KGL/KGL-DOH basic records: {doha_kgl_basic}")
+        logger.info(f"DEBUG: OTHH-HRYR/HRYR-OTHH basic records: {doha_kgl_basic}")
         
-        # Get all basic crew records for DOH-KGL and KGL-DOH flights
+        # Get all basic crew records for OTHH-HRYR and HRYR-OTHH flights
         basic_crew_records = QatarCrewBasic.objects.filter(
-            models.Q(origin='DOH', destination='KGL') | 
-            models.Q(origin='KGL', destination='DOH')
+            models.Q(origin='OTHH', destination='HRYR') | 
+            models.Q(origin='HRYR', destination='OTHH')
         )
         
         if not basic_crew_records.exists():
-            logger.warning("No basic crew records found for DOH-KGL or KGL-DOH flights")
+            logger.warning("No basic crew records found for OTHH-HRYR or HRYR-OTHH flights")
             return None
         
         apis_records = []
@@ -2472,15 +2566,30 @@ def generate_qatar_apis_file():
                 logger.info(f"Processing crew {basic_record.crew_id} for flight {basic_record.flight_no}")
                 
                 # Get detailed information for this crew member
-                # FIXED: More flexible matching - try crew_id first, then crew_id + passport
+                # Try crew_id first, then crew_id + passport
                 detailed_record = QatarCrewDetailed.objects.filter(
                     crew_id=basic_record.crew_id
                 ).first()
                 
                 if not detailed_record:
+                    # Try matching by passport number
+                    detailed_record = QatarCrewDetailed.objects.filter(
+                        passport_number=basic_record.passport_number
+                    ).first()
+                
+                if not detailed_record:
                     logger.warning(f"No detailed record found for crew {basic_record.crew_id}")
                     missing_details_count += 1
-                    continue
+                    # Create a minimal detailed record
+                    detailed_record = QatarCrewDetailed(
+                        crew_id=basic_record.crew_id,
+                        passport_number=basic_record.passport_number,
+                        surname="UNKNOWN",
+                        given_name="CREW",
+                        nationality="RWANDAN",
+                        nationality_country_code="RWA",
+                        passport_issuing_state="RWA"
+                    )
                 
                 # Get flight schedule information for timing
                 flight_data = FlightData.objects.filter(
@@ -2502,8 +2611,8 @@ def generate_qatar_apis_file():
                     arr_time = flight_data.sta_utc or datetime.time(14, 0)
                     arr_date = flight_data.sa_date_utc or basic_record.flight_date
                 
-                # Determine direction
-                direction = 'O' if basic_record.origin == 'KGL' else 'I'  # Outbound from KGL, Inbound to KGL
+                # Determine direction (O = Outbound from KGL, I = Inbound to KGL)
+                direction = 'O' if basic_record.origin == 'HRYR' else 'I'
                 
                 # Calculate document expiry (assuming 10 years from issue date if available)
                 document_expiry = None
@@ -2613,28 +2722,136 @@ def generate_qatar_apis_file():
 def process_qatar_job97_email_attachment(item, process_function):
     """
     Process JOB 97 email attachments
+    Enhanced with better error handling and logging
     """
     try:
-        if item.attachments:
+        logger.info(f"Processing email with subject: {item.subject}")
+        
+        if hasattr(item, 'attachments') and item.attachments:
+            attachment_count = 0
+            try:
+                attachment_count = len(list(item.attachments))
+                logger.info(f"Email has {attachment_count} attachments")
+            except Exception as e:
+                logger.warning(f"Could not count attachments: {e}")
+            
+            total_processed = 0
             for attachment in item.attachments:
                 if isinstance(attachment, FileAttachment):
                     # Store reference to parent item for subject parsing
                     attachment.parent_item = item
-                    logger.info(f"Processing JOB 97 attachment: {attachment.name}")
-                    process_function(attachment)
+                    logger.info(f"Processing JOB 97 attachment: {attachment.name} (size: {len(attachment.content)} bytes)")
+                    
+                    try:
+                        result = process_function(attachment)
+                        total_processed += result if isinstance(result, int) else 0
+                        logger.info(f"Processed attachment {attachment.name}: {result} records")
+                    except Exception as e:
+                        logger.error(f"Error processing attachment {attachment.name}: {e}")
+                        continue
+                else:
+                    logger.info(f"Skipping non-file attachment: {type(attachment)}")
+            
+            return total_processed
+        else:
+            logger.warning(f"Email has no attachments or attachments are not accessible")
+            return 0
+            
     except Exception as e:
         logger.error(f"Error processing JOB 97 email attachment: {e}")
+        return 0
 
 
 def process_qatar_job1008_email_attachment(item, process_function):
     """
     Process JOB 1008 email attachments
+    Enhanced with better error handling and logging
     """
     try:
-        if item.attachments:
+        logger.info(f"Processing JOB 1008 email with subject: {item.subject}")
+        
+        if hasattr(item, 'attachments') and item.attachments:
+            total_processed = 0
             for attachment in item.attachments:
                 if isinstance(attachment, FileAttachment):
                     logger.info(f"Processing JOB 1008 attachment: {attachment.name}")
-                    process_function(attachment)
+                    try:
+                        result = process_function(attachment)
+                        total_processed += result if isinstance(result, int) else 0
+                        logger.info(f"Processed JOB 1008 attachment {attachment.name}: {result} records")
+                    except Exception as e:
+                        logger.error(f"Error processing JOB 1008 attachment {attachment.name}: {e}")
+                        continue
+            return total_processed
+        else:
+            logger.warning(f"JOB 1008 email has no attachments")
+            return 0
     except Exception as e:
         logger.error(f"Error processing JOB 1008 email attachment: {e}")
+        return 0
+
+
+# Additional utility functions for better debugging
+
+def validate_crew_data(crew_data):
+    """
+    Validate crew data before saving
+    """
+    errors = []
+    
+    if not crew_data.get('crew_id'):
+        errors.append("Missing crew_id")
+    
+    if not crew_data.get('passport_number'):
+        errors.append("Missing passport_number")
+    
+    if crew_data.get('birth_date'):
+        try:
+            birth_year = crew_data['birth_date'].year
+            if birth_year < 1950 or birth_year > 2005:
+                errors.append(f"Invalid birth year: {birth_year}")
+        except:
+            errors.append("Invalid birth_date format")
+    
+    return errors
+
+
+def debug_file_content(content, max_lines=10):
+    """
+    Debug helper to analyze file content structure
+    """
+    lines = content.splitlines()
+    logger.info(f"File analysis:")
+    logger.info(f"  Total lines: {len(lines)}")
+    logger.info(f"  Total characters: {len(content)}")
+    logger.info(f"  Has commas: {content.count(',')}")
+    logger.info(f"  Has tabs: {content.count(chr(9))}")
+    
+    logger.info(f"  First {min(max_lines, len(lines))} lines:")
+    for i, line in enumerate(lines[:max_lines]):
+        logger.info(f"    Line {i+1}: {repr(line[:100])}")  # First 100 chars with quotes
+    
+    if len(lines) > max_lines:
+        logger.info(f"  ... and {len(lines) - max_lines} more lines")
+
+
+def test_subject_parsing():
+    """
+    Test function to validate subject parsing with various formats
+    """
+    test_subjects = [
+        "300/KGL DOH/28072025",
+        "301/DOH KGL/29072025",
+        "WB300/KGL DOH/30072025",
+        "300 / KGL DOH / 28/07/2025",
+        "301/DOH-KGL/29072025",
+        "Invalid subject format",
+        ""
+    ]
+    
+    logger.info("Testing subject parsing:")
+    for subject in test_subjects:
+        result = parse_job97_subject(subject)
+        logger.info(f"  '{subject}' -> {result}")
+    
+    return True

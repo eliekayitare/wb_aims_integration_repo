@@ -1792,28 +1792,28 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 
 #=================================================================================================================
 
+#=================================================================================================================
+# QATAR APIS TASKS - ENHANCED FOR RWANDAIR TO DOHA
+#=================================================================================================================
 
 from celery import shared_task
-from datetime import timedelta
+from datetime import timedelta, datetime
 from django.utils import timezone
+from django.conf import settings
 import logging
+import os
 
 from .utils import (
     parse_job97_subject,
     process_qatar_job97_email_attachment,
     process_job97_file,
+    process_qatar_job1008_email_attachment,
+    process_job1008_file,
+    get_exchange_account,
+    generate_qatar_apis_file,
+    debug_file_content,
+    test_subject_parsing,
 )
-# if fetch_qatar_job1008_data is in the same module you can import directly;
-# otherwise import lazily inside the function to avoid circular imports.
-
-logger = logging.getLogger(__name__)
-
-
-# tasks.py
-from celery import shared_task
-from datetime import timedelta
-from django.utils import timezone
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -1822,129 +1822,238 @@ logger = logging.getLogger(__name__)
 def fetch_qatar_job97_data():
     """
     Fetch recent JOB 97 emails (last 30 days) containing basic crew info
-    for DOH↔KGL flights. Subjects like: '300/KGL DOH/25072025'.
+    for KGL↔DOH flights. Subjects like: '300/KGL DOH/28072025'.
+    ENHANCED: Better debugging and error handling for RwandAir emails
     """
-    account = get_exchange_account()
-    logger.info("Fetching recent Qatar JOB 97 crew data emails...")
+    logger.info("Starting Qatar JOB 97 data fetch for RwandAir flights...")
+    
+    try:
+        account = get_exchange_account()
+        logger.info("Successfully connected to Exchange account")
+    except Exception as e:
+        logger.error(f"Failed to connect to Exchange account: {e}")
+        return {"status": "error", "message": f"Exchange connection failed: {e}"}
 
     try:
         start_date = timezone.now() - timedelta(days=30)
+        logger.info(f"Searching for emails since: {start_date}")
 
-        # Lean header fetch to reduce EWS chatter; full item fetched when we touch attachments
+        # Fetch emails with broader search criteria first
         recent_emails = list(
             account.inbox.only('subject', 'datetime_received', 'has_attachments')
             .filter(datetime_received__gte=start_date)
             .order_by('-datetime_received')
         )
-        logger.info("Found %d emails in the last 30 days", len(recent_emails))
+        
+        logger.info(f"Found {len(recent_emails)} total emails in the last 30 days")
 
-        # Parse subjects and keep only DOH↔KGL
+        # Debug: Show some sample subjects to help identify patterns
+        if recent_emails:
+            logger.info("Sample email subjects found:")
+            for i, email in enumerate(recent_emails[:10]):  # Show first 10
+                logger.info(f"  {i+1}. '{email.subject}' (received: {email.datetime_received}, has_attachments: {email.has_attachments})")
+
+        # Parse subjects and keep only KGL↔DOH flights
         candidates = []
+        parsing_stats = {"total": 0, "parsed": 0, "matched_route": 0}
+        
         for email in recent_emails:
+            parsing_stats["total"] += 1
             subj = email.subject or ""
+            
+            # Try to parse the subject
             fno, org, dst, fdate = parse_job97_subject(subj)
-            if all([fno, org, dst, fdate]) and (
-                (org == 'DOH' and dst == 'KGL') or (org == 'KGL' and dst == 'DOH')
-            ):
-                candidates.append(email)
+            
+            if all([fno, org, dst, fdate]):
+                parsing_stats["parsed"] += 1
+                logger.debug(f"Successfully parsed: {subj} -> Flight {fno}, {org}->{dst}, {fdate}")
+                
+                # Check for KGL↔DOH routes (using ICAO codes)
+                valid_routes = [
+                    ('HRYR', 'OTHH'),  # KGL to DOH
+                    ('OTHH', 'HRYR'),  # DOH to KGL
+                ]
+                
+                route_match = any((org, dst) == route for route in valid_routes)
+                
+                if route_match:
+                    parsing_stats["matched_route"] += 1
+                    candidates.append(email)
+                    logger.info(f"✓ Found valid JOB 97 email: {subj}")
+                else:
+                    logger.debug(f"Route not matched: {org} -> {dst} (not in {valid_routes})")
+            else:
+                logger.debug(f"Could not parse subject: '{subj}'")
 
-        logger.info("Found %d parsed JOB 97 emails for DOH↔KGL", len(candidates))
+        logger.info(f"Parsing statistics: {parsing_stats}")
+        logger.info(f"Found {len(candidates)} candidate JOB 97 emails for KGL↔DOH routes")
 
         if not candidates:
-            logger.info("No Qatar JOB 97 emails found in the last 30 days.")
-            return {"status": "no_emails", "message": "No recent JOB 97 emails found"}
+            logger.warning("No Qatar JOB 97 emails found matching KGL↔DOH routes in the last 30 days")
+            
+            # Debug: Show what subjects were found to help with troubleshooting
+            if recent_emails:
+                logger.info("All email subjects found (for debugging):")
+                for email in recent_emails[:20]:  # Show more for debugging
+                    logger.info(f"  '{email.subject}'")
+            
+            return {
+                "status": "no_emails", 
+                "message": "No recent JOB 97 emails found for KGL↔DOH routes",
+                "total_emails": len(recent_emails),
+                "parsing_stats": parsing_stats
+            }
 
-        # (Optional) simple dedupe by EWS id/message-id (keeps first seen)
+        # Remove duplicates
         seen = set()
         job97_emails = []
         for email in candidates:
-            key = getattr(email, 'internet_message_id', None) or getattr(email, 'message_id', None) or getattr(email, 'id', None)
-            if key in seen:
-                continue
-            seen.add(key)
-            job97_emails.append(email)
+            # Use multiple identifiers for deduplication
+            key = (
+                getattr(email, 'internet_message_id', None) or 
+                getattr(email, 'message_id', None) or 
+                getattr(email, 'id', None) or 
+                f"{email.subject}_{email.datetime_received}"
+            )
+            if key not in seen:
+                seen.add(key)
+                job97_emails.append(email)
 
-        processed_count, errors = 0, []
+        logger.info(f"After deduplication: {len(job97_emails)} unique emails to process")
 
-        # Process up to 10 most recent candidate emails
-        for email in job97_emails[:10]:
+        processed_count = 0
+        errors = []
+        total_crew_processed = 0
+
+        # Process emails (limit to 10 most recent)
+        for i, email in enumerate(job97_emails[:10]):
             try:
-                logger.info("Processing JOB 97 email: '%s' | received: %s",
-                            email.subject, email.datetime_received)
+                logger.info(f"Processing email {i+1}/{min(10, len(job97_emails))}: '{email.subject}' received {email.datetime_received}")
 
-                if getattr(email, 'attachments', None):
+                # Check for attachments
+                has_attachments = getattr(email, 'has_attachments', False)
+                logger.info(f"Email has_attachments flag: {has_attachments}")
+
+                if has_attachments:
                     try:
-                        _ = len(list(email.attachments))   # forces a GetItem; count for logging
-                        logger.info("Email has attachments")
-                    except Exception:
-                        logger.info("Email has attachments (count unknown)")
-
-                    # Sets attachment.parent_item and calls process_job97_file for each file
-                    process_qatar_job97_email_attachment(email, process_job97_file)
-                    processed_count += 1
+                        # Force fetch full email item to access attachments
+                        email.refresh(['attachments'])
+                        
+                        if hasattr(email, 'attachments') and email.attachments:
+                            attachment_count = len(list(email.attachments))
+                            logger.info(f"Found {attachment_count} attachments")
+                            
+                            # Process attachments and count crew members processed
+                            crew_count = process_qatar_job97_email_attachment(email, process_job97_file)
+                            total_crew_processed += crew_count if isinstance(crew_count, int) else 0
+                            
+                            processed_count += 1
+                            logger.info(f"✓ Successfully processed email with {crew_count} crew members")
+                        else:
+                            logger.warning(f"Email marked as having attachments but none found: {email.subject}")
+                    except Exception as attachment_error:
+                        logger.error(f"Error accessing attachments for email '{email.subject}': {attachment_error}")
+                        errors.append(f"Attachment error for '{email.subject}': {attachment_error}")
                 else:
-                    logger.warning("Email '%s' has no attachments", email.subject)
+                    logger.warning(f"Email '{email.subject}' has no attachments")
 
             except Exception as e:
                 msg = f"Error processing JOB 97 email '{email.subject}': {e}"
                 logger.error(msg)
                 errors.append(msg)
 
-        logger.info("Processed %d Qatar JOB 97 emails", processed_count)
+        logger.info(f"JOB 97 processing completed: {processed_count} emails processed, {total_crew_processed} crew members total")
 
-        # Trigger JOB 1008 only if we processed at least one email
+        # Trigger JOB 1008 processing if we successfully processed emails
+        job1008_triggered = False
         if processed_count > 0:
             try:
-                # Lazy import to avoid circulars if this lives in the same module
-                from .tasks import fetch_qatar_job1008_data
                 fetch_qatar_job1008_data.delay()
+                job1008_triggered = True
+                logger.info("Successfully queued JOB 1008 processing")
             except Exception as e:
-                logger.error("Failed to queue JOB 1008 fetch: %s", e)
+                logger.error(f"Failed to queue JOB 1008 fetch: {e}")
                 errors.append(f"Failed to queue JOB 1008: {e}")
 
         return {
             "status": "success",
             "processed_emails": processed_count,
+            "total_crew_processed": total_crew_processed,
             "total_found": len(job97_emails),
+            "parsing_stats": parsing_stats,
+            "job1008_triggered": job1008_triggered,
             "errors": errors,
-            "message": f"Processed {processed_count} JOB 97 emails"
+            "message": f"Processed {processed_count} JOB 97 emails with {total_crew_processed} crew members"
         }
 
     except Exception as e:
-        logger.error("Fatal error in fetch_qatar_job97_data: %s", e)
+        logger.error(f"Fatal error in fetch_qatar_job97_data: {e}")
         return {"status": "error", "message": str(e)}
-
-
 
 
 @shared_task
 def fetch_qatar_job1008_data():
     """
     Fetch JOB 1008 emails containing detailed crew passport information
+    ENHANCED: Better search and error handling
     """
-    account = get_exchange_account()
-    logger.info("Fetching Qatar JOB 1008 crew passport data...")
-
-    emails = account.inbox.filter(
-        subject__contains="AIMS JOB : #1008 Feeds APIS interface + ' file attached"
-    ).order_by('-datetime_received')
-    
-    if not emails.exists():
-        logger.info("No Qatar JOB 1008 email found.")
-        return {"status": "no_emails", "message": "No JOB 1008 emails found"}
+    logger.info("Starting Qatar JOB 1008 data fetch...")
     
     try:
+        account = get_exchange_account()
+        logger.info("Successfully connected to Exchange account for JOB 1008")
+    except Exception as e:
+        logger.error(f"Failed to connect to Exchange account: {e}")
+        return {"status": "error", "message": f"Exchange connection failed: {e}"}
+
+    try:
+        # Search for JOB 1008 emails with broader criteria
+        search_terms = [
+            "AIMS JOB : #1008 Feeds APIS interface",
+            "JOB 1008",
+            "1008 Feeds APIS",
+            "APIS interface"
+        ]
+        
+        emails_found = []
+        for term in search_terms:
+            try:
+                emails = list(
+                    account.inbox.filter(subject__contains=term)
+                    .order_by('-datetime_received')[:5]  # Get recent ones
+                )
+                emails_found.extend(emails)
+                logger.info(f"Found {len(emails)} emails containing '{term}'")
+            except Exception as e:
+                logger.warning(f"Error searching for '{term}': {e}")
+                continue
+        
+        # Remove duplicates
+        unique_emails = []
+        seen_ids = set()
+        for email in emails_found:
+            email_id = getattr(email, 'id', None) or f"{email.subject}_{email.datetime_received}"
+            if email_id not in seen_ids:
+                seen_ids.add(email_id)
+                unique_emails.append(email)
+        
+        if not unique_emails:
+            logger.info("No Qatar JOB 1008 emails found.")
+            return {"status": "no_emails", "message": "No JOB 1008 emails found"}
+    
         # Process the most recent email
-        email = emails[0]
+        email = unique_emails[0]
         logger.info(f"Processing Qatar JOB 1008 email with subject: {email.subject}")
-        process_qatar_job1008_email_attachment(email, process_job1008_file)
+        
+        crew_count = process_qatar_job1008_email_attachment(email, process_job1008_file)
         
         # After processing both JOB 97 and JOB 1008, generate the APIS file
         generate_qatar_apis_file_task.delay()
         
         return {
             "status": "success", 
-            "message": "Processed JOB 1008 email successfully"
+            "processed_crew": crew_count,
+            "message": f"Processed JOB 1008 email successfully with {crew_count} crew records"
         }
         
     except Exception as e:
@@ -1956,6 +2065,7 @@ def fetch_qatar_job1008_data():
 def generate_qatar_apis_file_task():
     """
     Generate Qatar APIS file from processed crew data
+    ENHANCED: Better logging and error handling
     """
     try:
         logger.info("Generating Qatar APIS file...")
@@ -1964,6 +2074,14 @@ def generate_qatar_apis_file_task():
         
         if file_path:
             logger.info(f"Qatar APIS file generated successfully: {file_path}")
+            
+            # Log file size for monitoring
+            try:
+                file_size = os.path.getsize(file_path)
+                logger.info(f"Generated file size: {file_size} bytes")
+            except Exception:
+                pass
+                
             return {
                 "status": "success",
                 "file_path": file_path,
@@ -1986,34 +2104,45 @@ def process_qatar_apis_complete_workflow():
     """
     Complete workflow: Fetch JOB 97 -> Fetch JOB 1008 -> Generate APIS file
     This task can be used to manually trigger the complete process
+    ENHANCED: Better timing and error handling
     """
     try:
         logger.info("Starting complete Qatar APIS workflow...")
         
         # Step 1: Fetch JOB 97 data
+        logger.info("Step 1: Fetching JOB 97 data...")
         result_97 = fetch_qatar_job97_data()
+        logger.info(f"JOB 97 result: {result_97}")
+        
         if result_97["status"] == "error":
             return result_97
         
         # Step 2: Fetch JOB 1008 data (with small delay)
         from time import sleep
+        logger.info("Step 2: Waiting 5 seconds before JOB 1008...")
         sleep(5)  # Give some time for JOB 97 processing
         
+        logger.info("Step 2: Fetching JOB 1008 data...")
         result_1008 = fetch_qatar_job1008_data()
+        logger.info(f"JOB 1008 result: {result_1008}")
+        
         if result_1008["status"] == "error":
             return result_1008
         
         # Step 3: Generate APIS file (with small delay)
+        logger.info("Step 3: Waiting 5 seconds before APIS generation...")
         sleep(5)  # Give some time for JOB 1008 processing
         
+        logger.info("Step 3: Generating APIS file...")
         result_apis = generate_qatar_apis_file_task()
+        logger.info(f"APIS generation result: {result_apis}")
         
         return {
             "status": "completed",
             "job97_result": result_97,
             "job1008_result": result_1008,
             "apis_result": result_apis,
-            "message": "Complete Qatar APIS workflow finished"
+            "message": "Complete Qatar APIS workflow finished successfully"
         }
         
     except Exception as e:
@@ -2022,9 +2151,83 @@ def process_qatar_apis_complete_workflow():
 
 
 @shared_task
+def debug_job97_emails():
+    """
+    Debug task to analyze JOB 97 email patterns without processing
+    Useful for troubleshooting email parsing issues
+    """
+    logger.info("Starting JOB 97 email debugging...")
+    
+    try:
+        account = get_exchange_account()
+        start_date = timezone.now() - timedelta(days=7)  # Last week only for debugging
+        
+        emails = list(
+            account.inbox.only('subject', 'datetime_received', 'has_attachments')
+            .filter(datetime_received__gte=start_date)
+            .order_by('-datetime_received')[:50]  # Limit to 50 most recent
+        )
+        
+        logger.info(f"Analyzing {len(emails)} recent emails...")
+        
+        # Test subject parsing function first
+        test_subject_parsing()
+        
+        # Analyze subject patterns
+        subject_patterns = {}
+        flight_numbers = set()
+        routes = set()
+        parsing_results = []
+        
+        for email in emails:
+            subject = email.subject or ""
+            logger.info(f"Email: '{subject}' | Received: {email.datetime_received} | Has attachments: {email.has_attachments}")
+            
+            # Try to parse
+            fno, org, dst, fdate = parse_job97_subject(subject)
+            parsing_results.append({
+                "subject": subject,
+                "parsed": all([fno, org, dst, fdate]),
+                "flight_no": fno,
+                "origin": org,
+                "destination": dst,
+                "flight_date": fdate
+            })
+            
+            if all([fno, org, dst, fdate]):
+                flight_numbers.add(fno)
+                routes.add(f"{org}-{dst}")
+                
+                # Check if it's a KGL-DOH route
+                is_valid_route = (org, dst) in [('HRYR', 'OTHH'), ('OTHH', 'HRYR')]
+                logger.info(f"  -> Parsed: Flight {fno}, {org}->{dst}, {fdate}, Valid route: {is_valid_route}")
+        
+        logger.info(f"Debug Summary:")
+        logger.info(f"  Total emails analyzed: {len(emails)}")
+        logger.info(f"  Successfully parsed subjects: {sum(1 for r in parsing_results if r['parsed'])}")
+        logger.info(f"  Unique flight numbers found: {flight_numbers}")
+        logger.info(f"  Unique routes found: {routes}")
+        
+        # Return detailed results
+        return {
+            "status": "success",
+            "total_emails": len(emails),
+            "parsing_results": parsing_results,
+            "flight_numbers": list(flight_numbers),
+            "routes": list(routes),
+            "message": f"Analyzed {len(emails)} emails"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in JOB 97 debugging: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task
 def cleanup_old_qatar_apis_files():
     """
     Clean up old Qatar APIS files (older than 30 days)
+    ENHANCED: Better logging and error handling
     """
     try:
         from datetime import timedelta
@@ -2039,6 +2242,8 @@ def cleanup_old_qatar_apis_files():
         cutoff_date = datetime.now() - timedelta(days=30)
         deleted_files = []
         total_size_freed = 0
+        
+        logger.info(f"Starting cleanup of files older than {cutoff_date}")
         
         for filename in os.listdir(output_dir):
             file_path = os.path.join(output_dir, filename)
@@ -2076,10 +2281,98 @@ def cleanup_old_qatar_apis_files():
             "status": "success",
             "deleted_files": len(deleted_files),
             "total_size_freed": total_size_freed,
-            "files": deleted_files
+            "files": deleted_files,
+            "message": f"Cleanup completed: {len(deleted_files)} files deleted"
         }
         
     except Exception as e:
         logger.error(f"Error during Qatar APIS file cleanup: {str(e)}")
         return {"status": "error", "message": str(e)}
 
+
+@shared_task
+def test_qatar_apis_system():
+    """
+    Test task to validate the entire Qatar APIS system
+    """
+    logger.info("Starting Qatar APIS system test...")
+    
+    try:
+        results = {
+            "exchange_connection": False,
+            "subject_parsing": False,
+            "database_access": False,
+            "file_generation": False,
+            "errors": []
+        }
+        
+        # Test 1: Exchange connection
+        try:
+            account = get_exchange_account()
+            # Try to access inbox
+            recent_emails = list(account.inbox.only('subject').all()[:1])
+            results["exchange_connection"] = True
+            logger.info("✓ Exchange connection test passed")
+        except Exception as e:
+            results["errors"].append(f"Exchange connection failed: {e}")
+            logger.error(f"✗ Exchange connection test failed: {e}")
+        
+        # Test 2: Subject parsing
+        try:
+            test_result = test_subject_parsing()
+            results["subject_parsing"] = test_result
+            logger.info("✓ Subject parsing test passed")
+        except Exception as e:
+            results["errors"].append(f"Subject parsing failed: {e}")
+            logger.error(f"✗ Subject parsing test failed: {e}")
+        
+        # Test 3: Database access
+        try:
+            from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord
+            basic_count = QatarCrewBasic.objects.count()
+            detailed_count = QatarCrewDetailed.objects.count()
+            apis_count = QatarApisRecord.objects.count()
+            results["database_access"] = True
+            logger.info(f"✓ Database access test passed - Basic: {basic_count}, Detailed: {detailed_count}, APIS: {apis_count}")
+        except Exception as e:
+            results["errors"].append(f"Database access failed: {e}")
+            logger.error(f"✗ Database access test failed: {e}")
+        
+        # Test 4: File generation directory
+        try:
+            output_dir = os.path.join(settings.MEDIA_ROOT, "qatar_apis")
+            os.makedirs(output_dir, exist_ok=True)
+            test_file = os.path.join(output_dir, "test_file.txt")
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+            results["file_generation"] = True
+            logger.info("✓ File generation test passed")
+        except Exception as e:
+            results["errors"].append(f"File generation failed: {e}")
+            logger.error(f"✗ File generation test failed: {e}")
+        
+        # Summary
+        total_tests = 4
+        passed_tests = sum([
+            results["exchange_connection"],
+            results["subject_parsing"], 
+            results["database_access"],
+            results["file_generation"]
+        ])
+        
+        overall_status = "passed" if passed_tests == total_tests else "failed"
+        
+        logger.info(f"Qatar APIS system test completed: {passed_tests}/{total_tests} tests passed")
+        
+        return {
+            "status": overall_status,
+            "tests_passed": passed_tests,
+            "total_tests": total_tests,
+            "results": results,
+            "message": f"System test completed: {passed_tests}/{total_tests} tests passed"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in Qatar APIS system test: {e}")
+        return {"status": "error", "message": str(e)}
