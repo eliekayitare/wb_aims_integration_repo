@@ -2063,17 +2063,17 @@ def process_tableau_data_email_attachment(item, process_function):
 # QATAR APIS UTILS 
 
 #==================================================================================
-
 #=================================================================================
-# QATAR APIS UTILS - UPDATED VERSION FOR RWANDAIR TO DOHA
+# QATAR APIS UTILS - UPDATED VERSION FOR RWANDAIR TO DOHA (3-LETTER CODES)
 #==================================================================================
 
 import re
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from exchangelib import FileAttachment, Credentials, Configuration, Account
 from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
 import logging
@@ -2174,7 +2174,7 @@ def parse_job97_subject(subject: str):
       - 300 / KGL-DOH / 28/07/2025
       - WB300/KGL DOH/28072025
     
-    FIXED: Handles both IATA (KGL, DOH) and converts to ICAO codes
+    FIXED: Keep 3-letter IATA codes as they are (don't convert to ICAO)
     Returns: (flight_no, origin, destination, flight_date) or (None, None, None, None)
     """
     if not subject:
@@ -2185,17 +2185,17 @@ def parse_job97_subject(subject: str):
     s = re.sub(r'\s+', ' ', s)  # collapse multiple spaces
     s = s.replace('-', ' ')     # treat hyphen like a space between airport codes
 
-    # Updated pattern to handle both 3-letter IATA codes and potential variations
+    # Pattern to handle 3-letter IATA codes
     # Pattern: <optional WB><flight>/<ORIGIN> <DEST>/<date>
     m = re.search(
-        r'(?:WB)?(\d{2,4})\s*/\s*([A-Z]{3,4})\s+([A-Z]{3,4})\s*/\s*(\d{8}|\d{2}/\d{2}/\d{4})',
+        r'(?:WB)?(\d{2,4})\s*/\s*([A-Z]{3})\s+([A-Z]{3})\s*/\s*(\d{8}|\d{2}/\d{2}/\d{4})',
         s
     )
     
     if not m:
         # Try alternative pattern with different separators or spacing
         m = re.search(
-            r'(?:WB)?(\d{2,4})\s*[/\-]\s*([A-Z]{3,4})\s*[/\-]?\s*([A-Z]{3,4})\s*[/\-]\s*(\d{8}|\d{2}/\d{2}/\d{4})',
+            r'(?:WB)?(\d{2,4})\s*[/\-]\s*([A-Z]{3})\s*[/\-]?\s*([A-Z]{3})\s*[/\-]\s*(\d{8}|\d{2}/\d{2}/\d{4})',
             s
         )
     
@@ -2205,19 +2205,15 @@ def parse_job97_subject(subject: str):
 
     flight_no, origin, destination, date_str = m.groups()
 
-    # Convert IATA codes to ICAO if needed for consistency
-    airport_mapping = {
-        'KGL': 'HRYR',  # Kigali (Rwanda)
-        'DOH': 'OTHH',  # Doha (Qatar)
-        'KIGALI': 'HRYR',
-        'DOHA': 'OTHH',
-        'HRYR': 'HRYR',  # Already ICAO
-        'OTHH': 'OTHH'   # Already ICAO
-    }
+    # Keep IATA codes as they are - don't convert to ICAO
+    # Just validate that they are the expected routes
+    valid_combinations = [
+        ('KGL', 'DOH'),  # Kigali to Doha
+        ('DOH', 'KGL'),  # Doha to Kigali
+    ]
     
-    # Use mapping if available, otherwise keep original
-    origin_icao = airport_mapping.get(origin, origin)
-    destination_icao = airport_mapping.get(destination, destination)
+    if (origin, destination) not in valid_combinations:
+        logger.debug(f"Route {origin} -> {destination} not in valid combinations: {valid_combinations}")
 
     # Parse date (DDMMYYYY or DD/MM/YYYY)
     try:
@@ -2229,8 +2225,8 @@ def parse_job97_subject(subject: str):
         logger.error(f"JOB 97 subject date parse failed: {date_str} in '{subject}'")
         return None, None, None, None
 
-    logger.info(f"Parsed JOB 97 subject: Flight {flight_no}, {origin_icao} -> {destination_icao}, Date: {flight_date}")
-    return flight_no, origin_icao, destination_icao, flight_date
+    logger.info(f"Parsed JOB 97 subject: Flight {flight_no}, {origin} -> {destination}, Date: {flight_date}")
+    return flight_no, origin, destination, flight_date
 
 
 def process_job97_file(attachment):
@@ -2249,8 +2245,8 @@ def process_job97_file(attachment):
         
         # Check if this is a valid KGL-DOH or DOH-KGL route
         valid_routes = [
-            ('HRYR', 'OTHH'),  # KGL to DOH (ICAO)
-            ('OTHH', 'HRYR'),  # DOH to KGL (ICAO)
+            ('KGL', 'DOH'),  # KGL to DOH (IATA)
+            ('DOH', 'KGL'),  # DOH to KGL (IATA)
         ]
         
         route_valid = any((origin, destination) == route for route in valid_routes)
@@ -2623,22 +2619,22 @@ def generate_qatar_apis_file():
         basic_crew_count = QatarCrewBasic.objects.count()
         detailed_crew_count = QatarCrewDetailed.objects.count()
         doha_kgl_basic = QatarCrewBasic.objects.filter(
-            models.Q(origin='OTHH', destination='HRYR') | 
-            models.Q(origin='HRYR', destination='OTHH')
+            models.Q(origin='DOH', destination='KGL') | 
+            models.Q(origin='KGL', destination='DOH')
         ).count()
         
         logger.info(f"DEBUG: Basic crew records: {basic_crew_count}")
         logger.info(f"DEBUG: Detailed crew records: {detailed_crew_count}")
-        logger.info(f"DEBUG: OTHH-HRYR/HRYR-OTHH basic records: {doha_kgl_basic}")
+        logger.info(f"DEBUG: DOH-KGL/KGL-DOH basic records: {doha_kgl_basic}")
         
-        # Get all basic crew records for OTHH-HRYR and HRYR-OTHH flights
+        # Get all basic crew records for DOH-KGL and KGL-DOH flights
         basic_crew_records = QatarCrewBasic.objects.filter(
-            models.Q(origin='OTHH', destination='HRYR') | 
-            models.Q(origin='HRYR', destination='OTHH')
+            models.Q(origin='DOH', destination='KGL') | 
+            models.Q(origin='KGL', destination='DOH')
         )
         
         if not basic_crew_records.exists():
-            logger.warning("No basic crew records found for OTHH-HRYR or HRYR-OTHH flights")
+            logger.warning("No basic crew records found for DOH-KGL or KGL-DOH flights")
             return None
         
         apis_records = []
@@ -2697,7 +2693,7 @@ def generate_qatar_apis_file():
                     arr_date = flight_data.sa_date_utc or basic_record.flight_date
                 
                 # Determine direction (O = Outbound from KGL, I = Inbound to KGL)
-                direction = 'O' if basic_record.origin == 'HRYR' else 'I'
+                direction = 'O' if basic_record.origin == 'KGL' else 'I'
                 
                 # Calculate document expiry (assuming 10 years from issue date if available)
                 document_expiry = None
@@ -2940,3 +2936,105 @@ def test_subject_parsing():
         logger.info(f"  '{subject}' -> {result}")
     
     return True
+
+
+# Database cleanup and verification functions
+
+def cleanup_old_airport_codes():
+    """
+    Clean up crew records that were stored with wrong airport codes (ICAO instead of IATA)
+    """
+    try:
+        # Count records with wrong codes
+        wrong_basic = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['HRYR', 'OTHH']) | 
+            models.Q(destination__in=['HRYR', 'OTHH'])
+        ).count()
+        
+        wrong_apis = QatarApisRecord.objects.filter(
+            models.Q(dep_port__in=['HRYR', 'OTHH']) | 
+            models.Q(arr_port__in=['HRYR', 'OTHH'])
+        ).count()
+        
+        logger.info(f"Found {wrong_basic} basic crew records with ICAO codes")
+        logger.info(f"Found {wrong_apis} APIS records with ICAO codes")
+        
+        # Delete records with wrong airport codes
+        deleted_basic = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['HRYR', 'OTHH']) | 
+            models.Q(destination__in=['HRYR', 'OTHH'])
+        ).delete()
+        
+        deleted_apis = QatarApisRecord.objects.filter(
+            models.Q(dep_port__in=['HRYR', 'OTHH']) | 
+            models.Q(arr_port__in=['HRYR', 'OTHH'])
+        ).delete()
+        
+        logger.info(f"Deleted {deleted_basic[0]} basic crew records with ICAO codes")
+        logger.info(f"Deleted {deleted_apis[0]} APIS records with ICAO codes")
+        
+        return {
+            "status": "success",
+            "deleted_basic": deleted_basic[0] if deleted_basic else 0,
+            "deleted_apis": deleted_apis[0] if deleted_apis else 0,
+            "message": f"Cleaned up {deleted_basic[0] if deleted_basic else 0} basic + {deleted_apis[0] if deleted_apis else 0} APIS records"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up old airport codes: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+def verify_current_data():
+    """
+    Verify what data we currently have in the database
+    """
+    try:
+        # Count all records
+        basic_total = QatarCrewBasic.objects.count()
+        detailed_total = QatarCrewDetailed.objects.count()
+        apis_total = QatarApisRecord.objects.count()
+        
+        # Count by airport codes
+        basic_iata = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['KGL', 'DOH']) | 
+            models.Q(destination__in=['KGL', 'DOH'])
+        ).count()
+        
+        basic_icao = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['HRYR', 'OTHH']) | 
+            models.Q(destination__in=['HRYR', 'OTHH'])
+        ).count()
+        
+        # Show sample records
+        sample_basic = list(QatarCrewBasic.objects.all()[:5].values(
+            'flight_no', 'origin', 'destination', 'flight_date', 'crew_id'
+        ))
+        
+        sample_detailed = list(QatarCrewDetailed.objects.all()[:5].values(
+            'crew_id', 'passport_number', 'surname', 'given_name'
+        ))
+        
+        logger.info(f"DATABASE VERIFICATION:")
+        logger.info(f"  Basic crew records total: {basic_total}")
+        logger.info(f"  Basic crew with IATA codes (KGL/DOH): {basic_iata}")
+        logger.info(f"  Basic crew with ICAO codes (HRYR/OTHH): {basic_icao}")
+        logger.info(f"  Detailed crew records: {detailed_total}")
+        logger.info(f"  APIS records: {apis_total}")
+        logger.info(f"  Sample basic records: {sample_basic}")
+        logger.info(f"  Sample detailed records: {sample_detailed}")
+        
+        return {
+            "status": "success",
+            "basic_total": basic_total,
+            "basic_iata": basic_iata,
+            "basic_icao": basic_icao,
+            "detailed_total": detailed_total,
+            "apis_total": apis_total,
+            "sample_basic": sample_basic,
+            "sample_detailed": sample_detailed
+        }
+        
+    except Exception as e:
+        logger.error(f"Error verifying current data: {e}")
+        return {"status": "error", "message": str(e)}

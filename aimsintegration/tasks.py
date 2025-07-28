@@ -1792,11 +1792,15 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 
 #=================================================================================================================
 
+#=================================================================================================================
+# QATAR APIS TASKS - ENHANCED FOR RWANDAIR TO DOHA (3-LETTER CODES)
+#=================================================================================================================
 
 from celery import shared_task
 from datetime import timedelta, datetime
 from django.utils import timezone
 from django.conf import settings
+from django.db import models
 import logging
 import os
 
@@ -1812,6 +1816,8 @@ from .utils import (
     generate_qatar_apis_file,
     debug_file_content,
     test_subject_parsing,
+    cleanup_old_airport_codes,
+    verify_current_data,
 )
 
 logger = logging.getLogger(__name__)
@@ -1863,10 +1869,10 @@ def fetch_qatar_job97_data():
                 parsing_stats["parsed"] += 1
                 logger.debug(f"Successfully parsed: {subj} -> Flight {fno}, {org}->{dst}, {fdate}")
                 
-                # Check for KGL↔DOH routes (using ICAO codes)
+                # Check for KGL↔DOH routes (using IATA codes)
                 valid_routes = [
-                    ('HRYR', 'OTHH'),  # KGL to DOH
-                    ('OTHH', 'HRYR'),  # DOH to KGL
+                    ('KGL', 'DOH'),  # KGL to DOH
+                    ('DOH', 'KGL'),  # DOH to KGL
                 ]
                 
                 route_match = any((org, dst) == route for route in valid_routes)
@@ -2188,7 +2194,7 @@ def debug_job97_emails():
                 routes.add(f"{org}-{dst}")
                 
                 # Check if it's a KGL-DOH route
-                is_valid_route = (org, dst) in [('HRYR', 'OTHH'), ('OTHH', 'HRYR')]
+                is_valid_route = (org, dst) in [('KGL', 'DOH'), ('DOH', 'KGL')]
                 logger.info(f"  -> Parsed: Flight {fno}, {org}->{dst}, {fdate}, Valid route: {is_valid_route}")
         
         logger.info(f"Debug Summary:")
@@ -2365,4 +2371,144 @@ def test_qatar_apis_system():
         
     except Exception as e:
         logger.error(f"Error in Qatar APIS system test: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# Database cleanup and verification tasks
+
+@shared_task
+def cleanup_old_airport_codes():
+    """
+    Clean up crew records that were stored with wrong airport codes (ICAO instead of IATA)
+    """
+    try:
+        from .models import QatarCrewBasic, QatarApisRecord
+        
+        # Count records with wrong codes
+        wrong_basic = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['HRYR', 'OTHH']) | 
+            models.Q(destination__in=['HRYR', 'OTHH'])
+        ).count()
+        
+        wrong_apis = QatarApisRecord.objects.filter(
+            models.Q(dep_port__in=['HRYR', 'OTHH']) | 
+            models.Q(arr_port__in=['HRYR', 'OTHH'])
+        ).count()
+        
+        logger.info(f"Found {wrong_basic} basic crew records with ICAO codes")
+        logger.info(f"Found {wrong_apis} APIS records with ICAO codes")
+        
+        # Delete records with wrong airport codes
+        deleted_basic = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['HRYR', 'OTHH']) | 
+            models.Q(destination__in=['HRYR', 'OTHH'])
+        ).delete()
+        
+        deleted_apis = QatarApisRecord.objects.filter(
+            models.Q(dep_port__in=['HRYR', 'OTHH']) | 
+            models.Q(arr_port__in=['HRYR', 'OTHH'])
+        ).delete()
+        
+        logger.info(f"Deleted {deleted_basic[0]} basic crew records with ICAO codes")
+        logger.info(f"Deleted {deleted_apis[0]} APIS records with ICAO codes")
+        
+        return {
+            "status": "success",
+            "deleted_basic": deleted_basic[0] if deleted_basic else 0,
+            "deleted_apis": deleted_apis[0] if deleted_apis else 0,
+            "message": f"Cleaned up {deleted_basic[0] if deleted_basic else 0} basic + {deleted_apis[0] if deleted_apis else 0} APIS records"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up old airport codes: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task
+def verify_current_data():
+    """
+    Verify what data we currently have in the database
+    """
+    try:
+        from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord
+        
+        # Count all records
+        basic_total = QatarCrewBasic.objects.count()
+        detailed_total = QatarCrewDetailed.objects.count()
+        apis_total = QatarApisRecord.objects.count()
+        
+        # Count by airport codes
+        basic_iata = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['KGL', 'DOH']) | 
+            models.Q(destination__in=['KGL', 'DOH'])
+        ).count()
+        
+        basic_icao = QatarCrewBasic.objects.filter(
+            models.Q(origin__in=['HRYR', 'OTHH']) | 
+            models.Q(destination__in=['HRYR', 'OTHH'])
+        ).count()
+        
+        # Show sample records
+        sample_basic = list(QatarCrewBasic.objects.all()[:5].values(
+            'flight_no', 'origin', 'destination', 'flight_date', 'crew_id'
+        ))
+        
+        sample_detailed = list(QatarCrewDetailed.objects.all()[:5].values(
+            'crew_id', 'passport_number', 'surname', 'given_name'
+        ))
+        
+        logger.info(f"DATABASE VERIFICATION:")
+        logger.info(f"  Basic crew records total: {basic_total}")
+        logger.info(f"  Basic crew with IATA codes (KGL/DOH): {basic_iata}")
+        logger.info(f"  Basic crew with ICAO codes (HRYR/OTHH): {basic_icao}")
+        logger.info(f"  Detailed crew records: {detailed_total}")
+        logger.info(f"  APIS records: {apis_total}")
+        logger.info(f"  Sample basic records: {sample_basic}")
+        logger.info(f"  Sample detailed records: {sample_detailed}")
+        
+        return {
+            "status": "success",
+            "basic_total": basic_total,
+            "basic_iata": basic_iata,
+            "basic_icao": basic_icao,
+            "detailed_total": detailed_total,
+            "apis_total": apis_total,
+            "sample_basic": sample_basic,
+            "sample_detailed": sample_detailed
+        }
+        
+    except Exception as e:
+        logger.error(f"Error verifying current data: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task 
+def test_single_subject_parsing():
+    """
+    Test parsing of a single subject to verify the fix
+    """
+    try:
+        test_subjects = [
+            "300/KGL DOH/28072025",
+            "301/DOH KGL/29072025"
+        ]
+        
+        results = []
+        for subject in test_subjects:
+            result = parse_job97_subject(subject)
+            results.append({
+                "subject": subject,
+                "parsed": result,
+                "valid": all(result) if result else False
+            })
+            logger.info(f"Parsing '{subject}' -> {result}")
+        
+        return {
+            "status": "success", 
+            "results": results,
+            "message": "Subject parsing test completed"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error testing subject parsing: {e}")
         return {"status": "error", "message": str(e)}
