@@ -1805,7 +1805,7 @@ from django.db import models
 
 
 @shared_task
-def fetch_qatar_job97_data_recent():
+def fetch_qatar_job97_data():
     """
     Fetch recent JOB 97 emails (last 30 days) containing basic crew information for DOH-KGL and KGL-DOH flights
     """
