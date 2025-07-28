@@ -1803,19 +1803,21 @@ from .utils import (
 from .models import QatarCrewBasic, QatarCrewDetailed, QatarApisRecord, FlightData
 from django.db import models
 
+
 @shared_task
 def fetch_qatar_job97_data_recent():
     """
     Fetch recent JOB 97 emails (last 30 days) containing basic crew information for DOH-KGL and KGL-DOH flights
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+    from django.utils import timezone
     
     account = get_exchange_account()
     logger.info("Fetching recent Qatar JOB 97 crew data emails...")
 
     try:
-        # Get emails from the last 30 days
-        start_date = datetime.now() - timedelta(days=30)
+        # Get emails from the last 30 days (timezone-aware)
+        start_date = timezone.now() - timedelta(days=30)
         
         # Get recent emails
         recent_emails = list(account.inbox.filter(
