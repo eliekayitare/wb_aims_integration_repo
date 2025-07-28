@@ -2626,8 +2626,8 @@ def process_job1008_file(attachment):
 
 def generate_qatar_apis_file():
     """
-    Generate Qatar APIS file by combining data from all sources
-    FIXED: Better error handling, debugging, and more flexible matching
+    Generate Qatar APIS file in EDIFACT format by combining data from all sources
+    FIXED: Generate proper EDIFACT format instead of CSV
     """
     try:
         # Create output directory
@@ -2636,7 +2636,7 @@ def generate_qatar_apis_file():
         
         # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"QATAR_APIS_{timestamp}.txt"
+        filename = f"QATAR_APIS_{timestamp}.edi"
         file_path = os.path.join(output_dir, filename)
         
         # Debug: Check what data we have
@@ -2661,166 +2661,148 @@ def generate_qatar_apis_file():
             logger.warning("No basic crew records found for DOH-KGL or KGL-DOH flights")
             return None
         
-        apis_records = []
-        processed_count = 0
-        missing_details_count = 0
-        missing_flight_data_count = 0
-        
+        # Group by flight for EDIFACT generation
+        flights = {}
         for basic_record in basic_crew_records:
-            try:
-                logger.info(f"Processing crew {basic_record.crew_id} for flight {basic_record.flight_no}")
-                
-                # Get detailed information for this crew member
-                # Try crew_id first, then crew_id + passport
-                detailed_record = QatarCrewDetailed.objects.filter(
-                    crew_id=basic_record.crew_id
-                ).first()
-                
-                if not detailed_record:
-                    # Try matching by passport number
-                    detailed_record = QatarCrewDetailed.objects.filter(
-                        passport_number=basic_record.passport_number
-                    ).first()
-                
-                if not detailed_record:
-                    logger.warning(f"No detailed record found for crew {basic_record.crew_id}")
-                    missing_details_count += 1
-                    # Create a minimal detailed record
-                    detailed_record = QatarCrewDetailed(
-                        crew_id=basic_record.crew_id,
-                        passport_number=basic_record.passport_number,
-                        surname="UNKNOWN",
-                        given_name="CREW",
-                        nationality="RWANDAN",
-                        nationality_country_code="RWA",
-                        passport_issuing_state="RWA"
-                    )
-                
-                # Get flight schedule information for timing
-                flight_data = FlightData.objects.filter(
-                    flight_no=basic_record.flight_no,
-                    sd_date_utc=basic_record.flight_date,
-                    dep_code_icao=basic_record.origin,
-                    arr_code_icao=basic_record.destination
-                ).first()
-                
-                if not flight_data:
-                    logger.warning(f"No flight schedule found for {basic_record.flight_no} on {basic_record.flight_date}")
-                    missing_flight_data_count += 1
-                    # Continue anyway with default times
-                    dep_time = datetime.time(12, 0)
-                    arr_time = datetime.time(14, 0)
-                    arr_date = basic_record.flight_date
-                else:
-                    dep_time = flight_data.std_utc or datetime.time(12, 0)
-                    arr_time = flight_data.sta_utc or datetime.time(14, 0)
-                    arr_date = flight_data.sa_date_utc or basic_record.flight_date
-                
-                # Determine direction (O = Outbound from KGL, I = Inbound to KGL)
-                direction = 'O' if basic_record.origin == 'KGL' else 'I'
-                
-                # Calculate document expiry (assuming 10 years from issue date if available)
-                document_expiry = None
-                if detailed_record.passport_issuing_date:
-                    try:
-                        document_expiry = detailed_record.passport_issuing_date.replace(
-                            year=detailed_record.passport_issuing_date.year + 10
-                        )
-                    except ValueError:
-                        document_expiry = datetime(2030, 12, 31).date()
-                else:
-                    # Default to a future date if no issue date available
-                    document_expiry = datetime(2030, 12, 31).date()
-                
-                # Clean up nationality codes to ensure they're 3 characters for APIS format
-                nationality = detailed_record.nationality_country_code[:3] if detailed_record.nationality_country_code else basic_record.nationality_code[:3]
-                issuing_state = detailed_record.passport_issuing_state[:3] if detailed_record.passport_issuing_state else nationality
-                country_of_birth = basic_record.nationality_code[:3] if basic_record.nationality_code else nationality
-                
-                # Create APIS record
-                apis_record = QatarApisRecord.objects.update_or_create(
-                    flight_no=basic_record.flight_no,
-                    dep_date=basic_record.flight_date,
-                    crew_id=basic_record.crew_id,
-                    direction=direction,
-                    defaults={
-                        'dep_port': basic_record.origin,
-                        'dep_time': dep_time,
-                        'arr_port': basic_record.destination,
-                        'arr_date': arr_date,
-                        'arr_time': arr_time,
-                        'document_number': basic_record.passport_number,
-                        'nationality': nationality,
-                        'document_type': 'P',  # Passport
-                        'issuing_state': issuing_state,
-                        'family_name': detailed_record.surname,
-                        'given_name': detailed_record.given_name,
-                        'date_of_birth': basic_record.birth_date,
-                        'sex': basic_record.gender,
-                        'country_of_birth': country_of_birth,
-                        'document_expiry_date': document_expiry,
-                        'file_generated': filename,
-                    }
-                )[0]
-                
-                apis_records.append(apis_record)
-                processed_count += 1
-                
-            except Exception as e:
-                logger.error(f"Error processing crew record {basic_record.crew_id}: {e}")
-                continue
+            flight_key = f"{basic_record.flight_no}_{basic_record.flight_date}_{basic_record.origin}_{basic_record.destination}"
+            if flight_key not in flights:
+                flights[flight_key] = {
+                    'basic_record': basic_record,
+                    'crew_members': []
+                }
+            flights[flight_key]['crew_members'].append(basic_record)
         
-        # Write APIS file
-        if apis_records:
-            with open(file_path, 'w', newline='') as f:
-                writer = csv.writer(f)
-                
-                # Write header
-                writer.writerow([
-                    'TYPE', 'DIRECTION', 'FLIGHT', 'DEP_PORT', 'DEP_DATE', 'DEP_TIME',
-                    'ARR_PORT', 'ARR_DATE', 'ARR_TIME', 'DOCUMENT_NUMBER', 'NATIONALITY',
-                    'DOCUMENT_TYPE', 'ISSUING_STATE', 'FAMILY_NAME', 'GIVEN_NAME',
-                    'DATE_OF_BIRTH', 'SEX', 'COUNTRY_OF_BIRTH', 'DOCUMENT_EXPIRY_DATE'
-                ])
-                
-                # Write data rows
-                for record in apis_records:
-                    writer.writerow([
-                        'C',  # Always 'C' for Crew
-                        record.direction,
-                        record.flight_no,
-                        record.dep_port,
-                        record.dep_date.strftime('%Y%m%d'),
-                        record.dep_time.strftime('%H%M'),
-                        record.arr_port,
-                        record.arr_date.strftime('%Y%m%d'),
-                        record.arr_time.strftime('%H%M'),
-                        record.document_number,
-                        record.nationality,
-                        record.document_type,
-                        record.issuing_state,
-                        record.family_name,
-                        record.given_name,
-                        record.date_of_birth.strftime('%Y%m%d'),
-                        record.sex,
-                        record.country_of_birth,
-                        record.document_expiry_date.strftime('%Y%m%d'),
-                    ])
+        edifact_content = []
+        processed_count = 0
+        
+        for flight_key, flight_data in flights.items():
+            basic_record = flight_data['basic_record']
+            crew_members = flight_data['crew_members']
             
-            logger.info(f"Generated Qatar APIS file: {filename}")
+            logger.info(f"Processing flight {basic_record.flight_no} with {len(crew_members)} crew members")
+            
+            # Get flight schedule information for timing
+            flight_data_obj = FlightData.objects.filter(
+                flight_no=basic_record.flight_no,
+                sd_date_utc=basic_record.flight_date,
+                dep_code_icao=basic_record.origin,
+                arr_code_icao=basic_record.destination
+            ).first()
+            
+            if flight_data_obj:
+                dep_time = flight_data_obj.std_utc or datetime.time(12, 0)
+                arr_time = flight_data_obj.sta_utc or datetime.time(14, 0)
+                arr_date = flight_data_obj.sa_date_utc or basic_record.flight_date
+            else:
+                dep_time = datetime.time(12, 0)
+                arr_time = datetime.time(14, 0)
+                arr_date = basic_record.flight_date
+            
+            # Generate EDIFACT message for this flight
+            current_time = datetime.now()
+            message_ref = f"{basic_record.flight_no}{current_time.strftime('%m%d%H%M')}"
+            
+            # EDIFACT Header
+            edifact_content.append(f"UNA:+.?*'")
+            edifact_content.append(f"UNB+UNOA:4+RWANDAIR:ZZ+QATAPIS:ZZ+{current_time.strftime('%y%m%d:%H%M')}+{message_ref}'")
+            edifact_content.append(f"UNG+PAXLST+RWANDAIR:ZZ+QATAPIS:ZZ+{current_time.strftime('%y%m%d:%H%M')}+{message_ref}+UN+D:05B'")
+            edifact_content.append(f"UNH+{message_ref}+PAXLST:D:05B:UN:IATA+WB{basic_record.flight_no}{basic_record.flight_date.strftime('%y%m%d%H%M')}+01:C'")
+            edifact_content.append(f"BGM+250'")
+            edifact_content.append(f"NAD+MS+++RWANDAIR:CREW APIS TEAM'")
+            edifact_content.append(f"COM+250-788-177-000:TE+250-788-177-001:FX'")
+            edifact_content.append(f"TDT+20+WB{basic_record.flight_no}'")
+            
+            # Departure information
+            edifact_content.append(f"LOC+125+{basic_record.origin}'")
+            edifact_content.append(f"DTM+189:{basic_record.flight_date.strftime('%y%m%d%H%M')}:201'")
+            
+            # Arrival information
+            edifact_content.append(f"LOC+87+{basic_record.destination}'")
+            edifact_content.append(f"DTM+232:{arr_date.strftime('%y%m%d')}{arr_time.strftime('%H%M')}:201'")
+            
+            # Process each crew member
+            for crew_basic in crew_members:
+                try:
+                    # Get detailed information for this crew member
+                    detailed_record = QatarCrewDetailed.objects.filter(
+                        crew_id=crew_basic.crew_id
+                    ).first()
+                    
+                    if not detailed_record:
+                        # Try matching by passport number
+                        detailed_record = QatarCrewDetailed.objects.filter(
+                            passport_number=crew_basic.passport_number
+                        ).first()
+                    
+                    # Use detailed info if available, otherwise use basic info
+                    if detailed_record:
+                        surname = detailed_record.surname or "UNKNOWN"
+                        given_name = detailed_record.given_name or "CREW"
+                        nationality_code = detailed_record.nationality_country_code or crew_basic.nationality_code or "RWA"
+                    else:
+                        surname = "UNKNOWN"
+                        given_name = "CREW"
+                        nationality_code = crew_basic.nationality_code or "RWA"
+                    
+                    # Clean up names
+                    surname = surname.strip().upper()
+                    given_name = given_name.strip().upper()
+                    nationality_code = nationality_code[:3].upper()
+                    
+                    # Crew member data segments
+                    edifact_content.append(f"NAD+FM+++{surname}:{given_name}+++++' ")
+                    edifact_content.append(f"ATT+2++{crew_basic.gender}'")
+                    edifact_content.append(f"DTM+329:{crew_basic.birth_date.strftime('%y%m%d')}'")
+                    edifact_content.append(f"LOC+22+{basic_record.destination}'")
+                    edifact_content.append(f"LOC+178+{basic_record.origin}'")
+                    edifact_content.append(f"LOC+179+{basic_record.destination}'")
+                    edifact_content.append(f"NAT+2+{nationality_code}'")
+                    edifact_content.append(f"DOC+P:110:111+{crew_basic.passport_number}'")
+                    
+                    # Document expiry
+                    if detailed_record and detailed_record.passport_issuing_date:
+                        try:
+                            expiry_date = detailed_record.passport_issuing_date.replace(
+                                year=detailed_record.passport_issuing_date.year + 10
+                            )
+                            edifact_content.append(f"DTM+36:{expiry_date.strftime('%y%m%d')}'")
+                        except ValueError:
+                            edifact_content.append(f"DTM+36:301231'")  # Default expiry
+                    else:
+                        edifact_content.append(f"DTM+36:301231'")  # Default expiry
+                    
+                    edifact_content.append(f"LOC+91+{nationality_code}'")
+                    
+                    processed_count += 1
+                    logger.info(f"Added crew member: {given_name} {surname} ({crew_basic.gender})")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing crew record {crew_basic.crew_id}: {e}")
+                    continue
+            
+            # EDIFACT Footer
+            edifact_content.append(f"CNT+41:{len(crew_members):04d}'")
+            segment_count = len([x for x in edifact_content if x.startswith(('NAD', 'ATT', 'DTM', 'LOC', 'DOC', 'NAT', 'CNT', 'BGM', 'COM', 'TDT'))]) + 3
+            edifact_content.append(f"UNT+{segment_count:04d}+{message_ref}'")
+            edifact_content.append(f"UNE+1+{message_ref}'")
+            edifact_content.append(f"UNZ+1+{message_ref}'")
+        
+        # Write EDIFACT file
+        if processed_count > 0:
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                for line in edifact_content:
+                    f.write(line)
+            
+            logger.info(f"Generated Qatar APIS EDIFACT file: {filename}")
             logger.info(f"Processed {processed_count} crew records")
-            if missing_details_count > 0:
-                logger.warning(f"Missing detailed information for {missing_details_count} crew members")
-            if missing_flight_data_count > 0:
-                logger.warning(f"Missing flight data for {missing_flight_data_count} flights")
             
             return file_path
         else:
-            logger.warning("No APIS records to generate")
+            logger.warning("No crew records to generate EDIFACT file")
             return None
             
     except Exception as e:
-        logger.error(f"Error generating Qatar APIS file: {e}")
+        logger.error(f"Error generating Qatar APIS EDIFACT file: {e}")
         return None
 
 

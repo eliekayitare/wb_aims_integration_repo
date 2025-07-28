@@ -2379,7 +2379,82 @@ def test_qatar_apis_system():
 # Database cleanup and verification tasks
 
 @shared_task
-def cleanup_old_airport_codes():
+def cleanup_invalid_crew_records():
+    """
+    Clean up crew records with invalid passport numbers (words instead of actual passports)
+    """
+    try:
+        from .models import QatarCrewBasic
+        
+        # List of invalid "passport numbers" that are actually words
+        invalid_passports = [
+            'AUTHORIZED', 'DISEMBARKED', 'RECENT', 'ALWAYS', 'NATIONALITY', 'CHRISTOPHER',
+            'BUCYANA', 'HEALTH', 'OFFICIAL', 'NECESSARY', 'CONTINUED', 'EFFECTS',
+            'FOLLOWING', 'PERSISTENT', 'WITHOUT', 'PERSON', 'DISINSECTING', 'CONCERNED',
+            'COURIER', 'APPENDIX', 'DEPARTURE', 'KAMANZI', 'MURUNGI', 'BISANGWA',
+            'NKUBANA', 'ARRIVAL', 'KALISA', 'KANENE', 'MUGISHA', 'COLUMN', 'DELETE',
+            'IMPAIRED', 'BLEEDING', 'LIKELIHOOD', 'MURAYA', 'MUTONI'
+        ]
+        
+        # Count records with invalid passports
+        invalid_count = QatarCrewBasic.objects.filter(
+            passport_number__in=invalid_passports
+        ).count()
+        
+        logger.info(f"Found {invalid_count} crew records with invalid passport numbers")
+        
+        # Delete invalid records
+        deleted = QatarCrewBasic.objects.filter(
+            passport_number__in=invalid_passports
+        ).delete()
+        
+        logger.info(f"Deleted {deleted[0]} invalid crew records")
+        
+        return {
+            "status": "success",
+            "deleted_count": deleted[0] if deleted else 0,
+            "message": f"Cleaned up {deleted[0] if deleted else 0} invalid crew records"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up invalid crew records: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@shared_task
+def test_edifact_generation():
+    """
+    Test the new EDIFACT generation with current data
+    """
+    try:
+        logger.info("Testing EDIFACT generation...")
+        
+        file_path = generate_qatar_apis_file()
+        
+        if file_path:
+            # Read and display first part of generated file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            logger.info(f"Generated EDIFACT file: {file_path}")
+            logger.info(f"File size: {len(content)} characters")
+            logger.info(f"First 500 characters:\n{content[:500]}")
+            
+            return {
+                "status": "success",
+                "file_path": file_path,
+                "content_preview": content[:1000],
+                "message": "EDIFACT file generated successfully"
+            }
+        else:
+            return {
+                "status": "no_data",
+                "message": "No data available to generate EDIFACT file"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error testing EDIFACT generation: {e}")
+        return {"status": "error", "message": str(e)}
     """
     Clean up crew records that were stored with wrong airport codes (ICAO instead of IATA)
     """
@@ -2513,173 +2588,4 @@ def test_single_subject_parsing():
         
     except Exception as e:
         logger.error(f"Error testing subject parsing: {e}")
-        return {"status": "error", "message": str(e)}
-    
-
-
-# Add this task to your tasks.py file
-
-@shared_task
-def debug_specific_email_processing():
-    """
-    Debug the specific email that was found but failed to process
-    """
-    try:
-        logger.info("Starting debug of specific email processing...")
-        
-        account = get_exchange_account()
-        start_date = timezone.now() - timedelta(days=7)
-        
-        # Get recent emails
-        recent_emails = get_filtered_emails(account, start_date, limit=50)
-        
-        # Look for the specific email mentioned in logs
-        target_subject = "302/KGL DOH/29072025"
-        target_email = None
-        
-        for email in recent_emails:
-            if email.subject and target_subject in email.subject:
-                target_email = email
-                break
-        
-        if not target_email:
-            logger.warning(f"Could not find email with subject containing '{target_subject}'")
-            return {"status": "not_found", "message": f"Email with subject '{target_subject}' not found"}
-        
-        logger.info(f"Found target email: {target_email.subject}")
-        logger.info(f"Email received: {target_email.datetime_received}")
-        logger.info(f"Has attachments flag: {target_email.has_attachments}")
-        
-        # Try to access attachments with different methods
-        attachment_count = 0
-        attachment_info = []
-        
-        try:
-            # Method 1: Try newer refresh syntax
-            logger.info("Trying newer refresh syntax...")
-            target_email.refresh(['attachments'])
-            logger.info("✓ Newer refresh syntax worked")
-        except TypeError as e:
-            logger.info(f"Newer refresh failed: {e}")
-            try:
-                # Method 2: Try older refresh syntax
-                logger.info("Trying older refresh syntax...")
-                target_email.refresh()
-                logger.info("✓ Older refresh syntax worked")
-            except Exception as e2:
-                logger.error(f"Both refresh methods failed: {e2}")
-                return {"status": "error", "message": f"Could not refresh email: {e2}"}
-        
-        # Check attachments
-        if hasattr(target_email, 'attachments') and target_email.attachments:
-            try:
-                attachment_count = len(list(target_email.attachments))
-                logger.info(f"Found {attachment_count} attachments")
-                
-                for i, attachment in enumerate(target_email.attachments):
-                    attachment_info.append({
-                        "index": i,
-                        "name": getattr(attachment, 'name', 'Unknown'),
-                        "type": type(attachment).__name__,
-                        "size": len(getattr(attachment, 'content', b'')) if hasattr(attachment, 'content') else 0
-                    })
-                    logger.info(f"Attachment {i}: {attachment_info[-1]}")
-                
-            except Exception as e:
-                logger.error(f"Error analyzing attachments: {e}")
-                return {"status": "error", "message": f"Error analyzing attachments: {e}"}
-        else:
-            logger.warning("No attachments found or attachments not accessible")
-        
-        # Try to parse the subject
-        fno, org, dst, fdate = parse_job97_subject(target_email.subject)
-        logger.info(f"Subject parsing result: Flight={fno}, Origin={org}, Dest={dst}, Date={fdate}")
-        
-        # Try to process one attachment if available
-        processed_records = 0
-        if attachment_count > 0:
-            try:
-                logger.info("Attempting to process first attachment...")
-                first_attachment = list(target_email.attachments)[0]
-                first_attachment.parent_item = target_email
-                
-                # Try processing
-                result = process_job97_file(first_attachment)
-                processed_records = result if isinstance(result, int) else 0
-                logger.info(f"Processing result: {processed_records} records")
-                
-            except Exception as e:
-                logger.error(f"Error processing attachment: {e}")
-                return {"status": "error", "message": f"Error processing attachment: {e}"}
-        
-        return {
-            "status": "success",
-            "email_subject": target_email.subject,
-            "attachment_count": attachment_count,
-            "attachment_info": attachment_info,
-            "subject_parsing": {
-                "flight_no": fno,
-                "origin": org, 
-                "destination": dst,
-                "flight_date": str(fdate) if fdate else None
-            },
-            "processed_records": processed_records,
-            "message": f"Debug completed - found {attachment_count} attachments, processed {processed_records} records"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in debug email processing: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@shared_task
-def check_database_after_processing():
-    """
-    Check what's actually in the database after processing
-    """
-    try:
-        from .models import QatarCrewBasic, QatarCrewDetailed
-        
-        # Count all records
-        basic_total = QatarCrewBasic.objects.count()
-        detailed_total = QatarCrewDetailed.objects.count()
-        
-        # Count by specific routes
-        kgl_doh = QatarCrewBasic.objects.filter(origin='KGL', destination='DOH').count()
-        doh_kgl = QatarCrewBasic.objects.filter(origin='DOH', destination='KGL').count()
-        
-        # Show recent records
-        recent_basic = list(QatarCrewBasic.objects.order_by('-created_at')[:10].values(
-            'flight_no', 'origin', 'destination', 'flight_date', 'crew_id', 'created_at'
-        ))
-        
-        recent_detailed = list(QatarCrewDetailed.objects.order_by('-created_at')[:10].values(
-            'crew_id', 'passport_number', 'surname', 'given_name', 'created_at'
-        ))
-        
-        # Show all unique routes in database
-        unique_routes = list(QatarCrewBasic.objects.values('origin', 'destination').distinct())
-        
-        logger.info(f"DATABASE STATUS:")
-        logger.info(f"  Total basic crew records: {basic_total}")
-        logger.info(f"  Total detailed crew records: {detailed_total}")
-        logger.info(f"  KGL->DOH records: {kgl_doh}")
-        logger.info(f"  DOH->KGL records: {doh_kgl}")
-        logger.info(f"  Unique routes found: {unique_routes}")
-        logger.info(f"  Recent basic records: {recent_basic}")
-        logger.info(f"  Recent detailed records: {recent_detailed}")
-        
-        return {
-            "status": "success",
-            "basic_total": basic_total,
-            "detailed_total": detailed_total,
-            "kgl_doh": kgl_doh,
-            "doh_kgl": doh_kgl,
-            "unique_routes": unique_routes,
-            "recent_basic": recent_basic,
-            "recent_detailed": recent_detailed
-        }
-        
-    except Exception as e:
-        logger.error(f"Error checking database: {e}")
         return {"status": "error", "message": str(e)}
