@@ -2059,10 +2059,9 @@ def process_tableau_data_email_attachment(item, process_function):
 #=================================================================================
 # CLEAN QATAR APIS UTILS 
 #==================================================================================
-
+import re
 import csv
 import logging
-from striprtf.striprtf import rtf_to_text
 from datetime import datetime
 from django.db import transaction
 from exchangelib import FileAttachment
@@ -2071,31 +2070,21 @@ from .models import FlightData, QatarFlightCrewAssignment, QatarCrewDetail
 
 logger = logging.getLogger(__name__)
 
-
 def extract_plain_from_rtf(rtf_bytes):
     """
     Naively strip RTF control words and braces to get plain text lines.
     """
     raw = rtf_bytes.decode('utf-8', errors='ignore')
-    # Remove RTF groups and braces
-    text = re.sub(r'{\[^}]+}', '', raw)
-    # Remove remaining control words like \pard, \f0, etc.
-    text = re.sub(r'\[a-zA-Z]+\d* ?', '', text)
-    # Remove leftover braces
+    text = re.sub(r'{\\[^}]+}', '', raw)
+    text = re.sub(r'\\[a-zA-Z]+\\d* ?', '', text)
     text = re.sub(r'[{}]', '', text)
-    # Split into clean lines
     return [line.strip() for line in text.splitlines() if line.strip()]
 
-logger = logging.getLogger(__name__)
 
 def rtf_to_text(rtf_content):
     """
-    Convert RTF content (string or bytes) into plain text.
-    Uses extract_plain_from_rtf under the hood.
-
-    Returns a single string with lines joined by newlines.
+    Convert RTF content (string or bytes) into plain text string.
     """
-    # Ensure bytes
     if isinstance(rtf_content, str):
         rtf_bytes = rtf_content.encode('utf-8', errors='ignore')
     else:
@@ -2104,31 +2093,36 @@ def rtf_to_text(rtf_content):
     return "\n".join(lines)
 
 
+def process_email_attachment(item, process_function):
+    """
+    Process FileAttachment items by invoking the given processor.
+    """
+    try:
+        for attachment in getattr(item, 'attachments', []):
+            if isinstance(attachment, FileAttachment):
+                logger.info(f"Processing attachment: {attachment.name}")
+                process_function(attachment)
+    except Exception as e:
+        logger.error(f"Error processing email attachment: {e}")
+
 
 def process_job97_file(attachment):
     """
-    Processes AIMS JOB #97 RTF, extracting the crew‐assignment table
-    and upserting into QatarFlightCrewAssignment using existing FlightData.
-    Logs all intermediate values for debugging.
+    Extract crew assignments from Job #97 RTF and upsert into QatarFlightCrewAssignment.
     """
-    # 1) Convert RTF to plain text
     raw = attachment.content.decode('utf-8', errors='ignore')
-    logger.debug(f"RTF content length: {len(raw)} chars")
+    logger.debug(f"RTF raw size: {len(raw)} chars")
     text = rtf_to_text(raw)
     lines = [ln for ln in text.splitlines() if ln.strip()]
-    logger.debug(f"Extracted {len(lines)} non-empty lines")
-    logger.debug("Sample lines: %s", lines[:5])
+    logger.debug(f"Parsed {len(lines)} lines from RTF")
 
-    # 2) Locate header row containing column names
     hdr_idx = next((i for i, ln in enumerate(lines)
                     if 'Crew ID' in ln and 'Flight No' in ln), None)
-    logger.debug(f"Header index: {hdr_idx}")
     if hdr_idx is None:
-        logger.error("Couldn't find data table header in Job97 RTF")
+        logger.error("Table header not found in Job97 RTF")
         return
-    logger.debug(f"Header line: {lines[hdr_idx]}")
+    logger.debug(f"Header found at line {hdr_idx}: {lines[hdr_idx]}")
 
-    # 3) Define fixed-width column slices (adjust per form layout)
     col_specs = [
         ('crew_id', 0, 12),
         ('tail_no', 12, 22),
@@ -2140,36 +2134,20 @@ def process_job97_file(attachment):
         ('passport_expiry', 62, 72),
     ]
 
-    # 4) Iterate data rows
     for ln in lines[hdr_idx+1:]:
         if not ln.strip():
             continue
-        logger.debug(f"Raw data line: '{ln}'")
-        # Slice fields
         row = {name: ln[start:end].strip() for name, start, end in col_specs}
-        logger.debug(f"Parsed row dict: {row}")
-
-        # Skip if missing key fields
-        if not row.get('crew_id') or not row.get('flight_no'):
-            logger.warning(f"Skipping incomplete row: {row}")
+        logger.debug(f"Row fields: {row}")
+        if not row['crew_id'] or not row['flight_no']:
+            logger.warning(f"Incomplete row, skipping: {row}")
             continue
-
-        # Parse birth date
         try:
             birth = datetime.strptime(row['birth_date'], '%d/%m/%y').date()
-            logger.debug(f"Parsed birth_date: {birth}")
-        except Exception as e:
-            logger.error(f"Invalid birth_date '{row['birth_date']}': {e}")
-            continue
-        # Parse passport expiry
-        try:
             expiry = datetime.strptime(row['passport_expiry'], '%d/%m/%y').date()
-            logger.debug(f"Parsed passport_expiry: {expiry}")
         except Exception as e:
-            logger.error(f"Invalid passport_expiry '{row['passport_expiry']}': {e}")
+            logger.error(f"Date parse error in row {row}: {e}")
             continue
-
-        # Lookup FlightData for STD/STA
         try:
             flight = FlightData.objects.get(
                 flight_no=row['flight_no'],
@@ -2177,12 +2155,9 @@ def process_job97_file(attachment):
                 arr_code_iata=row['arr_port'],
                 tail_no=row['tail_no']
             )
-            logger.debug(f"Found FlightData: {flight}")
         except FlightData.DoesNotExist:
-            logger.error(f"No matching FlightData for {row['flight_no']} {row['dep_port']}→{row['arr_port']} tail {row['tail_no']}")
+            logger.error(f"No FlightData match: {row}")
             continue
-
-        # Upsert into QatarFlightCrewAssignment
         try:
             obj, created = QatarFlightCrewAssignment.objects.update_or_create(
                 crew_id=row['crew_id'],
@@ -2198,43 +2173,32 @@ def process_job97_file(attachment):
                     'passport_expiry': expiry,
                 }
             )
-            logger.info(f"{'Created' if created else 'Updated'} assignment for crew {row['crew_id']} on flight {flight.flight_no}")
+            logger.info(f"{'Created' if created else 'Updated'} assignment for {row['crew_id']}")
         except Exception as e:
-            logger.error(f"Error upserting assignment {row['crew_id']}: {e}")
+            logger.error(f"Error upserting crew assignment {row['crew_id']}: {e}")
 
 
 def process_job1008_file(attachment):
     """
-    Processes Job #1008 CSV, upserting QatarCrewDetail.
-    Logs each row for debugging.
+    Extract static crew details from Job #1008 CSV into QatarCrewDetail.
     """
     text = attachment.content.decode('utf-8', errors='ignore')
     lines = [ln for ln in text.splitlines() if ln.strip()]
     reader = csv.DictReader(lines)
-    logger.debug(f"Job1008 total rows: {len(lines)-1}")
-
     for row in reader:
-        logger.debug(f"Row: {row}")
-        # Validate mandatory fields
+        logger.debug(f"Processing crew detail row: {row}")
         if not row.get('crew_id') or not row.get('surname') or not row.get('firstname'):
-            logger.warning(f"Skipping incomplete crew row: {row}")
+            logger.warning(f"Skipping incomplete crew detail: {row}")
             continue
-        # Parse dates with logging
         birth = None
-        if row.get('birth_date'):
-            try:
-                birth = datetime.strptime(row['birth_date'], '%Y%m%d').date()
-                logger.debug(f"Parsed birth_date: {birth}")
-            except Exception as e:
-                logger.error(f"Invalid birth_date '{row['birth_date']}': {e}")
         expiry = None
-        if row.get('passport_expiry'):
-            try:
+        try:
+            if row.get('birth_date'):
+                birth = datetime.strptime(row['birth_date'], '%Y%m%d').date()
+            if row.get('passport_expiry'):
                 expiry = datetime.strptime(row['passport_expiry'], '%y%m%d').date()
-                logger.debug(f"Parsed passport_expiry: {expiry}")
-            except Exception as e:
-                logger.error(f"Invalid passport_expiry '{row['passport_expiry']}': {e}")
-
+        except Exception as e:
+            logger.error(f"Date parse error in crew detail row {row}: {e}")
         try:
             obj, created = QatarCrewDetail.objects.update_or_create(
                 crew_id=row['crew_id'],
@@ -2259,7 +2223,7 @@ def process_job1008_file(attachment):
 
 def build_qatar_apis_edifact(direction, date):
     """
-    Constructs the EDIFACT PAXLST file and writes to disk.
+    Constructs and writes the EDIFACT PAXLST file for the given direction and date.
     """
     lines = ["UNA:+.?*'"]
     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
@@ -2275,39 +2239,34 @@ def build_qatar_apis_edifact(direction, date):
         flight__dep_code_iata=('KGL' if direction=='O' else 'DOH'),
         flight__arr_code_iata=('DOH' if direction=='O' else 'KGL')
     ).select_related('flight')
-    logger.debug(f"Found {assignments.count()} assignments for {direction} on {date}")
+    logger.debug(f"Assignments to include: {assignments.count()}")
 
     for asg in assignments:
         msg_count += 1
         msg_ref = f"{ctrl}{msg_count:02d}"
-        body = []
-        # UNH
-        body.append(f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+{asg.flight.flight_no}{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:C'")
-        # BGM
-        body.append("BGM+250'")
-        # Flight segments
-        body.extend([
+        segments = []
+        segments.append(f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+{asg.flight.flight_no}{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:C'")
+        segments.append("BGM+250'")
+        segments.extend([
             f"TDT+20+{asg.flight.flight_no}'",
             f"LOC+125+{asg.flight.dep_code_iata}'",
             f"LOC+87+{asg.flight.arr_code_iata}'",
             f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'",
             f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'",
         ])
-        # Crew segments
         crew = QatarCrewDetail.objects.filter(crew_id=asg.crew_id).first()
-        logger.debug(f"Using crew detail: {crew}")
-        body.append(f"NAD+FM+++{crew.surname if crew else ''}:{crew.firstname if crew else ''}+++++'")
-        body.append(f"ATT+2++{asg.sex}'")
-        body.append(f"DTM+329:{asg.birth_date.strftime('%y%m%d')}:201'")
-        body.append(f"NAT+2+{crew.nationality if crew else ''}'")
-        body.append(f"DOC+P:110:111+{crew.passport_number if crew else ''}'")
-        body.append(f"DTM+36:{(crew.passport_expiry.strftime('%y%m') if crew and crew.passport_expiry else asg.passport_expiry.strftime('%y%m'))}:203'")
-        body.append(f"LOC+91+{crew.birth_place_cc if crew else ''}'")
-        body.append("CNT+41:0001'")
-        # UNT count
-        seg_count = len(body) + 1
-        lines.extend(body)
-        lines.append(f"UNT+{seg_count:03d}+{msg_ref}'")
+        segments.extend([
+            f"NAD+FM+++{crew.surname if crew else ''}:{crew.firstname if crew else ''}+++++'",
+            f"ATT+2++{asg.sex}'",
+            f"DTM+329:{asg.birth_date.strftime('%y%m%d')}:201'",
+            f"NAT+2+{crew.nationality if crew else ''}'",
+            f"DOC+P:110:111+{crew.passport_number if crew else ''}'",
+            f"DTM+36:{(crew.passport_expiry or asg.passport_expiry).strftime('%y%m')}:203'",
+            f"LOC+91+{crew.birth_place_cc if crew else ''}'",
+            "CNT+41:0001'",
+        ])
+        lines.extend(segments)
+        lines.append(f"UNT+{len(segments)+1:03d}+{msg_ref}'")
 
     lines.append(f"UNE+{msg_count}+{ts}'")
     lines.append(f"UNZ+{msg_count}+{ctrl}'")
@@ -2315,7 +2274,7 @@ def build_qatar_apis_edifact(direction, date):
     out_dir = settings.QATAR_APIS_OUTPUT_PATH
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"QATAPIS_{direction}_{date:%Y%m%d}.edi"
-    logger.info(f"Writing EDIFACT file to: {out_path}")
+    logger.info(f"Writing EDIFACT to {out_path}")
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(lines))
     return out_path
