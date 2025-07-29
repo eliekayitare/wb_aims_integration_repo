@@ -2233,7 +2233,7 @@ def build_qatar_apis_edifact(direction, date):
     lines.append(f"UNG+PAXLST+{sender}:ZZ+QATAPIS:ZZ+{ts}+UN+D:05B'")
 
     msg_count = 0
-    assignments = FlightCrewAssignment.objects.filter(
+    assignments = QatarFlightCrewAssignment.objects.filter(
         dep_date_utc=date,
         flight__dep_code_iata=('KGL' if direction=='O' else 'DOH'),
         flight__arr_code_iata=('DOH' if direction=='O' else 'KGL')
@@ -2256,7 +2256,7 @@ def build_qatar_apis_edifact(direction, date):
             f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'",
         ])
         # Crew details
-        crew = CrewDetail.objects.filter(crew_id=asg.crew_id).first()
+        crew = QatarCrewDetail.objects.filter(crew_id=asg.crew_id).first()
         body.append(f"NAD+FM+++{crew.surname if crew else ''}:{crew.firstname if crew else ''}+++++'")
         body.append(f"ATT+2++{asg.sex}'")
         body.append(f"DTM+329:{asg.birth_date.strftime('%y%m%d')}:201'")
