@@ -2068,7 +2068,7 @@ import logging
 from django.db import transaction
 from exchangelib import FileAttachment
 from django.conf import settings
-from .models import FlightData, FlightCrewAssignment, CrewDetail
+from .models import *
 
 logger = logging.getLogger(__name__)
 
