@@ -2097,7 +2097,17 @@ def rtf_to_text(rtf_content):
     return "\n".join(lines)
 
 
-
+def process_email_attachment(item, process_function):
+    """
+    General handler to process FileAttachment items.
+    """
+    try:
+        for attachment in getattr(item, 'attachments', []):
+            if isinstance(attachment, FileAttachment):
+                logger.info(f"Processing attachment: {attachment.name}")
+                process_function(attachment)
+    except Exception as e:
+        logger.error(f"Error processing email attachment: {e}")
 
 
 def process_job97_file(attachment):
@@ -2174,59 +2184,69 @@ def process_job97_file(attachment):
 
 def process_job1008_file(attachment):
     """
-    Parse Job #1008 fixed-width crew details and upsert into QatarCrewDetail.
+    Process Job #1008 CSV crew details and upsert into QatarCrewDetail using comma-delimited columns.
+    Expected columns:
+      0 crew_id
+      1 passport_number
+      2 <unused>
+      3 surname
+      4 firstname
+      5 middlename
+      6 nationality
+      7 issuing_state
+      8 passport_issue_date (dd/MM/yyyy)
+      9 <unused>
+     10 place_of_issue
+     11 <unused>
+     12 birth_place_cc
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     lines = [ln for ln in raw.splitlines() if ln.strip()]
-    hdr_idx = next((i for i, ln in enumerate(lines) if 'Crew Member ID' in ln), None)
-    data_lines = lines[hdr_idx+1:] if hdr_idx is not None else lines
-
-    # Fixed-width specs from UI
-    col_specs = [
-        ('crew_id', 0, 11),
-        ('passport_number', 11, 27),
-        ('full_name', 27, 67),
-        ('nationality', 67, 87),
-        ('passport_issue_date', 87, 97),
-        ('place_of_issue', 97, 113),
-        ('birth_place_cc', 113, 116),
-    ]
-
-    for ln in data_lines:
-        if len(ln) < 116:
-            logger.warning(f"Skipping short line (<116): {ln!r}")
+    import csv as _csv
+    reader = _csv.reader(lines)
+    header = next(reader, None)
+    logger.debug(f"Header columns: {header}")
+    for row in reader:
+        if len(row) < 13:
+            logger.warning(f"Skipping short CSV row: {row}")
             continue
-        row = {name: ln[start:end].strip() for name, start, end in col_specs}
-        parts = row['full_name'].split(',', 2)
-        surname = parts[0] if len(parts) > 0 else ''
-        firstname = parts[1] if len(parts) > 1 else ''
-        middlename = parts[2] if len(parts) > 2 else ''
-        issue_date = None
-        try:
-            issue_date = datetime.strptime(row['passport_issue_date'], '%d/%m/%Y').date()
-        except Exception:
-            logger.warning(f"Invalid passport_issue_date for line: {row}")
+        crew_id         = row[0].strip()
+        passport_number = row[1].strip() or None
+        surname         = row[3].strip() or ''
+        firstname       = row[4].strip() or ''
+        middlename      = row[5].strip() or None
+        nationality     = row[6].strip() or None
+        issuing_state   = row[7].strip() or None
+        issue_date_str  = row[8].strip()
+        place_of_issue  = row[10].strip() or None
+        birth_place_cc  = row[12].strip() or None
+        # Parse passport issue date
+        passport_issue_date = None
+        if issue_date_str:
+            try:
+                passport_issue_date = datetime.strptime(issue_date_str, '%d/%m/%Y').date()
+            except Exception as e:
+                logger.warning(f"Invalid passport_issue_date '{issue_date_str}' for crew {crew_id}: {e}")
         try:
             obj, created = QatarCrewDetail.objects.update_or_create(
-                crew_id=row['crew_id'],
+                crew_id=crew_id,
                 defaults={
-                    'passport_number': row['passport_number'],
+                    'passport_number': passport_number,
                     'surname': surname,
                     'firstname': firstname,
                     'middlename': middlename,
-                    'nationality': row['nationality'],
-                    'issuing_state': '',
-                    'place_of_issue': row['place_of_issue'],
-                    'birth_place_cc': row['birth_place_cc'],
+                    'nationality': nationality,
+                    'issuing_state': issuing_state,
+                    'place_of_issue': place_of_issue,
+                    'birth_place_cc': birth_place_cc,
                     'birth_date': None,
                     'sex': None,
-                    'passport_expiry': issue_date,
+                    'passport_expiry': None,
                 }
             )
-            logger.info(f"{'Created' if created else 'Updated'} crew detail for {row['crew_id']}")
+            logger.info(f"{'Created' if created else 'Updated'} crew detail for {crew_id}")
         except Exception as e:
-            logger.error(f"Upsert failed for crew {row['crew_id']}: {e}")
-
+            logger.error(f"Upsert failed for crew {crew_id}: {e}")
 
 def build_qatar_apis_edifact(direction, date):
     """
