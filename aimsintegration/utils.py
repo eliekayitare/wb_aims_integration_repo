@@ -2090,7 +2090,7 @@ from striprtf.striprtf import rtf_to_text
 from datetime import datetime
 import logging
 from django.db import transaction
-from .models import FlightData, FlightCrewAssignment
+from .models import QatarFlightCrewAssignment, QatarCrewDetail
 
 logger = logging.getLogger(__name__)
 

@@ -1778,6 +1778,7 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 #=================================================================================================================
 
 from .utils import *
+from .models import QatarFlightCrewAssignment, QatarCrewDetail
 
 @shared_task
 def fetch_job97():
