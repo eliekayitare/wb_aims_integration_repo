@@ -445,8 +445,8 @@ class DreamilesEmailRecord(models.Model):
 class QatarCrewDetail(models.Model):
     crew_id = models.CharField(max_length=11, primary_key=True)
     passport_number = models.CharField(max_length=20, null=True, blank=True)
-    surname = models.CharField(max_length=50)
-    firstname = models.CharField(max_length=50)
+    surname = models.CharField(max_length=50, null=True, blank=True)
+    firstname = models.CharField(max_length=50, null=True, blank=True)
     middlename = models.CharField(max_length=50, null=True, blank=True)
     nationality = models.CharField(max_length=3)
     issuing_state = models.CharField(max_length=3)
