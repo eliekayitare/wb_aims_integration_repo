@@ -457,7 +457,7 @@ class QatarCrewDetail(models.Model):
     passport_expiry = models.DateField(null=True, blank=True)
 
     class Meta:
-        db_table = 'crew_detail'
+        db_table = 'qatar_crew_detail'
 
     def __str__(self):
         return f"{self.crew_id} {self.surname}, {self.firstname}"
@@ -476,7 +476,7 @@ class QatarFlightCrewAssignment(models.Model):
     passport_expiry = models.DateField(null=True, blank=True)
 
     class Meta:
-        db_table = 'flight_crew_assignment'
+        db_table = 'qatar_flight_crew_assignment'
         unique_together = ('crew_id', 'flight')
 
     def __str__(self):
