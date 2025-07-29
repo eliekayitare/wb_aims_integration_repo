@@ -2086,77 +2086,100 @@ def extract_plain_from_rtf(rtf_bytes):
     text = re.sub(r'[{}]', '', text)
     return [line.strip() for line in text.splitlines() if line.strip()]
 
+from striprtf.striprtf import rtf_to_text
+from datetime import datetime
+import logging
+from django.db import transaction
+from .models import FlightData, FlightCrewAssignment
+
+logger = logging.getLogger(__name__)
 
 def process_job97_file(attachment):
     """
-    Processes Job #97: flight-crew assignments using existing FlightData for STD/STA.
-    Handles .rtf attachments by extracting plain text.
+    Processes AIMS JOB #97 RTF, extracting the crew‐assignment table
+    and upserting into FlightCrewAssignment (using existing FlightData for STD/STA).
     """
-    if attachment.name.lower().endswith('.rtf'):
-        lines = extract_plain_from_rtf(attachment.content)
-    else:
-        raw = attachment.content.decode('utf-8', errors='ignore')
-        lines = [l for l in raw.splitlines() if l.strip()]
+    # 1) RTF → plain text
+    rtf = attachment.content.decode('utf-8', errors='ignore')
+    text = rtf_to_text(rtf)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
 
-    reader = csv.DictReader(lines)
-    for row in reader:
-        try:
-            dep_date = datetime.strptime(row['dep_date'], '%m%d%Y').date()
-        except Exception:
-            logger.warning(f"Invalid dep_date for row: {row}")
+    # 2) Find the header row
+    hdr_idx = next(
+        (i for i, ln in enumerate(lines)
+         if 'Crew ID' in ln and 'Flight No' in ln),
+        None
+    )
+    if hdr_idx is None:
+        logger.error("Couldn't find the data table header in Job97 RTF")
+        return
+
+    # 3) Define fixed‐width column slices (adjust offsets to your form)
+    col_specs = [
+        ('crew_id',       0, 11),
+        ('tail_no',      12, 22),
+        ('flight_no',    23, 29),
+        ('dep_port',     30, 40),
+        ('arr_port',     41, 51),
+        ('birth_date',   52, 62),
+        ('sex',          63, 64),
+        ('passport_expiry', 65, 73),
+    ]
+
+    # 4) Parse each data line
+    for ln in lines[hdr_idx+1:]:
+        if not ln.strip():
             continue
-        try:
-            arr_date = datetime.strptime(row.get('arr_date',''), '%m%d%Y').date() if row.get('arr_date') else None
-        except Exception:
-            logger.warning(f"Invalid arr_date for row: {row}")
-            arr_date = None
 
-        flight_no = row.get('flight_no')
-        dep_port = row.get('dep_port')
-        arr_port = row.get('arr_port')
-        tail_no = row.get('tail_no')
+        # Slice out each field
+        row = {}
+        for name, start, end in col_specs:
+            row[name] = ln[start:end].strip()
+
+        # Parse dates
+        try:
+            birth = datetime.strptime(row['birth_date'], '%d/%m/%y').date()
+        except ValueError:
+            logger.warning(f"Invalid birth_date for line: {ln!r}")
+            continue
+
+        try:
+            expiry = datetime.strptime(row['passport_expiry'], '%d/%m/%y').date()
+        except ValueError:
+            logger.warning(f"Invalid passport_expiry for line: {ln!r}")
+            continue
+
+        # Lookup matching FlightData
         try:
             flight = FlightData.objects.get(
-                flight_no=flight_no,
-                sd_date_utc=dep_date,
-                dep_code_iata=dep_port,
-                arr_code_iata=arr_port,
-                tail_no=tail_no
+                flight_no=row['flight_no'],
+                sd_date_utc=datetime.utcnow().date(),  # or parse a date field if present
+                dep_code_iata=row['dep_port'],
+                arr_code_iata=row['arr_port'],
+                tail_no=row['tail_no']
             )
         except FlightData.DoesNotExist:
-            logger.warning(f"No FlightData for {flight_no} on {dep_date} {dep_port}->{arr_port}")
+            logger.warning(f"No FlightData for {row['flight_no']} / {row['dep_port']}→{row['arr_port']}")
             continue
 
-        std_time = flight.std_utc
-        sta_time = flight.sta_utc
-        birth = None
-        if row.get('birth_date'):
-            try:
-                birth = datetime.strptime(row['birth_date'], '%y%m%d').date()
-            except Exception:
-                logger.warning(f"Invalid birth_date for row: {row}")
-        expiry = None
-        if row.get('passport_expiry'):
-            try:
-                expiry = datetime.strptime(row['passport_expiry'], '%y%m').date()
-            except Exception:
-                logger.warning(f"Invalid passport_expiry for row: {row}")
-
+        # Upsert assignment
         with transaction.atomic():
-            FlightCrewAssignment.objects.update_or_create(
-                crew_id=row.get('crew_id'),
+            QatarFlightCrewAssignment.objects.update_or_create(
+                crew_id=row['crew_id'],
                 flight=flight,
                 defaults={
-                    'tail_no': tail_no,
-                    'dep_date_utc': dep_date,
-                    'arr_date_utc': arr_date,
-                    'std_utc': std_time,
-                    'sta_utc': sta_time,
+                    'tail_no': row['tail_no'],
+                    'dep_date_utc': flight.sd_date_utc,
+                    'arr_date_utc': flight.sa_date_utc,
+                    'std_utc':    flight.std_utc,
+                    'sta_utc':    flight.sta_utc,
                     'birth_date': birth,
-                    'sex': row.get('sex'),
-                    'passport_expiry': expiry
+                    'sex':        row['sex'],
+                    'passport_expiry': expiry,
                 }
             )
+        logger.info(f"Upserted assignment for crew {row['crew_id']} on flight {flight.flight_no}")
+
 
 
 def process_job1008_file(attachment):
@@ -2179,7 +2202,7 @@ def process_job1008_file(attachment):
             except Exception:
                 logger.warning(f"Invalid passport_expiry for row: {row}")
 
-        CrewDetail.objects.update_or_create(
+        QatarCrewDetail.objects.update_or_create(
             crew_id=row.get('crew_id'),
             defaults={
                 'passport_number': row.get('passport_number'),
