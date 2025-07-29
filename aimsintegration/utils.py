@@ -2184,49 +2184,36 @@ def process_job97_file(attachment):
 
 def process_job1008_file(attachment):
     """
-    Process Job #1008 CSV crew details and upsert into QatarCrewDetail using comma-delimited columns.
-    Expected columns:
-      0 crew_id
-      1 passport_number
-      2 <unused>
-      3 surname
-      4 firstname
-      5 middlename
-      6 nationality
-      7 issuing_state
-      8 passport_issue_date (dd/MM/yyyy)
-      9 <unused>
-     10 place_of_issue
-     11 <unused>
-     12 birth_place_cc
+    Process Job #1008 CSV crew details using header names, enforce non-null issuing_state,
+    and truncate birth_place_cc to 3 characters.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     lines = [ln for ln in raw.splitlines() if ln.strip()]
-    import csv as _csv
-    reader = _csv.reader(lines)
-    header = next(reader, None)
-    logger.debug(f"Header columns: {header}")
+    reader = csv.DictReader(lines)
     for row in reader:
-        if len(row) < 13:
-            logger.warning(f"Skipping short CSV row: {row}")
+        crew_id = row.get('crew_id', '').strip()
+        if not crew_id:
+            logger.warning(f"Skipping row with missing crew_id: {row}")
             continue
-        crew_id         = row[0].strip()
-        passport_number = row[1].strip() or None
-        surname         = row[3].strip() or ''
-        firstname       = row[4].strip() or ''
-        middlename      = row[5].strip() or None
-        nationality     = row[6].strip() or None
-        issuing_state   = row[7].strip() or None
-        issue_date_str  = row[8].strip()
-        place_of_issue  = row[10].strip() or None
-        birth_place_cc  = row[12].strip() or None
-        # Parse passport issue date
+        passport_number = row.get('passport_number', '').strip() or None
+        surname = row.get('surname', '').strip() or ''
+        firstname = row.get('firstname', '').strip() or ''
+        middlename = row.get('middlename', '').strip() or None
+        nationality = row.get('nationality', '').strip() or None
+        # Ensure issuing_state is never null
+        issuing_state = (row.get('issuing_state', '') or '').strip()[:3]
+        # Parse passport issue date dd/MM/yyyy
+        issue_date_str = row.get('passport_issue_date', '').strip()
         passport_issue_date = None
         if issue_date_str:
             try:
                 passport_issue_date = datetime.strptime(issue_date_str, '%d/%m/%Y').date()
             except Exception as e:
                 logger.warning(f"Invalid passport_issue_date '{issue_date_str}' for crew {crew_id}: {e}")
+        place_of_issue = row.get('place_of_issue', '').strip() or None
+        # Truncate/trust birth_place_cc
+        birth_cc_raw = row.get('birth_place_cc', '').strip() or ''
+        birth_place_cc = birth_cc_raw[:3]
         try:
             obj, created = QatarCrewDetail.objects.update_or_create(
                 crew_id=crew_id,
@@ -2241,7 +2228,7 @@ def process_job1008_file(attachment):
                     'birth_place_cc': birth_place_cc,
                     'birth_date': None,
                     'sex': None,
-                    'passport_expiry': None,
+                    'passport_expiry': passport_issue_date,
                 }
             )
             logger.info(f"{'Created' if created else 'Updated'} crew detail for {crew_id}")
