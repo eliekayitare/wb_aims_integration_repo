@@ -438,3 +438,46 @@ class DreamilesEmailRecord(models.Model):
 # QATAR APIS models
 
 #===========================================================================
+
+
+
+
+class QatarCrewDetail(models.Model):
+    crew_id = models.CharField(max_length=11, primary_key=True)
+    passport_number = models.CharField(max_length=20, null=True, blank=True)
+    surname = models.CharField(max_length=50)
+    firstname = models.CharField(max_length=50)
+    middlename = models.CharField(max_length=50, null=True, blank=True)
+    nationality = models.CharField(max_length=3)
+    issuing_state = models.CharField(max_length=3)
+    place_of_issue = models.CharField(max_length=16, null=True, blank=True)
+    birth_place_cc = models.CharField(max_length=3, null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')])
+    passport_expiry = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'crew_detail'
+
+    def __str__(self):
+        return f"{self.crew_id} {self.surname}, {self.firstname}"
+
+
+class QatarFlightCrewAssignment(models.Model):
+    crew_id = models.CharField(max_length=11)
+    flight = models.ForeignKey(FlightData, on_delete=models.CASCADE, related_name='assignments')
+    tail_no = models.CharField(max_length=10, null=True, blank=True)
+    dep_date_utc = models.DateField()
+    arr_date_utc = models.DateField(null=True, blank=True)
+    std_utc = models.TimeField(null=True, blank=True)
+    sta_utc = models.TimeField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')])
+    passport_expiry = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'flight_crew_assignment'
+        unique_together = ('crew_id', 'flight')
+
+    def __str__(self):
+        return f"{self.crew_id} on {self.flight}"

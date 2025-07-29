@@ -342,18 +342,15 @@ CELERY_BEAT_SCHEDULE = {
     #     'schedule': crontab(minute='*/2'),  # Every hour
     # },
 
-    # Qatar APIS Tasks - Add these to your existing CELERY_BEAT_SCHEDULE
-    'fetch-qatar-apis-data-every-2-hours': {
-        'task': 'aimsintegration.tasks.process_qatar_apis_complete_workflow',
-        'schedule': crontab(minute='*/3'),  # Every 2 minutes
-        'options': {'run_immediately': False}
+     # Job 97: fetch flight-crew assignments every 10 minutes
+    'fetch-job97-every-10-minutes': {
+        'task': 'aimsintegration.tasks.fetch_job97',
+        'schedule': crontab(minute='*/3'),
     },
-
-    # Cleanup old Qatar APIS files - runs weekly
-    'cleanup-qatar-apis-files-weekly': {
-        'task': 'aimsintegration.tasks.cleanup_old_qatar_apis_files',
-        'schedule': crontab(hour=2, minute=0, day_of_week=0),  # Every Sunday at 2 AM
-        'options': {'run_immediately': False}
+    # Job 1008: fetch static crew details every 15 minutes
+    'fetch-job1008-every-15-minutes': {
+        'task': 'aimsintegration.tasks.fetch_job1008',
+        'schedule': crontab(minute='*/4'),
     },
 
 }

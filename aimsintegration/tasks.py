@@ -52,22 +52,7 @@ def fetch_airport_data():
         logger.error(f"Error processing airport data email: {e}")
         raise
 
-# @shared_task
-# def fetch_flight_schedules():
-#     account = get_exchange_account()
-#     logger.info("Fetching the most recent flight schedule email...")
 
-#     emails = account.inbox.filter(
-#         subject__contains='AIMS JOB : #1002 Flight schedule feed to WB server file attached'
-#     ).order_by('-datetime_received')
-    
-#     email = emails[0] if emails else None
-
-#     if email:
-#         logger.info(f"Processing the most recent flight schedule email with subject: {email.subject}")
-#         process_email_attachment(email, process_flight_schedule_file)
-#     else:
-#         logger.info("No new flight schedule email found.")
 
 
 @shared_task
@@ -1791,3 +1776,67 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 # QATAR APIS TASKS
 
 #=================================================================================================================
+
+from .utils import *
+
+@shared_task
+def fetch_job97():
+    """
+    Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
+    then immediately build the Qatar APIS EDIFACT file.
+    """
+    account = get_exchange_account()
+    logger.info("Fetching the most recent Job 97 email...")
+
+    # Filter for both inbound/outbound by checking 'DOH KGL' pattern
+    emails = account.inbox.filter(
+        subject__contains="DOH KGL"
+    ).order_by('-datetime_received')
+
+    try:
+        email = emails[0]
+        subject = email.subject.upper()
+        logger.info(f"Processing Job 97 email: {email.subject}")
+
+        # Ingest and process attachments
+        process_email_attachment(email, process_job97_file)
+
+        # Determine direction: inbound if DOH->KGL, else outbound
+        direction = 'I' if 'DOH KGL' in subject else 'O'
+        # Use UTC today for file naming
+        run_date = datetime.utcnow().date()
+
+        # Generate EDIFACT file and save locally
+        edi_path = build_qatar_apis_edifact(direction, run_date)
+        logger.info(f"Generated EDIFACT file at: {edi_path}")
+
+    except IndexError:
+        logger.info("No new Job 97 email found.")
+    except Exception as e:
+        logger.error(f"Error in fetch_job97: {e}")
+        raise
+
+@shared_task
+def fetch_job1008():
+    """
+    Fetch AIMS JOB #1008 (Feeds APIS interface), process static crew details.
+    """
+    account = get_exchange_account()
+    logger.info("Fetching the most recent Job 1008 email...")
+
+    emails = account.inbox.filter(
+        subject__contains="#1008 Feeds APIS interface"
+    ).order_by('-datetime_received')
+
+    try:
+        email = emails[0]
+        logger.info(f"Processing Job 1008 email: {email.subject}")
+
+        # Ingest and process attachments
+        process_email_attachment(email, process_job1008_file)
+
+    except IndexError:
+        logger.info("No new Job 1008 email found.")
+    except Exception as e:
+        logger.error(f"Error in fetch_job1008: {e}")
+        raise
