@@ -233,8 +233,10 @@ AIMS_SERVER_DESTINATION_PATH= config('AIMS_SERVER_DESTINATION_PATH')
 AIMS_PORT= config('AIMS_PORT')
 
 
-EXCHANGE_SENDER_ID = 'RWANDAIR'
+# Local folder where EDIFACT files will be written
 QATAR_APIS_OUTPUT_PATH = BASE_DIR / 'qatar_apis'
+# Ensure the output directory exists
+os.makedirs(QATAR_APIS_OUTPUT_PATH, exist_ok=True)
 # DREAMMILES
 
 DREAM_HOST_USER = config('DREAM_HOST_USER')
