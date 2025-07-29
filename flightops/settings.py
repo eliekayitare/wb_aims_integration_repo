@@ -252,16 +252,16 @@ CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 # Celery Beat Schedule for periodic tasks
 CELERY_BEAT_SCHEDULE = {
     # Airport Data - Runs every 72 hours after initial run
-    # 'fetch-airport-data-every-72-hours': {
-    #     'task': 'aimsintegration.tasks.fetch_airport_data',
-    #     'schedule': crontab(minute='*/75'),  # Every 1 hour 15 minutes
-    # },
-    # # Flight Schedules - Runs every 10 minutes after initial run
-    # 'fetch-flight-schedules-every-10-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_flight_schedules',
-    #     'schedule': crontab(minute='*/10'),  # Every 10 minutes
+    'fetch-airport-data-every-72-hours': {
+        'task': 'aimsintegration.tasks.fetch_airport_data',
+        'schedule': crontab(minute='*/75'),  # Every 1 hour 15 minutes
+    },
+    # Flight Schedules - Runs every 10 minutes after initial run
+    'fetch-flight-schedules-every-10-minutes': {
+        'task': 'aimsintegration.tasks.fetch_flight_schedules',
+        'schedule': crontab(minute='*/10'),  # Every 10 minutes
         
-    # },
+    },
     # ACARS Messages - Runs every 3 minutes
     'fetch-acars-messages-every-3-minutes': {
         'task': 'aimsintegration.tasks.fetch_acars_messages',
@@ -275,10 +275,10 @@ CELERY_BEAT_SCHEDULE = {
     },
 
     # CPAT Project -Runs every 1 hour 40 minutes
-    # 'fetch-cpat-data-every-hour': {
-    #     'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
-    #     'schedule': crontab(minute='*/100'),  # Every 1 hour 40 minutes
-    # },
+    'fetch-cpat-data-every-hour': {
+        'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
+        'schedule': crontab(minute='*/100'),  # Every 1 hour 40 minutes
+    },
 
     # Send Notification for expired records - Runs every 1 hour
     'notify-cpat-expiry-daily': {
@@ -289,39 +289,39 @@ CELERY_BEAT_SCHEDULE = {
     #FDM Project - Runs every 1 hour
 
      # Flight Schedules - Runs every 10 minutes after initial run
-    # 'fetch-fdm_flight-schedules-every-15-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
-    #     'schedule': crontab(minute='*/15'),  # Every 15 minutes
-    #     'options': {'run_immediately': False}
-    # },
+    'fetch-fdm_flight-schedules-every-15-minutes': {
+        'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
+        'options': {'run_immediately': False}
+    },
 
     #Fetch Crew Data - Runs every 15 minutes
-    # 'fetch-crew-data-every-15-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-    #     'schedule': crontab(minute='*/16'),  # Every 16 minutes
-    #     'options': {'run_immediately': False}
-    # },
+    'fetch-crew-data-every-15-minutes': {
+        'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
+        'schedule': crontab(minute='*/16'),  # Every 16 minutes
+        'options': {'run_immediately': False}
+    },
 
     # UPload FDM Data - runs every 1 hour
-    # 'upload-fdm-data-every-hour': {
-    #     'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
-    #     'schedule': crontab(minute='*/60'),  # Every 1 hour
-    #     'options': {'run_immediately': False}
+    'upload-fdm-data-every-hour': {
+        'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
+        'schedule': crontab(minute='*/60'),  # Every 1 hour
+        'options': {'run_immediately': False}
         
-    # },
+    },
 
     # Feed Tableau - Runs every 5 minutes
-    # 'feed-tableau-every-5-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_tableau',
-    #     'schedule': crontab(minute='*/5'),  # Every 5 minutes
-    # },
+    'feed-tableau-every-5-minutes': {
+        'task': 'aimsintegration.tasks.fetch_tableau',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    },
 
     # Delete old emails - Runs every 1 hour
 
-    # 'delete-old-emails-every-hour': {
-    #     'task': 'aimsintegration.tasks.delete_old_emails',
-    #     'schedule': crontab(minute='*/2'),  # Every hour
-    # },
+    'delete-old-emails-every-hour': {
+        'task': 'aimsintegration.tasks.delete_old_emails',
+        'schedule': crontab(minute='*/2'),  # Every hour
+    },
 
     # # Only keep the campaign checker in CELERY_BEAT (the processing will self-schedule)
     # 'check-dreammiles-campaign-hourly': {
