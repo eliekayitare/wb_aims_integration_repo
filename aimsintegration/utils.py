@@ -2055,9 +2055,6 @@ def process_tableau_data_email_attachment(item, process_function):
 #=================================================================================
 # CLEAN QATAR APIS UTILS - FIXED VERSION
 #==================================================================================
-#=================================================================================
-# CLEAN QATAR APIS UTILS - NO ISSUING_STATE FIELD
-#==================================================================================
 import re
 import csv
 import logging
@@ -2190,7 +2187,7 @@ def process_job1008_file(attachment):
             birth_place_cc = birth_place_cc_raw[:3] if birth_place_cc_raw else None
             
             try:
-                # Create/update crew detail with ONLY Job 1008 fields
+                # Create/update crew detail with Job 1008 fields including passport_issue_date
                 obj, created = QatarCrewDetail.objects.update_or_create(
                     crew_id=crew_id,
                     defaults={
@@ -2201,8 +2198,7 @@ def process_job1008_file(attachment):
                         'nationality': nationality,
                         'place_of_issue': place_of_issue,
                         'birth_place_cc': birth_place_cc,
-                        # Only set passport_issue_date if your model has it
-                        # 'passport_issue_date': passport_issue_date,
+                        'passport_issue_date': passport_issue_date,  # Now included since field exists
                     }
                 )
                 logger.info(f"Line {line_num}: {'Created' if created else 'Updated'} crew detail for {crew_id}")
