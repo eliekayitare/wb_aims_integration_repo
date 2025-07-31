@@ -2053,7 +2053,6 @@ def process_tableau_data_email_attachment(item, process_function):
     except Exception as e:
         logger.error(f"Error processing fdm email attachment: {e}")
 
-
 #=================================================================================
 # CLEAN QATAR APIS UTILS - FIXED VERSION
 #==================================================================================
@@ -2303,10 +2302,13 @@ def process_job1008_file(attachment):
             surname = row.get('surname', '').strip() or ''
             firstname = row.get('firstname', '').strip() or ''
             middlename = row.get('middlename', '').strip() or None
-            nationality = row.get('nationality', '').strip() or None
+            nationality_raw = row.get('nationality', '').strip() or None
             
-            # Ensure issuing_state is never null - use nationality or default
-            issuing_state = (nationality or 'RWA')[:3]
+            # Handle nationality - truncate to 3 chars and ensure not null
+            nationality = (nationality_raw or 'RWA')[:3]
+            
+            # Ensure issuing_state is never null and max 3 chars
+            issuing_state = nationality  # Use same as nationality, already truncated
             
             # Parse passport issue date dd/MM/yyyy
             issue_date_str = row.get('passport_issue_date', '').strip()
@@ -2321,9 +2323,13 @@ def process_job1008_file(attachment):
                     except ValueError:
                         logger.warning(f"Line {line_num}: Invalid passport_issue_date '{issue_date_str}' for crew {crew_id}")
             
-            place_of_issue = row.get('place_of_issue', '').strip() or None
+            # Handle place_of_issue - truncate to 16 chars max
+            place_of_issue_raw = row.get('place_of_issue', '').strip()
+            place_of_issue = place_of_issue_raw[:16] if place_of_issue_raw else None
+            
+            # Handle birth_place_cc - truncate to 3 chars max
             birth_cc_raw = row.get('birth_place_cc', '').strip() or ''
-            birth_place_cc = birth_cc_raw[:3]
+            birth_place_cc = birth_cc_raw[:3] if birth_cc_raw else None
             
             try:
                 obj, created = QatarCrewDetail.objects.update_or_create(
@@ -2338,7 +2344,7 @@ def process_job1008_file(attachment):
                         'place_of_issue': place_of_issue,
                         'birth_place_cc': birth_place_cc,
                         'birth_date': None,  # Not in this file
-                        'sex': None,  # Not in this file
+                        'sex': 'M',  # Default value since it's required but not in CSV
                         'passport_expiry': passport_issue_date,  # Using issue date as placeholder
                     }
                 )

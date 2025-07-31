@@ -439,21 +439,18 @@ class DreamilesEmailRecord(models.Model):
 
 #===========================================================================
 
-
-
-
 class QatarCrewDetail(models.Model):
     crew_id = models.CharField(max_length=11, primary_key=True)
     passport_number = models.CharField(max_length=20, null=True, blank=True)
     surname = models.CharField(max_length=50, null=True, blank=True)
     firstname = models.CharField(max_length=50, null=True, blank=True)
     middlename = models.CharField(max_length=50, null=True, blank=True)
-    nationality = models.CharField(max_length=3)
-    issuing_state = models.CharField(max_length=3)
+    nationality = models.CharField(max_length=3, null=True, blank=True)  # Allow null
+    issuing_state = models.CharField(max_length=3, default='RWA')  # Default value
     place_of_issue = models.CharField(max_length=16, null=True, blank=True)
     birth_place_cc = models.CharField(max_length=3, null=True, blank=True)
     birth_date = models.DateField(null=True, blank=True)
-    sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')])
+    sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')], null=True, blank=True)  # Allow null
     passport_expiry = models.DateField(null=True, blank=True)
 
     class Meta:
