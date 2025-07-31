@@ -2052,7 +2052,6 @@ def process_tableau_data_email_attachment(item, process_function):
                     process_function(attachment)  # Call the relevant function for each attachment
     except Exception as e:
         logger.error(f"Error processing fdm email attachment: {e}")
-
 #=================================================================================
 # CLEAN QATAR APIS UTILS - FIXED VERSION
 #==================================================================================
@@ -2257,22 +2256,22 @@ def process_job1008_file(attachment):
     
     logger.info(f"Processing Job 1008 with {len(lines)} lines")
     
-    # Define the column structure based on your screenshot
-    # The columns are: crew_id, passport_number, ?, surname, firstname, middlename, nationality, ?, passport_issue_date, ?, place_of_issue, ?, birth_place_cc
+    # Define the column structure based on Job 1008 field specification
+    # Only 7 fields: crew_id, passport_number, full_name, nationality, passport_issue_date, place_of_issue, birth_place_cc
     column_mapping = {
-        0: 'crew_id',
-        1: 'passport_number', 
-        2: None,  # empty column
-        3: 'surname',
-        4: 'firstname',
-        5: 'middlename',
-        6: 'nationality',
-        7: None,  # empty column  
-        8: 'passport_issue_date',
-        9: None,  # empty column
-        10: 'place_of_issue',
-        11: None,  # empty column
-        12: 'birth_place_cc'
+        0: 'crew_id',           # Crew Member ID
+        1: 'passport_number',   # Passport Number
+        2: None,                # Empty column
+        3: 'full_name',         # Passport Surname, FirstName, Middle (combined)
+        4: None,                # Empty column  
+        5: None,                # Empty column
+        6: 'nationality',       # Nationality Of Person
+        7: None,                # Empty column
+        8: 'passport_issue_date', # Passport Issue Date
+        9: None,                # Empty column
+        10: 'place_of_issue',   # Passport Place Of Issue
+        11: None,               # Empty column
+        12: 'birth_place_cc'    # Birth Place Country Code
     }
     
     processed_count = 0
@@ -2299,9 +2298,34 @@ def process_job1008_file(attachment):
                 
             # Process the data
             passport_number = row.get('passport_number', '').strip() or None
-            surname = row.get('surname', '').strip() or ''
-            firstname = row.get('firstname', '').strip() or ''
-            middlename = row.get('middlename', '').strip() or None
+            
+            # Parse the full name field (Passport Surname, FirstName, Middle)
+            full_name = row.get('full_name', '').strip()
+            surname = ''
+            firstname = ''
+            middlename = None
+            
+            if full_name:
+                # Split the full name - typically "LASTNAME, FIRSTNAME MIDDLENAME"
+                if ',' in full_name:
+                    name_parts = full_name.split(',', 1)
+                    surname = name_parts[0].strip()
+                    if len(name_parts) > 1:
+                        remaining_names = name_parts[1].strip().split()
+                        if remaining_names:
+                            firstname = remaining_names[0]
+                            if len(remaining_names) > 1:
+                                middlename = ' '.join(remaining_names[1:])
+                else:
+                    # If no comma, assume it's all one name
+                    name_parts = full_name.split()
+                    if name_parts:
+                        surname = name_parts[0]
+                        if len(name_parts) > 1:
+                            firstname = name_parts[1]
+                            if len(name_parts) > 2:
+                                middlename = ' '.join(name_parts[2:])
+            
             nationality_raw = row.get('nationality', '').strip() or None
             
             # Handle nationality - truncate to 3 chars and ensure not null
