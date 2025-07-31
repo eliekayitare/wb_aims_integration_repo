@@ -2093,23 +2093,127 @@ def rtf_to_text(rtf_content):
     return "\n".join(lines)
 
 
-def process_email_attachment(item, process_function):
+
+def process_job1008_file(attachment):
     """
-    General handler to process FileAttachment items.
+    Process Job #1008 CSV crew details - FINAL CORRECTED VERSION
+    Job 1008 contains exactly 7 fields, no issuing_state field
     """
-    try:
-        for attachment in getattr(item, 'attachments', []):
-            if isinstance(attachment, FileAttachment):
-                logger.info(f"Processing attachment: {attachment.name}")
-                process_function(attachment)
-    except Exception as e:
-        logger.error(f"Error processing email attachment: {e}")
+    raw = attachment.content.decode('utf-8', errors='ignore')
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    
+    logger.info(f"Processing Job 1008 with {len(lines)} lines")
+    
+    # FINAL CORRECTED column mapping - Job 1008 has NO issuing_state field
+    # The 7 fields from Job 1008 specification are mapped to CSV columns:
+    column_mapping = {
+        0: 'crew_id',               # Field 1: Crew Member ID
+        1: 'passport_number',       # Field 2: Passport Number
+        2: None,                    # Empty column
+        3: 'surname',               # Field 3: Surname part of "Passport Surname, FirstName, Middle"
+        4: 'firstname',             # Field 3: Firstname part of "Passport Surname, FirstName, Middle"
+        5: 'middlename',            # Field 3: Middlename part of "Passport Surname, FirstName, Middle"
+        6: 'nationality',           # Field 4: Nationality Of Person
+        7: None,                    # Empty column
+        8: 'passport_issue_date',   # Field 5: Passport Issue Date
+        9: None,                    # Empty column
+        10: 'place_of_issue',       # Field 6: Passport Place Of Issue
+        11: None,                   # Empty column
+        12: 'birth_place_cc'        # Field 7: Birth Place Country Code
+    }
+    
+    processed_count = 0
+    error_count = 0
+    
+    for line_num, line in enumerate(lines, 1):
+        try:
+            # Split by comma
+            parts = line.split(',')
+            
+            # Create row dictionary using our column mapping
+            row = {}
+            for idx, column_name in column_mapping.items():
+                if column_name and idx < len(parts):
+                    row[column_name] = parts[idx].strip()
+                elif column_name:
+                    row[column_name] = ''
+            
+            # Skip if no crew_id
+            crew_id = row.get('crew_id', '').strip()
+            if not crew_id:
+                logger.warning(f"Line {line_num}: Skipping row with missing crew_id")
+                continue
+                
+            # Process the data from Job 1008
+            passport_number = row.get('passport_number', '').strip() or None
+            surname = row.get('surname', '').strip() or None
+            firstname = row.get('firstname', '').strip() or None
+            middlename = row.get('middlename', '').strip() or None
+            
+            # Handle nationality - keep full text like "RWANDAN" (up to 20 chars)
+            nationality_raw = row.get('nationality', '').strip()
+            nationality = nationality_raw[:20] if nationality_raw else None
+            
+            # Parse passport issue date dd/MM/yyyy
+            issue_date_str = row.get('passport_issue_date', '').strip()
+            passport_issue_date = None
+            if issue_date_str:
+                try:
+                    passport_issue_date = datetime.strptime(issue_date_str, '%d/%m/%Y').date()
+                except ValueError:
+                    try:
+                        # Try without century
+                        passport_issue_date = datetime.strptime(issue_date_str, '%d/%m/%y').date()
+                    except ValueError:
+                        logger.warning(f"Line {line_num}: Invalid passport_issue_date '{issue_date_str}' for crew {crew_id}")
+            
+            # Handle place_of_issue - truncate to 16 chars max
+            place_of_issue_raw = row.get('place_of_issue', '').strip()
+            place_of_issue = place_of_issue_raw[:16] if place_of_issue_raw else None
+            
+            # Handle birth_place_cc - 3-letter country code
+            birth_place_cc_raw = row.get('birth_place_cc', '').strip()
+            birth_place_cc = birth_place_cc_raw[:3] if birth_place_cc_raw else None
+            
+            try:
+                obj, created = QatarCrewDetail.objects.update_or_create(
+                    crew_id=crew_id,
+                    defaults={
+                        # Data from Job 1008:
+                        'passport_number': passport_number,
+                        'surname': surname,
+                        'firstname': firstname,
+                        'middlename': middlename,
+                        'nationality': nationality,
+                        'passport_issue_date': passport_issue_date,
+                        'place_of_issue': place_of_issue,
+                        'birth_place_cc': birth_place_cc,
+                        
+                        # These fields will be populated by Job 97:
+                        'issuing_state': None,  # Not in Job 1008, will come from Job 97
+                        'birth_date': None,     # Not in Job 1008, will come from Job 97
+                        'sex': None,            # Not in Job 1008, will come from Job 97
+                        'passport_expiry': None, # Not in Job 1008, will come from Job 97
+                    }
+                )
+                logger.info(f"Line {line_num}: {'Created' if created else 'Updated'} crew detail for {crew_id}")
+                processed_count += 1
+                
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Line {line_num}: Upsert failed for crew {crew_id}: {e}")
+                
+        except Exception as e:
+            error_count += 1
+            logger.error(f"Line {line_num}: Error processing line '{line}': {e}")
+    
+    logger.info(f"Job 1008 processing complete: {processed_count} processed, {error_count} errors")
 
 
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and upsert into QatarFlightCrewAssignment.
-    FIXED VERSION - Better parsing for the actual RTF structure
+    This will also update crew details with additional info (sex, birth_date, passport_expiry)
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     logger.debug(f"RTF raw size: {len(raw)} characters")
@@ -2118,7 +2222,6 @@ def process_job97_file(attachment):
     logger.debug(f"Extracted {len(lines)} non-empty lines")
 
     # Look for crew data entries - they follow a specific pattern in the RTF
-    # The RTF contains crew entries with ID, NAME, ROLE, PASSPORT, etc.
     crew_entries = []
     
     # Find lines that start with numbers (crew IDs) followed by names
@@ -2126,12 +2229,11 @@ def process_job97_file(attachment):
         # Look for pattern: NUMBER NAME ROLE PASSPORT_NUMBER BIRTH_DATE GENDER NATIONALITY EXPIRY
         if re.match(r'^\d+\s+[A-Z]', line):
             try:
-                # Parse the crew entry from this line and potentially next lines
+                # Parse the crew entry from this line
                 parts = line.split()
                 if len(parts) >= 8:  # Minimum expected parts
                     crew_id = parts[0]
                     # Find where the name ends and other data begins
-                    # Names are usually 2-4 words, followed by role (CP, FO, FP, etc.)
                     name_parts = []
                     role = None
                     passport = None
@@ -2178,7 +2280,7 @@ def process_job97_file(attachment):
                             'passport': passport,
                             'birth_date': birth_date,
                             'gender': gender,
-                            'nationality': nationality or 'RWA',
+                            'nationality': nationality,
                             'expiry': expiry
                         })
                         
@@ -2200,9 +2302,6 @@ def process_job97_file(attachment):
                     # Try different date formats
                     if '/' in entry['birth_date']:
                         birth = datetime.strptime(entry['birth_date'], '%d/%m/%y').date()
-                    else:
-                        # Try other formats as needed
-                        pass
                 except:
                     logger.warning(f"Could not parse birth date: {entry['birth_date']}")
             
@@ -2213,177 +2312,23 @@ def process_job97_file(attachment):
                 except:
                     logger.warning(f"Could not parse expiry date: {entry['expiry']}")
 
-            # Try to find matching flight - this might need adjustment based on your FlightData model
-            # For now, we'll create/update the assignment with available data
+            # Update the crew detail with Job 97 data
             try:
-                # You'll need to adjust this query based on your actual flight matching logic
-                # This is a placeholder - you might need flight number, date, route info from the RTF
-                flight = None  # FlightData.objects.filter(...).first()
-                
-                if flight:
-                    obj, created = QatarFlightCrewAssignment.objects.update_or_create(
-                        crew_id=entry['crew_id'],
-                        flight=flight,
-                        defaults={
-                            'tail_no': '9XR-WG',  # From RTF header
-                            'dep_date_utc': flight.sd_date_utc,
-                            'arr_date_utc': flight.sa_date_utc,
-                            'std_utc': flight.std_utc,
-                            'sta_utc': flight.sta_utc,
-                            'birth_date': birth,
-                            'sex': entry['gender'],
-                            'passport_expiry': expiry,
-                        }
-                    )
-                    logger.info(f"{'Created' if created else 'Updated'} assignment for {entry['crew_id']}")
+                crew_detail = QatarCrewDetail.objects.filter(crew_id=entry['crew_id']).first()
+                if crew_detail:
+                    crew_detail.birth_date = birth
+                    crew_detail.sex = entry['gender']
+                    crew_detail.passport_expiry = expiry
+                    crew_detail.save()
+                    logger.info(f"Updated crew detail for {entry['crew_id']} with Job 97 data")
                 else:
-                    logger.warning(f"No flight found for crew {entry['crew_id']}")
+                    logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97")
                     
             except Exception as e:
-                logger.error(f"Failed to create/update assignment for {entry['crew_id']}: {e}")
+                logger.error(f"Failed to update crew detail for {entry['crew_id']}: {e}")
                 
         except Exception as e:
             logger.error(f"Error processing crew entry {entry}: {e}")
-
-
-def process_job1008_file(attachment):
-    """
-    Process Job #1008 CSV crew details - FIXED VERSION
-    The CSV has NO HEADER ROW, so we need to define the column mapping manually
-    """
-    raw = attachment.content.decode('utf-8', errors='ignore')
-    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-    
-    logger.info(f"Processing Job 1008 with {len(lines)} lines")
-    
-    # Define the column structure based on Job 1008 field specification
-    # Only 7 fields: crew_id, passport_number, full_name, nationality, passport_issue_date, place_of_issue, birth_place_cc
-    column_mapping = {
-        0: 'crew_id',           # Crew Member ID
-        1: 'passport_number',   # Passport Number
-        2: None,                # Empty column
-        3: 'full_name',         # Passport Surname, FirstName, Middle (combined)
-        4: None,                # Empty column  
-        5: None,                # Empty column
-        6: 'nationality',       # Nationality Of Person
-        7: None,                # Empty column
-        8: 'passport_issue_date', # Passport Issue Date
-        9: None,                # Empty column
-        10: 'place_of_issue',   # Passport Place Of Issue
-        11: None,               # Empty column
-        12: 'birth_place_cc'    # Birth Place Country Code
-    }
-    
-    processed_count = 0
-    error_count = 0
-    
-    for line_num, line in enumerate(lines, 1):
-        try:
-            # Split by comma
-            parts = line.split(',')
-            
-            # Create row dictionary using our column mapping
-            row = {}
-            for idx, column_name in column_mapping.items():
-                if column_name and idx < len(parts):
-                    row[column_name] = parts[idx].strip()
-                elif column_name:
-                    row[column_name] = ''
-            
-            # Skip if no crew_id
-            crew_id = row.get('crew_id', '').strip()
-            if not crew_id:
-                logger.warning(f"Line {line_num}: Skipping row with missing crew_id")
-                continue
-                
-            # Process the data
-            passport_number = row.get('passport_number', '').strip() or None
-            
-            # Parse the full name field (Passport Surname, FirstName, Middle)
-            full_name = row.get('full_name', '').strip()
-            surname = ''
-            firstname = ''
-            middlename = None
-            
-            if full_name:
-                # Split the full name - typically "LASTNAME, FIRSTNAME MIDDLENAME"
-                if ',' in full_name:
-                    name_parts = full_name.split(',', 1)
-                    surname = name_parts[0].strip()
-                    if len(name_parts) > 1:
-                        remaining_names = name_parts[1].strip().split()
-                        if remaining_names:
-                            firstname = remaining_names[0]
-                            if len(remaining_names) > 1:
-                                middlename = ' '.join(remaining_names[1:])
-                else:
-                    # If no comma, assume it's all one name
-                    name_parts = full_name.split()
-                    if name_parts:
-                        surname = name_parts[0]
-                        if len(name_parts) > 1:
-                            firstname = name_parts[1]
-                            if len(name_parts) > 2:
-                                middlename = ' '.join(name_parts[2:])
-            
-            nationality_raw = row.get('nationality', '').strip() or None
-            
-            # Handle nationality - truncate to 3 chars and ensure not null
-            nationality = (nationality_raw or 'RWA')[:3]
-            
-            # Ensure issuing_state is never null and max 3 chars
-            issuing_state = nationality  # Use same as nationality, already truncated
-            
-            # Parse passport issue date dd/MM/yyyy
-            issue_date_str = row.get('passport_issue_date', '').strip()
-            passport_issue_date = None
-            if issue_date_str:
-                try:
-                    passport_issue_date = datetime.strptime(issue_date_str, '%d/%m/%Y').date()
-                except ValueError:
-                    try:
-                        # Try without century
-                        passport_issue_date = datetime.strptime(issue_date_str, '%d/%m/%y').date()
-                    except ValueError:
-                        logger.warning(f"Line {line_num}: Invalid passport_issue_date '{issue_date_str}' for crew {crew_id}")
-            
-            # Handle place_of_issue - truncate to 16 chars max
-            place_of_issue_raw = row.get('place_of_issue', '').strip()
-            place_of_issue = place_of_issue_raw[:16] if place_of_issue_raw else None
-            
-            # Handle birth_place_cc - truncate to 3 chars max
-            birth_cc_raw = row.get('birth_place_cc', '').strip() or ''
-            birth_place_cc = birth_cc_raw[:3] if birth_cc_raw else None
-            
-            try:
-                obj, created = QatarCrewDetail.objects.update_or_create(
-                    crew_id=crew_id,
-                    defaults={
-                        'passport_number': passport_number,
-                        'surname': surname,
-                        'firstname': firstname,
-                        'middlename': middlename,
-                        'nationality': nationality,
-                        'issuing_state': issuing_state,
-                        'place_of_issue': place_of_issue,
-                        'birth_place_cc': birth_place_cc,
-                        'birth_date': None,  # Not in this file
-                        'sex': 'M',  # Default value since it's required but not in CSV
-                        'passport_expiry': passport_issue_date,  # Using issue date as placeholder
-                    }
-                )
-                logger.info(f"Line {line_num}: {'Created' if created else 'Updated'} crew detail for {crew_id}")
-                processed_count += 1
-                
-            except Exception as e:
-                error_count += 1
-                logger.error(f"Line {line_num}: Upsert failed for crew {crew_id}: {e}")
-                
-        except Exception as e:
-            error_count += 1
-            logger.error(f"Line {line_num}: Error processing line '{line}': {e}")
-    
-    logger.info(f"Job 1008 processing complete: {processed_count} processed, {error_count} errors")
 
 
 def build_qatar_apis_edifact(direction, date):
@@ -2424,9 +2369,9 @@ def build_qatar_apis_edifact(direction, date):
         crew = QatarCrewDetail.objects.filter(crew_id=asg.crew_id).first()
         segments.extend([
             f"NAD+FM+++{crew.surname if crew else ''}:{crew.firstname if crew else ''}+++++'",
-            f"ATT+2++{asg.sex}'",
-            f"DTM+329:{asg.birth_date.strftime('%y%m%d')}:201'" if asg.birth_date else "DTM+329::201'",
-            f"NAT+2+{crew.nationality if crew else ''}'",
+            f"ATT+2++{asg.sex or (crew.sex if crew else '')}'",
+            f"DTM+329:{(asg.birth_date or (crew.birth_date if crew else None)).strftime('%y%m%d')}:201'" if (asg.birth_date or (crew and crew.birth_date)) else "DTM+329::201'",
+            f"NAT+2+{crew.issuing_state if crew else ''}'",
             f"DOC+P:110:111+{crew.passport_number if crew else ''}'",
             f"DTM+36:{(crew.passport_expiry or asg.passport_expiry).strftime('%y%m')}:203'" if (crew and crew.passport_expiry) or asg.passport_expiry else "DTM+36::203'",
             f"LOC+91+{crew.birth_place_cc if crew else ''}'",
