@@ -1792,13 +1792,22 @@ def fetch_job97():
     account = get_exchange_account()
     logger.info("Fetching the most recent Job 97 email...")
 
+    # Get all emails and filter manually since exchangelib doesn't support OR queries easily
+    all_emails = account.inbox.filter().order_by('-datetime_received')
+    
     # Filter for both inbound/outbound by checking for both patterns
-    emails = account.inbox.filter(
-        Q(subject__contains="DOH KGL") | Q(subject__contains="KGL DOH")
-    ).order_by('-datetime_received')
+    job97_emails = []
+    for email in all_emails:
+        if email.subject and ('DOH KGL' in email.subject.upper() or 'KGL DOH' in email.subject.upper()):
+            job97_emails.append(email)
+            break  # Get the most recent one
 
     try:
-        email = emails[0]
+        if not job97_emails:
+            logger.info("No new Job 97 email found.")
+            return
+            
+        email = job97_emails[0]
         subject = email.subject.upper()
         logger.info(f"Processing Job 97 email: {email.subject}")
 
@@ -1824,8 +1833,6 @@ def fetch_job97():
         edi_path = build_qatar_apis_edifact(direction, run_date)
         logger.info(f"Generated EDIFACT file at: {edi_path}")
 
-    except IndexError:
-        logger.info("No new Job 97 email found.")
     except Exception as e:
         logger.error(f"Error in fetch_job97: {e}")
         raise
