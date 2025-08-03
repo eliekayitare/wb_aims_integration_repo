@@ -2217,7 +2217,6 @@ def process_job1008_file(attachment):
     
     logger.info(f"Job 1008 processing complete: {processed_count} processed, {error_count} errors")
 
-
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
@@ -2230,13 +2229,15 @@ def process_job97_file(attachment):
     logger.debug(f"Extracted {len(lines)} non-empty lines")
 
     logger.info(f"Total lines in RTF: {len(lines)}")
-    logger.info("First 30 lines of RTF for debugging:")
-    for i, line in enumerate(lines[:30]):
-        logger.info(f"Line {i}: {line}")
+    
+    # Log more lines to see the actual crew data
+    logger.info("Lines 30-60 of RTF for debugging:")
+    for i, line in enumerate(lines[30:60], 30):
+        logger.info(f"Line {i}: {repr(line)}")
 
     crew_entries = []
     
-    # Look for the start of crew data - after "NO OF PASSENGERS" and "ON THIS STAGE"
+    # Look for the start of crew data - after "EXPIRY" header
     crew_data_started = False
     
     for i, line in enumerate(lines):
@@ -2244,53 +2245,64 @@ def process_job97_file(attachment):
         
         # Skip until we find the crew data section
         if not crew_data_started:
-            if "ON THIS STAGE" in line or "EXPIRY" in line:
+            if "EXPIRY" in line:
                 crew_data_started = True
                 logger.info(f"Crew data section starts after line {i}: {line}")
                 continue
             else:
                 continue
         
-        # Skip location markers and empty lines
+        # Log each line we're processing in the crew section
+        logger.info(f"Processing crew line {i}: {repr(line)}")
+        
+        # Skip location markers, empty lines, and section dividers
         if (line in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 'Embarking:', 
                     'Disembarking:', 'Through on same flight'] or 
             line.startswith('...') or 
             not line or
             'DECLARATION OF HEALTH' in line or
-            'FOR OFFICIAL USE' in line):
+            'FOR OFFICIAL USE' in line or
+            'NO OF PASSENGERS' in line):
+            logger.info(f"Skipping line {i}: {line}")
             continue
         
-        # Look for crew data lines that contain crew ID, name, role, passport, etc.
-        # Pattern: crew_id, name, role, passport, birth_date, gender, nationality, expiry
-        # Example: "464 JEAN DE DIEU KARANGWA PIC CP PC710505 02/02/82 M RWA 29/06/32"
+        # Try to parse crew data from the line
+        # The format appears to be: ID NAME ROLE PASSPORT BIRTH_DATE GENDER NATIONALITY EXPIRY
+        # Example from RTF: "464 JEAN DE DIEU KARANGWA PIC CP PC710505 02/02/82 M RWA 29/06/32"
         
-        # Split the line and look for crew data pattern
+        # Split the line into parts
         parts = line.split()
+        logger.info(f"Line {i} parts: {parts}")
         
         if len(parts) >= 6:  # Minimum parts for a valid crew entry
             try:
-                # First part should be crew ID (numeric)
+                # Check if first part is a crew ID (3-4 digits)
                 if parts[0].isdigit() and len(parts[0]) >= 3:
                     crew_id = parts[0]
+                    logger.info(f"Found potential crew ID: {crew_id}")
                     
-                    # Find the role (PIC, CP, FO, FP, SA, FA, AC)
+                    # Find role position - look for known crew roles
                     role_idx = None
                     role = None
                     for idx, part in enumerate(parts[1:], 1):
                         if part in ['PIC', 'CP', 'FO', 'FP', 'SA', 'FA', 'AC']:
                             role_idx = idx
                             role = part
+                            logger.info(f"Found role '{role}' at position {idx}")
                             break
                     
                     if role_idx is None:
-                        continue  # Skip if no role found
+                        logger.info(f"No role found in line {i}, skipping")
+                        continue
                     
                     # Extract name (everything between crew_id and role)
                     name_parts = parts[1:role_idx]
                     name = ' '.join(name_parts)
+                    logger.info(f"Extracted name: {name}")
                     
-                    # Look for remaining data after role
+                    # Process remaining parts after role
                     remaining_parts = parts[role_idx + 1:]
+                    logger.info(f"Remaining parts after role: {remaining_parts}")
                     
                     passport = None
                     birth_date = None
@@ -2299,12 +2311,12 @@ def process_job97_file(attachment):
                     expiry = None
                     
                     for part in remaining_parts:
-                        # Passport number (starts with PC or is all digits and long enough)
+                        # Passport number (starts with PC or is all digits and 6+ chars)
                         if (part.startswith('PC') or part.startswith('pc')) and len(part) > 4:
                             passport = part.upper()
                         elif part.isdigit() and len(part) >= 6:
                             passport = part
-                        # Birth date (dd/mm/yy format)
+                        # Date format (dd/mm/yy)
                         elif re.match(r'^\d{2}/\d{2}/\d{2}$', part):
                             if not birth_date:
                                 birth_date = part
@@ -2318,7 +2330,7 @@ def process_job97_file(attachment):
                             nationality = part
                     
                     if crew_id and name:
-                        crew_entries.append({
+                        crew_entry = {
                             'crew_id': crew_id,
                             'name': name,
                             'role': role,
@@ -2327,8 +2339,9 @@ def process_job97_file(attachment):
                             'gender': gender,
                             'nationality': nationality,
                             'expiry': expiry
-                        })
-                        logger.info(f"Parsed crew entry: {crew_id} - {name} ({role}) - Passport: {passport}")
+                        }
+                        crew_entries.append(crew_entry)
+                        logger.info(f"Successfully parsed crew entry: {crew_entry}")
                         
             except Exception as e:
                 logger.warning(f"Could not parse line {i}: {line} - Error: {e}")
@@ -2383,6 +2396,8 @@ def process_job97_file(attachment):
             logger.error(f"Failed to update crew detail for {entry['crew_id']}: {e}")
 
     logger.info(f"Job 97 processing complete: Updated {updated_count} crew records")
+
+    
 
 def build_qatar_apis_edifact(direction, date):
     """
