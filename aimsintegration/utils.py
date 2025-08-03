@@ -2690,7 +2690,7 @@ def process_job97_file(attachment):
             # Create flight crew assignment if we have a flight record
             if flight_record:
                 try:
-                    assignment, created = QatarFlightCrewAssignment.objects.update_or_create(
+                    assignment, created = QatarFlightDetails.objects.update_or_create(
                         crew_id=entry['crew_id'],
                         flight=flight_record,
                         defaults={
@@ -2728,7 +2728,7 @@ def build_qatar_apis_edifact(direction, date):
     lines.append(f"UNG+PAXLST+{sender}:ZZ+QATAPIS:ZZ+{ts}+UN+D:05B'")
 
     msg_count = 0
-    assignments = QatarFlightCrewAssignment.objects.filter(
+    assignments = QatarFlightDetails.objects.filter(
         dep_date_utc=date,
         flight__dep_code_iata=('KGL' if direction == 'O' else 'DOH'),
         flight__arr_code_iata=('DOH' if direction == 'O' else 'KGL')
