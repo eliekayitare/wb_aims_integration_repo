@@ -1785,13 +1785,14 @@ def fetch_job97():
     """
     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
     then immediately build the Qatar APIS EDIFACT file.
+    Updated to handle both flight directions.
     """
     account = get_exchange_account()
     logger.info("Fetching the most recent Job 97 email...")
 
-    # Filter for both inbound/outbound by checking 'DOH KGL' pattern
+    # Filter for both inbound/outbound by checking for both patterns
     emails = account.inbox.filter(
-        subject__contains="DOH KGL"
+        Q(subject__contains="DOH KGL") | Q(subject__contains="KGL DOH")
     ).order_by('-datetime_received')
 
     try:
@@ -1802,8 +1803,18 @@ def fetch_job97():
         # Ingest and process attachments
         process_email_attachment(email, process_job97_file)
 
-        # Determine direction: inbound if DOH->KGL, else outbound
-        direction = 'I' if 'DOH KGL' in subject else 'O'
+        # Determine direction based on subject line
+        if 'DOH KGL' in subject:
+            direction = 'I'  # Inbound (DOH to KGL)
+            logger.info("Detected inbound flight direction (DOH -> KGL)")
+        elif 'KGL DOH' in subject:
+            direction = 'O'  # Outbound (KGL to DOH)
+            logger.info("Detected outbound flight direction (KGL -> DOH)")
+        else:
+            # Fallback: try to detect from email content or use default
+            logger.warning("Could not determine flight direction from subject, defaulting to inbound")
+            direction = 'I'
+        
         # Use UTC today for file naming
         run_date = datetime.utcnow().date()
 
