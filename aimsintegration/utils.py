@@ -2665,27 +2665,51 @@ def process_job97_file(attachment):
     flight_record = None
     if flight_number and flight_date:
         try:
-            # Use correct field names from FlightData model
+            # Extract numeric flight number (remove WB prefix if present)
+            numeric_flight_no = flight_number[2:] if flight_number.startswith('WB') else flight_number
+            logger.info(f"Searching for flight with numeric number: {numeric_flight_no}")
+            
+            # Try with detected route first
             flight_record = FlightData.objects.filter(
-                flight_no=flight_number,
-                sd_date_utc=flight_date,  # Use sd_date_utc (scheduled departure date)
+                flight_no=numeric_flight_no,
+                sd_date_utc=flight_date,
                 dep_code_iata=departure_airport,
                 arr_code_iata=arrival_airport
             ).first()
             
             if not flight_record:
-                # Try without route filter in case airports don't match exactly
+                # Try with reversed route (in case RTF shows opposite direction)
                 flight_record = FlightData.objects.filter(
-                    flight_no=flight_number,
+                    flight_no=numeric_flight_no,
+                    sd_date_utc=flight_date,
+                    dep_code_iata=arrival_airport,
+                    arr_code_iata=departure_airport
+                ).first()
+                
+                if flight_record:
+                    logger.info(f"Found flight record with reversed route {arrival_airport}->{departure_airport}: {flight_record}")
+                    # Update our route variables to match the actual flight
+                    departure_airport, arrival_airport = arrival_airport, departure_airport
+                    logger.info(f"Updated route to match FlightData: {departure_airport} -> {arrival_airport}")
+            
+            if not flight_record:
+                # Try without route filter (just flight number and date)
+                flight_record = FlightData.objects.filter(
+                    flight_no=numeric_flight_no,
                     sd_date_utc=flight_date
                 ).first()
                 
                 if flight_record:
                     logger.info(f"Found flight record without route match: {flight_record}")
+                    # Update route variables to match the found flight
+                    departure_airport = flight_record.dep_code_iata
+                    arrival_airport = flight_record.arr_code_iata
+                    logger.info(f"Updated route from FlightData: {departure_airport} -> {arrival_airport}")
                 else:
-                    logger.warning(f"Flight record not found for {flight_number} on {flight_date}")
+                    logger.warning(f"Flight record not found for {numeric_flight_no} on {flight_date}")
             else:
                 logger.info(f"Found flight record: {flight_record}")
+                
         except Exception as e:
             logger.error(f"Error finding flight record: {e}")
 
