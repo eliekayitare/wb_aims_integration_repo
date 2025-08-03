@@ -2065,7 +2065,7 @@ from datetime import datetime
 from django.db import transaction
 from exchangelib import FileAttachment
 from django.conf import settings
-from .models import FlightData, QatarFlightCrewAssignment, QatarCrewDetail
+from .models import *
 
 logger = logging.getLogger(__name__)
 
@@ -2713,7 +2713,7 @@ def process_job97_file(attachment):
 
     logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, created {assignment_count} flight assignments")
 
-    
+
 
 def build_qatar_apis_edifact(direction, date):
     """
