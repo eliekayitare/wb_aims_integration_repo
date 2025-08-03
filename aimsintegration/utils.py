@@ -2722,6 +2722,7 @@ def process_job97_file(attachment):
         logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
 
 
+
 def build_qatar_apis_edifact(direction, date):
     """
     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
@@ -2808,12 +2809,12 @@ def build_qatar_apis_edifact(direction, date):
         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
         
         # Departure location and time (use IATA codes for EDIFACT)
-        dep_iata = asg.flight.dep_code_iata or 'DOH'  # Fallback to DOH if missing
+        dep_iata = 'DOH' if 'OTHH' in str(asg.flight.dep_code_icao) else (asg.flight.dep_code_iata or 'DOH')
         segments.append(f"LOC+125+{dep_iata}'")
         segments.append(f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'")
         
         # Arrival location and time (use IATA codes for EDIFACT)
-        arr_iata = asg.flight.arr_code_iata or 'KGL'  # Fallback to KGL if missing
+        arr_iata = 'KGL' if 'HRYR' in str(asg.flight.arr_code_icao) else (asg.flight.arr_code_iata or 'KGL')
         segments.append(f"LOC+87+{arr_iata}'")
         segments.append(f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'")
         
@@ -2835,10 +2836,14 @@ def build_qatar_apis_edifact(direction, date):
             
             crew_count += 1
             
-            # Crew member name and address
+            # Crew member name and address - handle full names properly
             surname = crew_detail.surname or ''
             firstname = crew_detail.firstname or ''
-            segments.append(f"NAD+FM+++{surname}:{firstname}+++++'")
+            middlename = crew_detail.middlename or ''
+            
+            # Combine first and middle names
+            full_given_name = f"{firstname} {middlename}".strip() if middlename else firstname
+            segments.append(f"NAD+FM+++{surname}:{full_given_name}+++++'")
             
             # Gender/Sex
             sex = crew_detail.sex or 'M'  # Default to M if not specified
@@ -2860,9 +2865,10 @@ def build_qatar_apis_edifact(direction, date):
             nationality_code = crew_detail.nationality_code or 'RWA'  # Default to RWA if not specified
             segments.append(f"NAT+2+{nationality_code}'")
             
-            # Document (Passport) information
+            # Document (Passport) information with issuing state
             passport_number = crew_detail.passport_number or ''
-            segments.append(f"DOC+P:110:111+{passport_number}'")
+            issuing_state = crew_detail.place_of_issue or nationality_code or 'RWA'  # Use place_of_issue or nationality as issuing state
+            segments.append(f"DOC+P:110:111+{passport_number}+{issuing_state}'")
             
             # Passport expiry date
             if crew_detail.passport_expiry:
