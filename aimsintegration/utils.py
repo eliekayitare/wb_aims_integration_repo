@@ -2112,7 +2112,8 @@ def process_email_attachment(item, process_function):
 
 def process_job97_file(attachment):
     """
-    Parse Job #97 RTF for crew assignments and upsert into QatarFlightCrewAssignment.
+    Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
+    Updated to handle the actual RTF structure with better debugging.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     logger.debug(f"RTF raw size: {len(raw)} characters")
@@ -2120,66 +2121,139 @@ def process_job97_file(attachment):
     lines = [ln for ln in text.splitlines() if ln.strip()]
     logger.debug(f"Extracted {len(lines)} non-empty lines")
 
-    # Find header row containing 'Crew ID' and 'Flight No'
-    hdr_idx = next((i for i, ln in enumerate(lines)
-                    if 'Crew ID' in ln and 'Flight No' in ln), None)
-    if hdr_idx is None:
-        logger.error("Couldn't find data table header in Job97 RTF")
-        return
+    # Debug: Log first 20 lines to understand structure
+    logger.info("First 20 lines of RTF for debugging:")
+    for i, line in enumerate(lines[:20]):
+        logger.info(f"Line {i}: {line}")
 
-    # Define fixed-width columns
-    col_specs = [
-        ('crew_id', 0, 12),
-        ('tail_no', 12, 22),
-        ('flight_no', 22, 30),
-        ('dep_port', 30, 40),
-        ('arr_port', 40, 50),
-        ('birth_date', 50, 60),
-        ('sex', 60, 62),
-        ('passport_expiry', 62, 72),
-    ]
+    # Look for crew data lines - they start with crew IDs (3-4 digits) followed by names
+    crew_entries = []
+    
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line or len(line) < 10:
+            continue
+            
+        # Look for crew data pattern: starts with 3-4 digits followed by uppercase letters (names)
+        if re.match(r'^\d{3,4}\s+[A-Z]', line):
+            logger.info(f"Found potential crew line {i}: {line}")
+            
+            try:
+                # Parse the crew line
+                parts = line.split()
+                if len(parts) < 6:
+                    continue
+                    
+                # Extract crew information
+                crew_id = None
+                crew_name = []
+                role = None
+                passport = None
+                birth_date = None
+                gender = None
+                nationality = None
+                expiry = None
+                
+                j = 0
+                while j < len(parts):
+                    part = parts[j]
+                    
+                    # Look for crew ID (numeric at start)
+                    if j == 0 and part.isdigit():
+                        crew_id = part
+                    
+                    # Look for names (until we hit a role)
+                    elif not role and part not in ['PIC', 'CP', 'FO', 'FP', 'SA', 'FA', 'AC']:
+                        crew_name.append(part)
+                    
+                    # Look for role
+                    elif part in ['PIC', 'CP', 'FO', 'FP', 'SA', 'FA', 'AC']:
+                        role = part
+                    
+                    # Look for passport number (starts with PC or digits)
+                    elif re.match(r'^PC\d+$', part) or (len(part) >= 6 and part.isdigit()):
+                        passport = part
+                    
+                    # Look for birth date (dd/mm/yy format)
+                    elif re.match(r'^\d{2}/\d{2}/\d{2}$', part):
+                        if not birth_date:
+                            birth_date = part
+                        else:
+                            expiry = part  # If we already have birth_date, this might be expiry
+                    
+                    # Look for gender
+                    elif part in ['M', 'F']:
+                        gender = part
+                    
+                    # Look for nationality
+                    elif part in ['RWA', 'RWANDAN', 'UGA', 'KEN', 'TZA', 'BDI', 'COD']:
+                        nationality = part
+                    
+                    j += 1
+                
+                if crew_id and len(crew_name) > 0:
+                    crew_entries.append({
+                        'crew_id': crew_id,
+                        'name': ' '.join(crew_name),
+                        'role': role,
+                        'passport': passport,
+                        'birth_date': birth_date,
+                        'gender': gender,
+                        'nationality': nationality,
+                        'expiry': expiry
+                    })
+                    logger.info(f"Parsed crew entry: {crew_id} - {' '.join(crew_name)} ({role})")
+                    
+            except Exception as e:
+                logger.warning(f"Error parsing crew line '{line}': {e}")
 
-    for ln in lines[hdr_idx+1:]:
-        if not ln.strip():
-            continue
-        row = {name: ln[start:end].strip() for name, start, end in col_specs}
-        if not row['crew_id'] or not row['flight_no']:
-            logger.warning(f"Skipping incomplete row: {row}")
-            continue
+    logger.info(f"Found {len(crew_entries)} crew entries in Job 97")
+
+    # Update crew details with Job 97 data
+    updated_count = 0
+    for entry in crew_entries:
         try:
-            birth = datetime.strptime(row['birth_date'], '%d/%m/%y').date()
-            expiry = datetime.strptime(row['passport_expiry'], '%d/%m/%y').date()
+            # Parse dates
+            birth = None
+            expiry = None
+            
+            if entry['birth_date']:
+                try:
+                    birth = datetime.strptime(entry['birth_date'], '%d/%m/%y').date()
+                except Exception as e:
+                    logger.warning(f"Could not parse birth date '{entry['birth_date']}': {e}")
+            
+            if entry['expiry']:
+                try:
+                    expiry = datetime.strptime(entry['expiry'], '%d/%m/%y').date()
+                except Exception as e:
+                    logger.warning(f"Could not parse expiry date '{entry['expiry']}': {e}")
+
+            # Update the existing crew detail record with Job 97 data
+            crew_detail = QatarCrewDetail.objects.filter(crew_id=entry['crew_id']).first()
+            if crew_detail:
+                updated = False
+                if birth and not crew_detail.birth_date:
+                    crew_detail.birth_date = birth
+                    updated = True
+                if entry['gender'] and not crew_detail.sex:
+                    crew_detail.sex = entry['gender']
+                    updated = True
+                if expiry and not crew_detail.passport_expiry:
+                    crew_detail.passport_expiry = expiry
+                    updated = True
+                
+                if updated:
+                    crew_detail.save()
+                    updated_count += 1
+                    logger.info(f"Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']})")
+            else:
+                logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97 - crew might not be in Job 1008")
+                
         except Exception as e:
-            logger.error(f"Date parse error for {row}: {e}")
-            continue
-        try:
-            flight = FlightData.objects.get(
-                flight_no=row['flight_no'],
-                dep_code_iata=row['dep_port'],
-                arr_code_iata=row['arr_port'],
-                tail_no=row['tail_no']
-            )
-        except FlightData.DoesNotExist:
-            logger.error(f"No FlightData match for {row}")
-            continue
-        try:
-            obj, created = QatarFlightCrewAssignment.objects.update_or_create(
-                crew_id=row['crew_id'],
-                flight=flight,
-                defaults={
-                    'tail_no': row['tail_no'],
-                    'dep_date_utc': flight.sd_date_utc,
-                    'arr_date_utc': flight.sa_date_utc,
-                    'std_utc': flight.std_utc,
-                    'sta_utc': flight.sta_utc,
-                    'birth_date': birth,
-                    'sex': row['sex'],
-                    'passport_expiry': expiry,
-                }
-            )
-            logger.info(f"{'Created' if created else 'Updated'} assignment for {row['crew_id']}")
-        except Exception as e:
-            logger.error(f"Upsert failed for {row['crew_id']}: {e}")
+            logger.error(f"Failed to update crew detail for {entry['crew_id']}: {e}")
+
+    logger.info(f"Job 97 processing complete: Updated {updated_count} crew records with birth dates, gender, and passport expiry")
 
 
 def process_job1008_file(attachment):
