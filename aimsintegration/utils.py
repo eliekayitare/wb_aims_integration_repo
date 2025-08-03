@@ -2739,7 +2739,7 @@ def build_qatar_apis_edifact(direction, date):
     msg_count = 0
     
     # Get crew assignments for the specified direction and date
-    # Use correct model name: QatarFlightCrewAssignment
+    # Use correct model name: QatarFlightDetails
     # Map direction to proper airport codes (both IATA and ICAO)
     if direction == 'O':  # Outbound (KGL to DOH)
         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
@@ -2808,13 +2808,23 @@ def build_qatar_apis_edifact(direction, date):
         # Transport information
         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
         
-        # Departure location and time (use IATA codes for EDIFACT)
-        dep_iata = 'DOH' if 'OTHH' in str(asg.flight.dep_code_icao) else (asg.flight.dep_code_iata or 'DOH')
+        # Departure location and time (convert to IATA codes for EDIFACT)
+        if 'OTHH' in str(asg.flight.dep_code_icao) or 'OTHH' in str(asg.flight.dep_code_iata):
+            dep_iata = 'DOH'
+        elif 'HRYR' in str(asg.flight.dep_code_icao) or 'HRYR' in str(asg.flight.dep_code_iata):
+            dep_iata = 'KGL'
+        else:
+            dep_iata = asg.flight.dep_code_iata or 'DOH'
         segments.append(f"LOC+125+{dep_iata}'")
         segments.append(f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'")
         
-        # Arrival location and time (use IATA codes for EDIFACT)
-        arr_iata = 'KGL' if 'HRYR' in str(asg.flight.arr_code_icao) else (asg.flight.arr_code_iata or 'KGL')
+        # Arrival location and time (convert to IATA codes for EDIFACT)
+        if 'OTHH' in str(asg.flight.arr_code_icao) or 'OTHH' in str(asg.flight.arr_code_iata):
+            arr_iata = 'DOH'
+        elif 'HRYR' in str(asg.flight.arr_code_icao) or 'HRYR' in str(asg.flight.arr_code_iata):
+            arr_iata = 'KGL'
+        else:
+            arr_iata = asg.flight.arr_code_iata or 'KGL'
         segments.append(f"LOC+87+{arr_iata}'")
         segments.append(f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'")
         
@@ -2867,7 +2877,7 @@ def build_qatar_apis_edifact(direction, date):
             
             # Document (Passport) information with issuing state
             passport_number = crew_detail.passport_number or ''
-            issuing_state = crew_detail.place_of_issue or nationality_code or 'RWA'  # Use place_of_issue or nationality as issuing state
+            issuing_state = crew_detail.place_of_issue or ''  # Use place_of_issue directly as issuing state
             segments.append(f"DOC+P:110:111+{passport_number}+{issuing_state}'")
             
             # Passport expiry date
