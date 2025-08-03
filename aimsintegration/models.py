@@ -449,11 +449,13 @@ class QatarCrewDetail(models.Model):
     place_of_issue = models.CharField(max_length=16, null=True, blank=True)  # From Job 1008
     birth_place_cc = models.CharField(max_length=3, null=True, blank=True)  # From Job 1008
     
+    
     # Fields that will come from Job 97:
     birth_date = models.DateField(null=True, blank=True)  # Will come from Job 97
     sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')], null=True, blank=True)  # Will come from Job 97
     passport_expiry = models.DateField(null=True, blank=True)  # Will come from Job 97
-
+    nationality_code = models.CharField(max_length=3, null=True, blank=True)  # Will come from Job 97
+    
     class Meta:
         db_table = 'qatar_crew_detail'
 
