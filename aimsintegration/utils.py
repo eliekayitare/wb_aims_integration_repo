@@ -2422,8 +2422,6 @@ def process_job1008_file(attachment):
 #     logger.info(f"Job 97 processing complete: Updated {updated_count} crew records")
 
 
-
-
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
@@ -2441,10 +2439,11 @@ def process_job97_file(attachment):
     flight_number = None
     flight_date = None
     tail_number = None
-    route_info = {'departure': None, 'arrival': None}
+    departure_airport = None
+    arrival_airport = None
     
     # Parse flight details from header
-    for i, line in enumerate(lines[:20]):  # Check first 20 lines for flight info
+    for i, line in enumerate(lines[:25]):  # Check first 25 lines for flight info
         line = line.strip()
         
         # Look for flight number (e.g., "WB301")
@@ -2452,7 +2451,7 @@ def process_job97_file(attachment):
             flight_number = line
             logger.info(f"Found flight number: {flight_number}")
         
-        # Look for date (e.g., "03/08/2025")
+        # Look for date (e.g., "03/08/2025" or "24/07/2025")
         elif re.match(r'^\d{2}/\d{2}/\d{4}$', line):
             try:
                 flight_date = datetime.strptime(line, '%d/%m/%Y').date()
@@ -2465,23 +2464,60 @@ def process_job97_file(attachment):
             tail_number = line
             logger.info(f"Found tail number: {tail_number}")
         
-        # Look for route information
-        elif 'KGL' in line and 'KIGALI' in line:
-            route_info['departure'] = 'KGL' if 'DOH' not in line else route_info['departure']
-            route_info['arrival'] = 'KGL' if route_info['departure'] != 'KGL' else route_info['arrival']
-        elif 'DOH' in line and 'DOHA' in line:
-            route_info['departure'] = 'DOH' if 'KGL' not in line else route_info['departure']
-            route_info['arrival'] = 'DOH' if route_info['departure'] != 'DOH' else route_info['arrival']
+        # Look for departure airport
+        elif 'KGL' in line and ('KIGALI' in line or 'INTERNATIONAL' in line):
+            if not departure_airport:
+                departure_airport = 'KGL'
+                logger.info(f"Found departure airport: KGL (from line: {line})")
+        elif 'DOH' in line and ('DOHA' in line or 'INTL' in line):
+            if not departure_airport:
+                departure_airport = 'DOH'
+                logger.info(f"Found departure airport: DOH (from line: {line})")
+        
+        # Look for arrival airport in FLIGHT ROUTING section
+        elif line == 'FLIGHT ROUTING':
+            # The next few lines should contain route info
+            for j in range(i+1, min(i+10, len(lines))):
+                next_line = lines[j].strip()
+                if 'DOH' in next_line and ('DOHA' in next_line or 'INTL' in next_line):
+                    if departure_airport != 'DOH':
+                        arrival_airport = 'DOH'
+                        logger.info(f"Found arrival airport: DOH (from routing section)")
+                elif 'KGL' in next_line and ('KIGALI' in next_line or 'INTERNATIONAL' in next_line):
+                    if departure_airport != 'KGL':
+                        arrival_airport = 'KGL'
+                        logger.info(f"Found arrival airport: KGL (from routing section)")
 
-    # Determine route from email or filename context if not found in RTF
-    if not route_info['departure'] or not route_info['arrival']:
-        # This would come from the email subject or attachment name
-        # For now, we'll try to determine from common patterns
-        route_info = {'departure': 'DOH', 'arrival': 'KGL'}  # Default for inbound
-        logger.info("Using default route: DOH -> KGL")
+    # If we didn't find both airports, check the "Departure from" and "Arrival at" section
+    if not departure_airport or not arrival_airport:
+        for i, line in enumerate(lines):
+            if line.strip() == 'Departure from':
+                if i+1 < len(lines):
+                    next_line = lines[i+1].strip()
+                    if 'KGL' in next_line:
+                        departure_airport = 'KGL'
+                        logger.info(f"Found departure from section: KGL")
+                    elif 'DOH' in next_line:
+                        departure_airport = 'DOH'
+                        logger.info(f"Found departure from section: DOH")
+            elif line.strip() == 'Arrival at':
+                if i+1 < len(lines):
+                    next_line = lines[i+1].strip()
+                    if 'KGL' in next_line:
+                        arrival_airport = 'KGL'
+                        logger.info(f"Found arrival at section: KGL")
+                    elif 'DOH' in next_line:
+                        arrival_airport = 'DOH'
+                        logger.info(f"Found arrival at section: DOH")
+
+    # Final fallback - if still no route found, use default
+    if not departure_airport or not arrival_airport:
+        departure_airport = 'DOH'
+        arrival_airport = 'KGL'
+        logger.warning("Could not determine route from RTF, using default: DOH -> KGL")
 
     logger.info(f"Flight info - Number: {flight_number}, Date: {flight_date}, Tail: {tail_number}")
-    logger.info(f"Route: {route_info['departure']} -> {route_info['arrival']}")
+    logger.info(f"Route: {departure_airport} -> {arrival_airport}")
 
     crew_entries = []
     
@@ -2629,14 +2665,25 @@ def process_job97_file(attachment):
     flight_record = None
     if flight_number and flight_date:
         try:
+            # Use correct field names from FlightData model
             flight_record = FlightData.objects.filter(
                 flight_no=flight_number,
-                dep_date_utc=flight_date
+                sd_date_utc=flight_date,  # Use sd_date_utc (scheduled departure date)
+                dep_code_iata=departure_airport,
+                arr_code_iata=arrival_airport
             ).first()
             
             if not flight_record:
-                logger.warning(f"Flight record not found for {flight_number} on {flight_date}")
-                # You might want to create a flight record here or handle this case differently
+                # Try without route filter in case airports don't match exactly
+                flight_record = FlightData.objects.filter(
+                    flight_no=flight_number,
+                    sd_date_utc=flight_date
+                ).first()
+                
+                if flight_record:
+                    logger.info(f"Found flight record without route match: {flight_record}")
+                else:
+                    logger.warning(f"Flight record not found for {flight_number} on {flight_date}")
             else:
                 logger.info(f"Found flight record: {flight_record}")
         except Exception as e:
@@ -2697,7 +2744,8 @@ def process_job97_file(attachment):
                             'tail_no': tail_number,
                             'dep_date_utc': flight_date,
                             'arr_date_utc': flight_date,  # Same day for this route
-                            # Add STD/STA times if you can extract them from the RTF
+                            'std_utc': flight_record.std_utc,  # Get from FlightData
+                            'sta_utc': flight_record.sta_utc,  # Get from FlightData
                         }
                     )
                     if created:
@@ -2712,7 +2760,6 @@ def process_job97_file(attachment):
             logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
 
     logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, created {assignment_count} flight assignments")
-
 
 
 def build_qatar_apis_edifact(direction, date):
