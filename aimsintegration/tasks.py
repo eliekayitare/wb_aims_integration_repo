@@ -1778,7 +1778,9 @@ def delete_flights_no_actual_timings(self, dry_run=False):
 #=================================================================================================================
 
 from .utils import *
-from .models import QatarFlightCrewAssignment, QatarCrewDetail
+from .models import *
+from django.db.models import Q
+import logging
 
 @shared_task
 def fetch_job97():
