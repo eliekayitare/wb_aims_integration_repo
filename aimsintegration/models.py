@@ -461,7 +461,7 @@ class QatarCrewDetail(models.Model):
         return f"{self.crew_id} {self.surname}, {self.firstname}"
 
 
-class QatarFlightCrewAssignment(models.Model):
+class QatarFlightDetails(models.Model):
     crew_id = models.CharField(max_length=11)
     flight = models.ForeignKey(FlightData, on_delete=models.CASCADE, related_name='assignments')
     tail_no = models.CharField(max_length=10, null=True, blank=True)
@@ -469,12 +469,10 @@ class QatarFlightCrewAssignment(models.Model):
     arr_date_utc = models.DateField(null=True, blank=True)
     std_utc = models.TimeField(null=True, blank=True)
     sta_utc = models.TimeField(null=True, blank=True)
-    birth_date = models.DateField(null=True, blank=True)  # From Job 97
-    sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')], null=True, blank=True)  # From Job 97
-    passport_expiry = models.DateField(null=True, blank=True)  # From Job 97
+    # Removed duplicate fields: birth_date, sex, passport_expiry (now only in QatarCrewDetail)
 
     class Meta:
-        db_table = 'qatar_flight_crew_assignment'
+        db_table = 'qatar_flight_details'
         unique_together = ('crew_id', 'flight')
 
     def __str__(self):
