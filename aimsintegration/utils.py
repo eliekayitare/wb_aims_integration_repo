@@ -2426,6 +2426,7 @@ def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
     Also create QatarFlightCrewAssignment records for the flight.
+    Uses Job 97 data for crew/tail/date and FlightData for operational details.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     logger.debug(f"RTF raw size: {len(raw)} characters")
@@ -2439,8 +2440,6 @@ def process_job97_file(attachment):
     flight_number = None
     flight_date = None
     tail_number = None
-    departure_airport = None
-    arrival_airport = None
     
     # Parse flight details from header
     for i, line in enumerate(lines[:25]):  # Check first 25 lines for flight info
@@ -2463,61 +2462,8 @@ def process_job97_file(attachment):
         elif re.match(r'^\d[A-Z]{2}-[A-Z]{2}$', line):
             tail_number = line
             logger.info(f"Found tail number: {tail_number}")
-        
-        # Look for departure airport
-        elif 'KGL' in line and ('KIGALI' in line or 'INTERNATIONAL' in line):
-            if not departure_airport:
-                departure_airport = 'KGL'
-                logger.info(f"Found departure airport: KGL (from line: {line})")
-        elif 'DOH' in line and ('DOHA' in line or 'INTL' in line):
-            if not departure_airport:
-                departure_airport = 'DOH'
-                logger.info(f"Found departure airport: DOH (from line: {line})")
-        
-        # Look for arrival airport in FLIGHT ROUTING section
-        elif line == 'FLIGHT ROUTING':
-            # The next few lines should contain route info
-            for j in range(i+1, min(i+10, len(lines))):
-                next_line = lines[j].strip()
-                if 'DOH' in next_line and ('DOHA' in next_line or 'INTL' in next_line):
-                    if departure_airport != 'DOH':
-                        arrival_airport = 'DOH'
-                        logger.info(f"Found arrival airport: DOH (from routing section)")
-                elif 'KGL' in next_line and ('KIGALI' in next_line or 'INTERNATIONAL' in next_line):
-                    if departure_airport != 'KGL':
-                        arrival_airport = 'KGL'
-                        logger.info(f"Found arrival airport: KGL (from routing section)")
 
-    # If we didn't find both airports, check the "Departure from" and "Arrival at" section
-    if not departure_airport or not arrival_airport:
-        for i, line in enumerate(lines):
-            if line.strip() == 'Departure from':
-                if i+1 < len(lines):
-                    next_line = lines[i+1].strip()
-                    if 'KGL' in next_line:
-                        departure_airport = 'KGL'
-                        logger.info(f"Found departure from section: KGL")
-                    elif 'DOH' in next_line:
-                        departure_airport = 'DOH'
-                        logger.info(f"Found departure from section: DOH")
-            elif line.strip() == 'Arrival at':
-                if i+1 < len(lines):
-                    next_line = lines[i+1].strip()
-                    if 'KGL' in next_line:
-                        arrival_airport = 'KGL'
-                        logger.info(f"Found arrival at section: KGL")
-                    elif 'DOH' in next_line:
-                        arrival_airport = 'DOH'
-                        logger.info(f"Found arrival at section: DOH")
-
-    # Final fallback - if still no route found, use default
-    if not departure_airport or not arrival_airport:
-        departure_airport = 'DOH'
-        arrival_airport = 'KGL'
-        logger.warning("Could not determine route from RTF, using default: DOH -> KGL")
-
-    logger.info(f"Flight info - Number: {flight_number}, Date: {flight_date}, Tail: {tail_number}")
-    logger.info(f"Route: {departure_airport} -> {arrival_airport}")
+    logger.info(f"Job 97 flight info - Number: {flight_number}, Date: {flight_date}, Tail: {tail_number}")
 
     crew_entries = []
     
@@ -2661,54 +2607,34 @@ def process_job97_file(attachment):
 
     logger.info(f"Found {len(crew_entries)} crew entries in Job 97")
 
-    # Find or create the flight record
+    # Find the flight record using Job 97 data (tail, flight number, date)
     flight_record = None
-    if flight_number and flight_date:
+    if flight_number and flight_date and tail_number:
         try:
             # Extract numeric flight number (remove WB prefix if present)
             numeric_flight_no = flight_number[2:] if flight_number.startswith('WB') else flight_number
-            logger.info(f"Searching for flight with numeric number: {numeric_flight_no}")
+            logger.info(f"Searching for flight using Job 97 data - Flight: {numeric_flight_no}, Date: {flight_date}, Tail: {tail_number}")
             
-            # Try with detected route first
+            # Primary search: Match flight number, date, and tail number
             flight_record = FlightData.objects.filter(
                 flight_no=numeric_flight_no,
                 sd_date_utc=flight_date,
-                dep_code_iata=departure_airport,
-                arr_code_iata=arrival_airport
+                tail_no=tail_number
             ).first()
             
             if not flight_record:
-                # Try with reversed route (in case RTF shows opposite direction)
-                flight_record = FlightData.objects.filter(
-                    flight_no=numeric_flight_no,
-                    sd_date_utc=flight_date,
-                    dep_code_iata=arrival_airport,
-                    arr_code_iata=departure_airport
-                ).first()
-                
-                if flight_record:
-                    logger.info(f"Found flight record with reversed route {arrival_airport}->{departure_airport}: {flight_record}")
-                    # Update our route variables to match the actual flight
-                    departure_airport, arrival_airport = arrival_airport, departure_airport
-                    logger.info(f"Updated route to match FlightData: {departure_airport} -> {arrival_airport}")
-            
-            if not flight_record:
-                # Try without route filter (just flight number and date)
+                # Fallback: Try without tail number (in case tail numbers don't match exactly)
                 flight_record = FlightData.objects.filter(
                     flight_no=numeric_flight_no,
                     sd_date_utc=flight_date
                 ).first()
                 
                 if flight_record:
-                    logger.info(f"Found flight record without route match: {flight_record}")
-                    # Update route variables to match the found flight
-                    departure_airport = flight_record.dep_code_iata
-                    arrival_airport = flight_record.arr_code_iata
-                    logger.info(f"Updated route from FlightData: {departure_airport} -> {arrival_airport}")
+                    logger.info(f"Found flight record without tail match: {flight_record}")
                 else:
                     logger.warning(f"Flight record not found for {numeric_flight_no} on {flight_date}")
             else:
-                logger.info(f"Found flight record: {flight_record}")
+                logger.info(f"Found exact flight record match: {flight_record}")
                 
         except Exception as e:
             logger.error(f"Error finding flight record: {e}")
@@ -2761,29 +2687,36 @@ def process_job97_file(attachment):
             # Create flight crew assignment if we have a flight record
             if flight_record:
                 try:
+                    # Use Job 97 data for crew assignment and FlightData for operational details
                     assignment, created = QatarFlightDetails.objects.update_or_create(
                         crew_id=entry['crew_id'],
                         flight=flight_record,
                         defaults={
-                            'tail_no': tail_number,
-                            'dep_date_utc': flight_date,
-                            'arr_date_utc': flight_date,  # Same day for this route
-                            'std_utc': flight_record.std_utc,  # Get from FlightData
-                            'sta_utc': flight_record.sta_utc,  # Get from FlightData
+                            # From Job 97 (RTF)
+                            'tail_no': tail_number,  # From Job 97
+                            'dep_date_utc': flight_date,  # From Job 97
+                            'arr_date_utc': flight_date,  # Assume same day
+                            # From FlightData (operational details)
+                            'std_utc': flight_record.std_utc,  # From FlightData
+                            'sta_utc': flight_record.sta_utc,  # From FlightData
                         }
                     )
                     if created:
                         assignment_count += 1
-                        logger.info(f"Created flight assignment for {entry['crew_id']} on {flight_record}")
+                        logger.info(f"Created flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
                     else:
-                        logger.info(f"Updated flight assignment for {entry['crew_id']} on {flight_record}")
+                        assignment_count += 1  # Count updates too
+                        logger.info(f"Updated flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
                 except Exception as e:
                     logger.error(f"Failed to create flight assignment for {entry['crew_id']}: {e}")
                 
         except Exception as e:
             logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
 
-    logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, created {assignment_count} flight assignments")
+    logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, processed {assignment_count} flight assignments")
+    
+    if flight_record:
+        logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
 
 
 def build_qatar_apis_edifact(direction, date):
