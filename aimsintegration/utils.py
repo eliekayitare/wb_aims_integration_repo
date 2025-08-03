@@ -2221,7 +2221,7 @@ def process_job1008_file(attachment):
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
-    Updated to handle the actual RTF structure with better debugging.
+    Clean version without errors.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     logger.debug(f"RTF raw size: {len(raw)} characters")
@@ -2229,27 +2229,29 @@ def process_job97_file(attachment):
     lines = [ln for ln in text.splitlines() if ln.strip()]
     logger.debug(f"Extracted {len(lines)} non-empty lines")
 
-    # Debug: Log first 20 lines to understand structure
-    logger.info("First 20 lines of RTF for debugging:")
-    for i, line in enumerate(lines[:20]):
+    # Debug: Log more lines to find where crew data starts
+    logger.info(f"Total lines in RTF: {len(lines)}")
+    logger.info("First 30 lines of RTF for debugging:")
+    for i, line in enumerate(lines[:30]):
         logger.info(f"Line {i}: {line}")
 
-    # Look for crew data lines - they start with crew IDs (3-4 digits) followed by names
+    # Look for crew data lines
     crew_entries = []
     
+    # Search through ALL lines
     for i, line in enumerate(lines):
         line = line.strip()
         if not line or len(line) < 10:
             continue
             
-        # Look for crew data pattern: starts with 3-4 digits followed by uppercase letters (names)
-        if re.match(r'^\d{3,4}\s+[A-Z]', line):
+        # Look for crew data patterns
+        if re.match(r'^\d{3,4}\s+[A-Z]', line) or re.match(r'(?:KGL|DOH)\s+\d{3,4}\s+[A-Z]', line):
             logger.info(f"Found potential crew line {i}: {line}")
             
             try:
                 # Parse the crew line
                 parts = line.split()
-                if len(parts) < 6:
+                if len(parts) < 4:
                     continue
                     
                 # Extract crew information
@@ -2266,19 +2268,29 @@ def process_job97_file(attachment):
                 while j < len(parts):
                     part = parts[j]
                     
-                    # Look for crew ID (numeric at start)
-                    if j == 0 and part.isdigit():
+                    # Skip airport codes at the beginning
+                    if part in ['KGL', 'DOH']:
+                        j += 1
+                        continue
+                    
+                    # Look for crew ID (numeric)
+                    if part.isdigit() and not crew_id:
                         crew_id = part
                     
                     # Look for names (until we hit a role)
-                    elif not role and part not in ['PIC', 'CP', 'FO', 'FP', 'SA', 'FA', 'AC']:
+                    elif (not role and 
+                          part not in ['PIC', 'CP', 'FO', 'FP', 'SA', 'FA', 'AC'] and 
+                          not part.isdigit() and 
+                          not re.match(r'^PC\d+$', part) and
+                          part not in ['M', 'F'] and
+                          not re.match(r'^\d{2}/\d{2}/\d{2}$', part)):
                         crew_name.append(part)
                     
                     # Look for role
                     elif part in ['PIC', 'CP', 'FO', 'FP', 'SA', 'FA', 'AC']:
                         role = part
                     
-                    # Look for passport number (starts with PC or digits)
+                    # Look for passport number (starts with PC or 6+ digits)
                     elif re.match(r'^PC\d+$', part) or (len(part) >= 6 and part.isdigit()):
                         passport = part
                     
@@ -2287,7 +2299,7 @@ def process_job97_file(attachment):
                         if not birth_date:
                             birth_date = part
                         else:
-                            expiry = part  # If we already have birth_date, this might be expiry
+                            expiry = part
                     
                     # Look for gender
                     elif part in ['M', 'F']:
@@ -2356,12 +2368,12 @@ def process_job97_file(attachment):
                     updated_count += 1
                     logger.info(f"Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']})")
             else:
-                logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97 - crew might not be in Job 1008")
+                logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97")
                 
         except Exception as e:
             logger.error(f"Failed to update crew detail for {entry['crew_id']}: {e}")
 
-    logger.info(f"Job 97 processing complete: Updated {updated_count} crew records with birth dates, gender, and passport expiry")
+    logger.info(f"Job 97 processing complete: Updated {updated_count} crew records")
 
 
 def build_qatar_apis_edifact(direction, date):
