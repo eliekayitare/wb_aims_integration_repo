@@ -2722,7 +2722,6 @@ def process_job97_file(attachment):
         logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
 
 
-
 def build_qatar_apis_edifact(direction, date):
     """
     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
@@ -2739,12 +2738,41 @@ def build_qatar_apis_edifact(direction, date):
     msg_count = 0
     
     # Get crew assignments for the specified direction and date
-    # Use correct model name: QatarFlightDetails
+    # Use correct model name: QatarFlightCrewAssignment
+    # Map direction to proper airport codes (both IATA and ICAO)
+    if direction == 'O':  # Outbound (KGL to DOH)
+        dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
+        arr_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
+    else:  # Inbound (DOH to KGL)
+        dep_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
+        arr_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
+    
     assignments = QatarFlightDetails.objects.filter(
         dep_date_utc=date,
-        flight__dep_code_iata=('KGL' if direction == 'O' else 'DOH'),
-        flight__arr_code_iata=('DOH' if direction == 'O' else 'KGL')
+        flight__dep_code_iata__in=dep_codes,
+        flight__arr_code_iata__in=arr_codes
     ).select_related('flight')
+    
+    # If no assignments found with IATA codes, try with ICAO codes
+    if not assignments.exists():
+        assignments = QatarFlightDetails.objects.filter(
+            dep_date_utc=date,
+            flight__dep_code_icao__in=dep_codes,
+            flight__arr_code_icao__in=arr_codes
+        ).select_related('flight')
+    
+    # Final fallback - just use the date and let's see what flights we have
+    if not assignments.exists():
+        logger.warning(f"No crew assignments found with airport codes. Checking all flights on {date}")
+        all_assignments = QatarFlightDetails.objects.filter(
+            dep_date_utc=date
+        ).select_related('flight')
+        
+        for asg in all_assignments:
+            logger.info(f"Available flight: {asg.flight.flight_no} - {asg.flight.dep_code_iata}/{asg.flight.dep_code_icao} -> {asg.flight.arr_code_iata}/{asg.flight.arr_code_icao}")
+        
+        # Use all assignments if direction matching fails
+        assignments = all_assignments
     
     if not assignments.exists():
         logger.warning(f"No crew assignments found for direction {direction} on {date}")
@@ -2779,12 +2807,14 @@ def build_qatar_apis_edifact(direction, date):
         # Transport information
         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
         
-        # Departure location and time
-        segments.append(f"LOC+125+{asg.flight.dep_code_iata}'")
+        # Departure location and time (use IATA codes for EDIFACT)
+        dep_iata = asg.flight.dep_code_iata or 'DOH'  # Fallback to DOH if missing
+        segments.append(f"LOC+125+{dep_iata}'")
         segments.append(f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'")
         
-        # Arrival location and time
-        segments.append(f"LOC+87+{asg.flight.arr_code_iata}'")
+        # Arrival location and time (use IATA codes for EDIFACT)
+        arr_iata = asg.flight.arr_code_iata or 'KGL'  # Fallback to KGL if missing
+        segments.append(f"LOC+87+{arr_iata}'")
         segments.append(f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'")
         
         # Get all crew members for this specific flight
@@ -2822,9 +2852,9 @@ def build_qatar_apis_edifact(direction, date):
                 segments.append("DTM+329:'")  # Empty if no birth date
             
             # Location information (departure and arrival ports for crew positioning)
-            segments.append(f"LOC+22+{asg.flight.arr_code_iata}'")  # Destination
-            segments.append(f"LOC+178+{asg.flight.dep_code_iata}'")  # Origin
-            segments.append(f"LOC+179+{asg.flight.arr_code_iata}'")  # Final destination
+            segments.append(f"LOC+22+{arr_iata}'")  # Destination
+            segments.append(f"LOC+178+{dep_iata}'")  # Origin
+            segments.append(f"LOC+179+{arr_iata}'")  # Final destination
             
             # Nationality - use nationality_code from Job 97 (3-letter code)
             nationality_code = crew_detail.nationality_code or 'RWA'  # Default to RWA if not specified
