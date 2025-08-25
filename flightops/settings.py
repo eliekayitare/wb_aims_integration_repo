@@ -326,17 +326,17 @@ CELERY_BEAT_SCHEDULE = {
     },
 
     # Feed Tableau - Runs every 5 minutes
-    'feed-tableau-every-5-minutes': {
-        'task': 'aimsintegration.tasks.fetch_tableau',
-        'schedule': crontab(minute='*/5'),  # Every 5 minutes
-    },
+    # 'feed-tableau-every-5-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_tableau',
+    #     'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    # },
 
     # Delete old emails - Runs every 1 hour
 
-    'delete-old-emails-every-hour': {
-        'task': 'aimsintegration.tasks.delete_old_emails',
-        'schedule': crontab(minute='*/2'),  # Every hour
-    },
+    # 'delete-old-emails-every-hour': {
+    #     'task': 'aimsintegration.tasks.delete_old_emails',
+    #     'schedule': crontab(minute='*/2'),  # Every hour
+    # },
 
     # # Only keep the campaign checker in CELERY_BEAT (the processing will self-schedule)
     # 'check-dreammiles-campaign-hourly': {
