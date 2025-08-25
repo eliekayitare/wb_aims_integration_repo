@@ -27,4 +27,4 @@ from .models import TableauData
 class TableauDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = TableauData
-        fields = '__all__'
+        exclude = ['id', 'created_at', 'updated_at']  # Exclude these fields
