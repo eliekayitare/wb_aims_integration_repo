@@ -1838,7 +1838,13 @@ import logging
 #         raise
 
 
+
+
 from datetime import datetime, timedelta, timezone
+from celery import shared_task
+import logging
+
+logger = logging.getLogger(__name__)
 
 @shared_task
 def fetch_job97():
@@ -1848,55 +1854,70 @@ def fetch_job97():
     Only considers emails received in the past 7 days.
     """
     account = get_exchange_account()
-    logger.info("Fetching the most recent Job 97 email...")
+    logger.info("Fetching the most recent Job 97 email (last 7 days)...")
 
-    # Aware UTC datetimes (avoid naive!)
-    now_utc = datetime.now(timezone.utc)
-    cutoff_date = now_utc - timedelta(days=7)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
-    # Use aware datetime in the filter
-    recent_emails = (
+    # Query inbound and outbound separately (like your 1008 style),
+    # then pick whichever is newest.
+    inbound_qs = (
         account.inbox
-        .filter(datetime_received__gte=cutoff_date)
+        .filter(subject__contains='DOH KGL', datetime_received__gte=cutoff)
+        .only('subject', 'datetime_received')   # avoids loading last_modified_time
+        .order_by('-datetime_received')
+    )
+    outbound_qs = (
+        account.inbox
+        .filter(subject__contains='KGL DOH', datetime_received__gte=cutoff)
+        .only('subject', 'datetime_received')
         .order_by('-datetime_received')
     )
 
-    job97_emails = []
-    for email in recent_emails:
-        subj = (email.subject or "").upper()
-        if 'DOH KGL' in subj or 'KGL DOH' in subj:
-            job97_emails.append(email)
-            break
-
     try:
-        if not job97_emails:
+        candidates = []
+        try:
+            candidates.append(inbound_qs[0])
+        except IndexError:
+            pass
+        try:
+            candidates.append(outbound_qs[0])
+        except IndexError:
+            pass
+
+        if not candidates:
             logger.info("No Job 97 email found in the last 7 days.")
             return
 
-        email = job97_emails[0]
-        subject = (email.subject or "").upper()
+        # Pick the most recent between inbound/outbound
+        email = max(candidates, key=lambda m: m.datetime_received)
         logger.info(f"Processing Job 97 email: {email.subject}")
 
+        # Ingest and process attachments
         process_email_attachment(email, process_job97_file)
 
-        if 'DOH KGL' in subject:
-            direction = 'I'
+        # Determine direction from subject
+        subj = (email.subject or "").upper()
+        if 'DOH KGL' in subj:
+            direction = 'I'  # Inbound (DOH -> KGL)
             logger.info("Detected inbound flight direction (DOH -> KGL)")
-        elif 'KGL DOH' in subject:
-            direction = 'O'
+        elif 'KGL DOH' in subj:
+            direction = 'O'  # Outbound (KGL -> DOH)
             logger.info("Detected outbound flight direction (KGL -> DOH)")
         else:
-            logger.warning("Could not determine direction; defaulting to inbound")
             direction = 'I'
+            logger.warning("Could not determine direction from subject; defaulting to inbound")
 
-        run_date = now_utc.date()  # date is fine
+        # Use aware UTC date for naming
+        run_date = datetime.now(timezone.utc).date()
 
+        # Generate EDIFACT
         edi_path = build_qatar_apis_edifact(direction, run_date)
         logger.info(f"Generated EDIFACT file at: {edi_path}")
 
     except Exception as e:
         logger.error(f"Error in fetch_job97: {e}")
         raise
+
 
 
 
