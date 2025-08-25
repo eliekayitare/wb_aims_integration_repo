@@ -50,4 +50,8 @@ urlpatterns = [
     # Quality Control Export
     path('generate_simple_csv/', views.generate_simple_csv_export, name='generate_simple_csv'),
 
+    #HUBSPOT
+    path('hubspot-data/', views.TableauDataListView.as_view(), name='hubspot-data'),
+
+
 ]

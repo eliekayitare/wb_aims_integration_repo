@@ -3725,3 +3725,29 @@ def generate_simple_csv_export(request):
     
     return response
 #End of Quality control
+
+
+
+
+
+#HUBSPOT
+
+from rest_framework import generics, status
+from rest_framework.response import Response
+from django.utils import timezone
+from .models import TableauData
+from .serializers import TableauDataSerializer
+from .pagination import FlexiblePageSizePagination
+
+class TableauDataListView(generics.ListAPIView):
+    serializer_class = TableauDataSerializer
+    pagination_class = FlexiblePageSizePagination
+    
+    def get_queryset(self):
+        """
+        Filter records AFTER today (future data only)
+        """
+        today = timezone.now().date()
+        return TableauData.objects.filter(
+            operation_day__gt=today
+        ).order_by('operation_day', 'std')

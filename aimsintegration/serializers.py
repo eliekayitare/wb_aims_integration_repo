@@ -16,3 +16,15 @@ class FlightDataSerializer(serializers.ModelSerializer):
             'std_utc', 
             'sta_utc'  # Include sta_utc field
         ]
+
+
+
+
+# serializers.py
+from rest_framework import serializers
+from .models import TableauData
+
+class TableauDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TableauData
+        fields = '__all__'
