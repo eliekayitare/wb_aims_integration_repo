@@ -3749,5 +3749,5 @@ class TableauDataListView(generics.ListAPIView):
         """
         today = timezone.now().date()
         return TableauData.objects.filter(
-            operation_day__lte=today
+            operation_day__gt=today
         ).order_by('operation_day', 'std')
