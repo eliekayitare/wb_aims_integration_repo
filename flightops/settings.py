@@ -310,12 +310,12 @@ CELERY_BEAT_SCHEDULE = {
         'options': {'run_immediately': False}
     },
 
-    # #Fetch Crew Data - Runs every 15 minutes
-    # 'fetch-crew-data-every-15-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-    #     'schedule': crontab(minute='*/16'),  # Every 16 minutes
-    #     'options': {'run_immediately': False}
-    # },
+    #Fetch Crew Data - Runs every 15 minutes
+    'fetch-crew-data-every-15-minutes': {
+        'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
+        'schedule': crontab(minute='*/16'),  # Every 16 minutes
+        'options': {'run_immediately': False}
+    },
 
     # UPload FDM Data - runs every 1 hour
     'upload-fdm-data-every-hour': {
@@ -326,17 +326,17 @@ CELERY_BEAT_SCHEDULE = {
     },
 
     # Feed Tableau - Runs every 5 minutes
-    # 'feed-tableau-every-5-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_tableau',
-    #     'schedule': crontab(minute='*/5'),  # Every 5 minutes
-    # },
+    'feed-tableau-every-5-minutes': {
+        'task': 'aimsintegration.tasks.fetch_tableau',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    },
 
     # Delete old emails - Runs every 1 hour
 
-    # 'delete-old-emails-every-hour': {
-    #     'task': 'aimsintegration.tasks.delete_old_emails',
-    #     'schedule': crontab(minute='*/2'),  # Every hour
-    # },
+    'delete-old-emails-every-hour': {
+        'task': 'aimsintegration.tasks.delete_old_emails',
+        'schedule': crontab(minute='*/2'),  # Every hour
+    },
 
     # # Only keep the campaign checker in CELERY_BEAT (the processing will self-schedule)
     # 'check-dreammiles-campaign-hourly': {
@@ -360,12 +360,12 @@ CELERY_BEAT_SCHEDULE = {
      # Job 97: fetch flight-crew assignments every 10 minutes
     'fetch-job97-every-10-minutes': {
         'task': 'aimsintegration.tasks.fetch_job97',
-        'schedule': crontab(minute='*/1'),
+        'schedule': crontab(minute='*/3'),
     },
     # Job 1008: fetch static crew details every 15 minutes
     'fetch-job1008-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_job1008',
-        'schedule': crontab(minute='*/10'),
+        'schedule': crontab(minute='*/4'),
     },
 
 }
