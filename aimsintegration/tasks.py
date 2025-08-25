@@ -1915,6 +1915,9 @@ def fetch_job97():
         logger.error(f"🔍 Error details: {str(e)}")
         raise
 
+
+    
+
 @shared_task
 def fetch_job1008():
     """
