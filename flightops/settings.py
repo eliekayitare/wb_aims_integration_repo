@@ -365,7 +365,7 @@ CELERY_BEAT_SCHEDULE = {
     # Job 1008: fetch static crew details every 15 minutes
     'fetch-job1008-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_job1008',
-        'schedule': crontab(minute='*/4'),
+        'schedule': crontab(minute='*/10'),
     },
 
 }
