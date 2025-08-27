@@ -1782,141 +1782,61 @@ from .models import *
 from django.db.models import Q
 import logging
 
-# @shared_task
-# def fetch_job97():
-#     """
-#     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
-#     then immediately build the Qatar APIS EDIFACT file.
-#     Updated to handle both flight directions.
-#     """
-#     account = get_exchange_account()
-#     logger.info("Fetching the most recent Job 97 email...")
-
-#     # Get all emails and filter manually since exchangelib doesn't support OR queries easily
-#     all_emails = account.inbox.filter().order_by('-datetime_received')
-    
-#     # Filter for both inbound/outbound by checking for both patterns
-#     job97_emails = []
-#     for email in all_emails:
-#         if email.subject and ('DOH KGL' in email.subject.upper() or 'KGL DOH' in email.subject.upper()):
-#             job97_emails.append(email)
-#             break  # Get the most recent one
-
-#     try:
-#         if not job97_emails:
-#             logger.info("No new Job 97 email found.")
-#             return
-            
-#         email = job97_emails[0]
-#         subject = email.subject.upper()
-#         logger.info(f"Processing Job 97 email: {email.subject}")
-
-#         # Ingest and process attachments
-#         process_email_attachment(email, process_job97_file)
-
-#         # Determine direction based on subject line
-#         if 'DOH KGL' in subject:
-#             direction = 'I'  # Inbound (DOH to KGL)
-#             logger.info("Detected inbound flight direction (DOH -> KGL)")
-#         elif 'KGL DOH' in subject:
-#             direction = 'O'  # Outbound (KGL to DOH)
-#             logger.info("Detected outbound flight direction (KGL -> DOH)")
-#         else:
-#             # Fallback: try to detect from email content or use default
-#             logger.warning("Could not determine flight direction from subject, defaulting to inbound")
-#             direction = 'I'
-        
-#         # Use UTC today for file naming
-#         run_date = datetime.utcnow().date()
-
-#         # Generate EDIFACT file and save locally
-#         edi_path = build_qatar_apis_edifact(direction, run_date)
-#         logger.info(f"Generated EDIFACT file at: {edi_path}")
-
-#     except Exception as e:
-#         logger.error(f"Error in fetch_job97: {e}")
-#         raise
-
-
-
-
-from datetime import datetime, timedelta, timezone
-from celery import shared_task
-import logging
-
-logger = logging.getLogger(__name__)
-
 @shared_task
 def fetch_job97():
     """
     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
     then immediately build the Qatar APIS EDIFACT file.
-    Only considers emails received in the past 7 days.
+    Updated to handle both flight directions.
     """
     account = get_exchange_account()
-    logger.info("Fetching the most recent Job 97 email (last 7 days)...")
+    logger.info("Fetching the most recent Job 97 email...")
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-    # Query inbound and outbound separately (like your 1008 style),
-    # then pick whichever is newest.
-    inbound_qs = (
-        account.inbox
-        .filter(subject__contains='DOH KGL', datetime_received__gte=cutoff)
-        .only('subject', 'datetime_received')   # avoids loading last_modified_time
-        .order_by('-datetime_received')
-    )
-    outbound_qs = (
-        account.inbox
-        .filter(subject__contains='KGL DOH', datetime_received__gte=cutoff)
-        .only('subject', 'datetime_received')
-        .order_by('-datetime_received')
-    )
+    # Get all emails and filter manually since exchangelib doesn't support OR queries easily
+    all_emails = account.inbox.filter().order_by('-datetime_received')
+    
+    # Filter for both inbound/outbound by checking for both patterns
+    job97_emails = []
+    for email in all_emails:
+        if email.subject and ('DOH KGL' in email.subject.upper() or 'KGL DOH' in email.subject.upper()):
+            job97_emails.append(email)
+            break  # Get the most recent one
 
     try:
-        candidates = []
-        try:
-            candidates.append(inbound_qs[0])
-        except IndexError:
-            pass
-        try:
-            candidates.append(outbound_qs[0])
-        except IndexError:
-            pass
-
-        if not candidates:
-            logger.info("No Job 97 email found in the last 7 days.")
+        if not job97_emails:
+            logger.info("No new Job 97 email found.")
             return
-
-        # Pick the most recent between inbound/outbound
-        email = max(candidates, key=lambda m: m.datetime_received)
+            
+        email = job97_emails[0]
+        subject = email.subject.upper()
         logger.info(f"Processing Job 97 email: {email.subject}")
 
         # Ingest and process attachments
         process_email_attachment(email, process_job97_file)
 
-        # Determine direction from subject
-        subj = (email.subject or "").upper()
-        if 'DOH KGL' in subj:
-            direction = 'I'  # Inbound (DOH -> KGL)
+        # Determine direction based on subject line
+        if 'DOH KGL' in subject:
+            direction = 'I'  # Inbound (DOH to KGL)
             logger.info("Detected inbound flight direction (DOH -> KGL)")
-        elif 'KGL DOH' in subj:
-            direction = 'O'  # Outbound (KGL -> DOH)
+        elif 'KGL DOH' in subject:
+            direction = 'O'  # Outbound (KGL to DOH)
             logger.info("Detected outbound flight direction (KGL -> DOH)")
         else:
+            # Fallback: try to detect from email content or use default
+            logger.warning("Could not determine flight direction from subject, defaulting to inbound")
             direction = 'I'
-            logger.warning("Could not determine direction from subject; defaulting to inbound")
+        
+        # Use UTC today for file naming
+        run_date = datetime.utcnow().date()
 
-        # Use aware UTC date for naming
-        run_date = datetime.now(timezone.utc).date()
-
-        # Generate EDIFACT
+        # Generate EDIFACT file and save locally
         edi_path = build_qatar_apis_edifact(direction, run_date)
         logger.info(f"Generated EDIFACT file at: {edi_path}")
 
     except Exception as e:
         logger.error(f"Error in fetch_job97: {e}")
         raise
+
 
 
 
