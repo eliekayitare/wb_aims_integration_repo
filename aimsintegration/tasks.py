@@ -1838,7 +1838,6 @@ import logging
 #         raise
 
 
-
 @shared_task
 def fetch_job97():
     """
@@ -1851,7 +1850,8 @@ def fetch_job97():
     
     # Only get emails from the last 7 days to avoid processing thousands of emails
     from datetime import timedelta
-    cutoff_date = datetime.utcnow() - timedelta(days=7)
+    from django.utils import timezone
+    cutoff_date = timezone.now() - timedelta(days=7)
     
     logger.info(f"Searching for Job 97 emails from {cutoff_date.strftime('%Y-%m-%d')} onwards...")
     
