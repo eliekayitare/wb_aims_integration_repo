@@ -2306,11 +2306,15 @@ def process_job97_file(attachment):
 #         return None
 
 
-
 def build_qatar_apis_edifact(direction, date):
     """
     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
     Updated to include all required crew fields and proper EDIFACT formatting.
+    Fixes applied based on Qatar Airways feedback:
+    - Use 'F' for complete crew lists in UNH segment
+    - Remove extra separators in NAD segment when no address info
+    - Remove issuing state from DOC segment  
+    - Ensure all uppercase characters
     """
     lines = ["UNA:+.?*'"]
     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
@@ -2323,7 +2327,6 @@ def build_qatar_apis_edifact(direction, date):
     msg_count = 0
     
     # Get crew assignments for the specified direction and date
-    # Use correct model name: QatarFlightCrewAssignment
     # Map direction to proper airport codes (both IATA and ICAO)
     if direction == 'O':  # Outbound (KGL to DOH)
         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
@@ -2428,19 +2431,29 @@ def build_qatar_apis_edifact(direction, date):
                 logger.warning(f"No crew detail found for crew_id: {crew_asg.crew_id}")
                 continue
             
-            crew_count += 1
-            
             # Crew member name and address - handle full names properly
-            surname = crew_detail.surname or ''
-            firstname = crew_detail.firstname or ''
-            middlename = crew_detail.middlename or ''
+            surname = (crew_detail.surname or '').upper().strip()
+            firstname = (crew_detail.firstname or '').upper().strip() 
+            middlename = (crew_detail.middlename or '').upper().strip()
+            
+            # Skip crew members with no name data
+            if not surname and not firstname:
+                logger.warning(f"Skipping crew member {crew_asg.crew_id} - no name data available")
+                continue
             
             # Combine first and middle names
             full_given_name = f"{firstname} {middlename}".strip() if middlename else firstname
-            segments.append(f"NAD+FM+++{surname}:{full_given_name}+++++'")
+            
+            # Format NAD segment without extra separators - only add what's needed
+            if full_given_name:
+                segments.append(f"NAD+FM+++{surname}:{full_given_name}'")
+            else:
+                segments.append(f"NAD+FM+++{surname}'")
+            
+            crew_count += 1
             
             # Gender/Sex
-            sex = crew_detail.sex or 'M'  # Default to M if not specified
+            sex = (crew_detail.sex or 'M').upper()  # Default to M if not specified, ensure uppercase
             segments.append(f"ATT+2++{sex}'")
             
             # Birth date
@@ -2459,7 +2472,7 @@ def build_qatar_apis_edifact(direction, date):
             nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
             segments.append(f"NAT+2+{nationality_code}'")
             
-            # Document (Passport) information - no issuing state per IATA guidelines
+            # Document (Passport) information - NO ISSUING STATE as per IATA guidelines
             passport_number = (crew_detail.passport_number or '').upper()  # Ensure uppercase
             segments.append(f"DOC+P:110:111+{passport_number}'")
             
