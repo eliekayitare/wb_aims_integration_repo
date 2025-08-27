@@ -1661,17 +1661,34 @@ def rtf_to_text(rtf_content):
     return "\n".join(lines)
 
 
+# def process_email_attachment(item, process_function):
+#     """
+#     General handler to process FileAttachment items.
+#     """
+#     try:
+#         for attachment in getattr(item, 'attachments', []):
+#             if isinstance(attachment, FileAttachment):
+#                 logger.info(f"Processing attachment: {attachment.name}")
+#                 process_function(attachment)
+#     except Exception as e:
+#         logger.error(f"Error processing email attachment: {e}")
+
+
 def process_email_attachment(item, process_function):
     """
     General handler to process FileAttachment items.
+    Now returns the result from the process_function.
     """
     try:
+        result = None
         for attachment in getattr(item, 'attachments', []):
             if isinstance(attachment, FileAttachment):
                 logger.info(f"Processing attachment: {attachment.name}")
-                process_function(attachment)
+                result = process_function(attachment)
+        return result
     except Exception as e:
         logger.error(f"Error processing email attachment: {e}")
+        return None
 
 
 def process_job1008_file(attachment):
@@ -2084,6 +2101,210 @@ def process_job97_file(attachment):
     if flight_record:
         logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
 
+    return flight_date
+
+# def build_qatar_apis_edifact(direction, date):
+#     """
+#     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
+#     Updated to include all required crew fields and proper EDIFACT formatting.
+#     """
+#     lines = ["UNA:+.?*'"]
+#     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
+#     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
+#     sender = "RWANDAIR"  # Updated sender name
+    
+#     lines.append(f"UNB+UNOA:4+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}'")
+#     lines.append(f"UNG+PAXLST+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
+    
+#     msg_count = 0
+    
+#     # Get crew assignments for the specified direction and date
+#     # Use correct model name: QatarFlightDetails
+#     # Map direction to proper airport codes (both IATA and ICAO)
+#     if direction == 'O':  # Outbound (KGL to DOH)
+#         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
+#         arr_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
+#     else:  # Inbound (DOH to KGL)
+#         dep_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
+#         arr_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
+    
+#     assignments = QatarFlightDetails.objects.filter(
+#         dep_date_utc=date,
+#         flight__dep_code_iata__in=dep_codes,
+#         flight__arr_code_iata__in=arr_codes
+#     ).select_related('flight')
+    
+#     # If no assignments found with IATA codes, try with ICAO codes
+#     if not assignments.exists():
+#         assignments = QatarFlightDetails.objects.filter(
+#             dep_date_utc=date,
+#             flight__dep_code_icao__in=dep_codes,
+#             flight__arr_code_icao__in=arr_codes
+#         ).select_related('flight')
+    
+#     # Final fallback - just use the date and let's see what flights we have
+#     if not assignments.exists():
+#         logger.warning(f"No crew assignments found with airport codes. Checking all flights on {date}")
+#         all_assignments = QatarFlightDetails.objects.filter(
+#             dep_date_utc=date
+#         ).select_related('flight')
+        
+#         for asg in all_assignments:
+#             logger.info(f"Available flight: {asg.flight.flight_no} - {asg.flight.dep_code_iata}/{asg.flight.dep_code_icao} -> {asg.flight.arr_code_iata}/{asg.flight.arr_code_icao}")
+        
+#         # Use all assignments if direction matching fails
+#         assignments = all_assignments
+    
+#     if not assignments.exists():
+#         logger.warning(f"No crew assignments found for direction {direction} on {date}")
+#         return None
+    
+#     # Group assignments by flight to create one message per flight
+#     flights_processed = set()
+    
+#     for asg in assignments:
+#         # Create one message per unique flight (avoid duplicates)
+#         flight_key = f"{asg.flight.flight_no}_{asg.flight.sd_date_utc}_{asg.std_utc}"
+#         if flight_key in flights_processed:
+#             continue
+#         flights_processed.add(flight_key)
+        
+#         msg_count += 1
+#         msg_ref = f"{ctrl_ref}{msg_count:02d}"
+#         segments = []
+        
+#         # Message header with flight info
+#         segments.append(
+#             f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+WB{asg.flight.flight_no}"
+#             f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:C'"
+#         )
+        
+#         # Beginning of message - crew list
+#         segments.append("BGM+250'")
+        
+#         # Sender information
+#         segments.append(f"NAD+MS+++{sender}:CREW APIS TEAM'")
+        
+#         # Transport information
+#         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
+        
+#         # Departure location and time (convert to IATA codes for EDIFACT)
+#         if 'OTHH' in str(asg.flight.dep_code_icao) or 'OTHH' in str(asg.flight.dep_code_iata):
+#             dep_iata = 'DOH'
+#         elif 'HRYR' in str(asg.flight.dep_code_icao) or 'HRYR' in str(asg.flight.dep_code_iata):
+#             dep_iata = 'KGL'
+#         else:
+#             dep_iata = asg.flight.dep_code_iata or 'DOH'
+#         segments.append(f"LOC+125+{dep_iata}'")
+#         segments.append(f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'")
+        
+#         # Arrival location and time (convert to IATA codes for EDIFACT)
+#         if 'OTHH' in str(asg.flight.arr_code_icao) or 'OTHH' in str(asg.flight.arr_code_iata):
+#             arr_iata = 'DOH'
+#         elif 'HRYR' in str(asg.flight.arr_code_icao) or 'HRYR' in str(asg.flight.arr_code_iata):
+#             arr_iata = 'KGL'
+#         else:
+#             arr_iata = asg.flight.arr_code_iata or 'KGL'
+#         segments.append(f"LOC+87+{arr_iata}'")
+#         segments.append(f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'")
+        
+#         # Get all crew members for this specific flight
+#         flight_crew = QatarFlightDetails.objects.filter(
+#             flight=asg.flight,
+#             dep_date_utc=date
+#         ).select_related('flight')
+        
+#         crew_count = 0
+        
+#         # Process each crew member
+#         for crew_asg in flight_crew:
+#             crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_asg.crew_id).first()
+            
+#             if not crew_detail:
+#                 logger.warning(f"No crew detail found for crew_id: {crew_asg.crew_id}")
+#                 continue
+            
+#             crew_count += 1
+            
+#             # Crew member name and address - handle full names properly
+#             surname = crew_detail.surname or ''
+#             firstname = crew_detail.firstname or ''
+#             middlename = crew_detail.middlename or ''
+            
+#             # Combine first and middle names
+#             full_given_name = f"{firstname} {middlename}".strip() if middlename else firstname
+#             segments.append(f"NAD+FM+++{surname}:{full_given_name}+++++'")
+            
+#             # Gender/Sex
+#             sex = crew_detail.sex or 'M'  # Default to M if not specified
+#             segments.append(f"ATT+2++{sex}'")
+            
+#             # Birth date
+#             if crew_detail.birth_date:
+#                 birth_date_str = crew_detail.birth_date.strftime('%y%m%d')
+#                 segments.append(f"DTM+329:{birth_date_str}'")
+#             else:
+#                 segments.append("DTM+329:'")  # Empty if no birth date
+            
+#             # Location information (departure and arrival ports for crew positioning)
+#             segments.append(f"LOC+22+{arr_iata}'")  # Destination
+#             segments.append(f"LOC+178+{dep_iata}'")  # Origin
+#             segments.append(f"LOC+179+{arr_iata}'")  # Final destination
+            
+#             # Nationality - use nationality_code from Job 97 (3-letter code)
+#             nationality_code = crew_detail.nationality_code or 'RWA'  # Default to RWA if not specified
+#             segments.append(f"NAT+2+{nationality_code}'")
+            
+#             # Document (Passport) information with issuing state
+#             passport_number = crew_detail.passport_number or ''
+#             issuing_state = crew_detail.place_of_issue or ''  # Use place_of_issue directly as issuing state
+#             segments.append(f"DOC+P:110:111+{passport_number}+{issuing_state}'")
+            
+#             # Passport expiry date
+#             if crew_detail.passport_expiry:
+#                 expiry_str = crew_detail.passport_expiry.strftime('%y%m%d')
+#                 segments.append(f"DTM+36:{expiry_str}'")
+#             else:
+#                 segments.append("DTM+36:'")
+            
+#             # Birth place (country code) - use nationality_code as fallback
+#             birth_place = crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA'
+#             segments.append(f"LOC+91+{birth_place}'")
+        
+#         # Crew count
+#         segments.append(f"CNT+41:{crew_count:04d}'")
+        
+#         # Add all segments to main lines
+#         lines.extend(segments)
+        
+#         # Message trailer
+#         lines.append(f"UNT+{len(segments)+1:04d}+{msg_ref}'")
+    
+#     # Group trailer
+#     lines.append(f"UNE+{msg_count}+{ctrl_ref}'")
+    
+#     # Interchange trailer
+#     lines.append(f"UNZ+{msg_count}+{ctrl_ref}'")
+    
+#     # Create output directory and file using settings.QATAR_APIS_OUTPUT_PATH
+#     try:
+#         out_dir = settings.QATAR_APIS_OUTPUT_PATH
+#         out_dir.mkdir(parents=True, exist_ok=True)
+#         filename = f"QATAPIS_{direction}_{date:%Y%m%d}.edi"
+#         out_path = out_dir / filename
+        
+#         with open(out_path, 'w', encoding='utf-8') as f:
+#             f.write("\n".join(lines))
+        
+#         logger.info(f"Generated EDIFACT file: {out_path}")
+#         logger.info(f"File contains {msg_count} flight(s) with crew data")
+        
+#         return out_path
+        
+#     except Exception as e:
+#         logger.error(f"Error writing EDIFACT file: {e}")
+#         return None
+
 
 
 def build_qatar_apis_edifact(direction, date):
@@ -2102,7 +2323,7 @@ def build_qatar_apis_edifact(direction, date):
     msg_count = 0
     
     # Get crew assignments for the specified direction and date
-    # Use correct model name: QatarFlightDetails
+    # Use correct model name: QatarFlightCrewAssignment
     # Map direction to proper airport codes (both IATA and ICAO)
     if direction == 'O':  # Outbound (KGL to DOH)
         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
@@ -2156,10 +2377,10 @@ def build_qatar_apis_edifact(direction, date):
         msg_ref = f"{ctrl_ref}{msg_count:02d}"
         segments = []
         
-        # Message header with flight info
+        # Message header with flight info - Use 'F' for complete crew list
         segments.append(
             f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+WB{asg.flight.flight_no}"
-            f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:C'"
+            f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:F'"
         )
         
         # Beginning of message - crew list
@@ -2234,14 +2455,13 @@ def build_qatar_apis_edifact(direction, date):
             segments.append(f"LOC+178+{dep_iata}'")  # Origin
             segments.append(f"LOC+179+{arr_iata}'")  # Final destination
             
-            # Nationality - use nationality_code from Job 97 (3-letter code)
-            nationality_code = crew_detail.nationality_code or 'RWA'  # Default to RWA if not specified
+            # Nationality - use nationality_code from Job 97 (3-letter code, uppercase)
+            nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
             segments.append(f"NAT+2+{nationality_code}'")
             
-            # Document (Passport) information with issuing state
-            passport_number = crew_detail.passport_number or ''
-            issuing_state = crew_detail.place_of_issue or ''  # Use place_of_issue directly as issuing state
-            segments.append(f"DOC+P:110:111+{passport_number}+{issuing_state}'")
+            # Document (Passport) information - no issuing state per IATA guidelines
+            passport_number = (crew_detail.passport_number or '').upper()  # Ensure uppercase
+            segments.append(f"DOC+P:110:111+{passport_number}'")
             
             # Passport expiry date
             if crew_detail.passport_expiry:
@@ -2250,8 +2470,8 @@ def build_qatar_apis_edifact(direction, date):
             else:
                 segments.append("DTM+36:'")
             
-            # Birth place (country code) - use nationality_code as fallback
-            birth_place = crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA'
+            # Birth place (country code) - use nationality_code as fallback, uppercase
+            birth_place = (crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA').upper()
             segments.append(f"LOC+91+{birth_place}'")
         
         # Crew count
@@ -2287,5 +2507,3 @@ def build_qatar_apis_edifact(direction, date):
     except Exception as e:
         logger.error(f"Error writing EDIFACT file: {e}")
         return None
-
-
