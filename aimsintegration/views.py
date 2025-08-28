@@ -3734,18 +3734,25 @@ def generate_simple_csv_export(request):
 
 from rest_framework import generics, status
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import BasicAuthentication, SessionAuthentication
 from django.utils import timezone
 from .models import TableauData
 from .serializers import TableauDataSerializer
 from .pagination import FlexiblePageSizePagination
 
+
 class TableauDataListView(generics.ListAPIView):
     serializer_class = TableauDataSerializer
     pagination_class = FlexiblePageSizePagination
     
+    # Password-based authentication
+    authentication_classes = [BasicAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    
     def get_queryset(self):
         """
-        Filter records AFTER today (future data only)
+        Filter records from TODAY upward (today and future data)
         """
         today = timezone.now().date()
         return TableauData.objects.filter(
