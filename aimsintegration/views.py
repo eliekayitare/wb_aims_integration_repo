@@ -3795,33 +3795,93 @@ class TableauDataListView(generics.ListAPIView):
     def get_queryset(self):
         """
         Filter records from TODAY upward (today and future data)
-        Optional query parameters:
-        - disrupted_only: if 'true', returns only cancelled or delayed flights
-        - cancelled_only: if 'true', returns only cancelled flights
-        - delayed_only: if 'true', returns only delayed flights
+        
+        Query parameter:
+        - filter: SQL-like filter conditions
+        
+        Examples:
+        ?filter=cancelled_deleted=true
+        ?filter=departure_delay_time>0
+        ?filter=cancelled_deleted=true OR departure_delay_time>0
         """
         today = timezone.now().date()
         queryset = TableauData.objects.filter(
             operation_day__gte=today
         )
         
-        # Check query parameters
-        disrupted_only = self.request.query_params.get('disrupted_only', '').lower() == 'true'
-        cancelled_only = self.request.query_params.get('cancelled_only', '').lower() == 'true'
-        delayed_only = self.request.query_params.get('delayed_only', '').lower() == 'true'
+        # Get filter parameter
+        filter_param = self.request.query_params.get('filter', '')
         
-        # Apply filters based on parameters
-        if disrupted_only:
-            # Return cancelled OR delayed flights
-            queryset = queryset.filter(
-                models.Q(cancelled_deleted=True) | 
-                models.Q(departure_delay_time__gt=0)
-            )
-        elif cancelled_only:
-            # Return only cancelled flights
-            queryset = queryset.filter(cancelled_deleted=True)
-        elif delayed_only:
-            # Return only delayed flights
-            queryset = queryset.filter(departure_delay_time__gt=0)
+        if filter_param:
+            try:
+                # Parse and apply filter
+                queryset = self.apply_filter(queryset, filter_param)
+            except Exception as e:
+                # If filter parsing fails, return empty queryset or log error
+                pass
         
         return queryset.order_by('operation_day', 'std')
+    
+    def apply_filter(self, queryset, filter_string):
+        """
+        Parse and apply filter conditions
+        """
+        # Handle OR conditions
+        if ' OR ' in filter_string.upper():
+            conditions = filter_string.upper().split(' OR ')
+            q_objects = models.Q()
+            
+            for condition in conditions:
+                condition = condition.strip()
+                q_obj = self.parse_condition(condition)
+                if q_obj:
+                    q_objects |= q_obj
+            
+            if q_objects:
+                queryset = queryset.filter(q_objects)
+        
+        # Handle single condition
+        else:
+            q_obj = self.parse_condition(filter_string)
+            if q_obj:
+                queryset = queryset.filter(q_obj)
+        
+        return queryset
+    
+    def parse_condition(self, condition):
+        """
+        Parse individual filter condition
+        """
+        condition = condition.strip()
+        
+        # Handle cancelled_deleted=true
+        if 'cancelled_deleted=true' in condition.lower():
+            return models.Q(cancelled_deleted=True)
+        
+        # Handle cancelled_deleted=false
+        elif 'cancelled_deleted=false' in condition.lower():
+            return models.Q(cancelled_deleted=False)
+        
+        # Handle departure_delay_time>0
+        elif 'departure_delay_time>0' in condition.lower():
+            return models.Q(departure_delay_time__gt=0)
+        
+        # Handle departure_delay_time>X (specific number)
+        elif 'departure_delay_time>' in condition.lower():
+            try:
+                value = condition.lower().split('departure_delay_time>')[1]
+                delay_value = int(value)
+                return models.Q(departure_delay_time__gt=delay_value)
+            except (IndexError, ValueError):
+                pass
+        
+        # Handle departure_delay_time=X
+        elif 'departure_delay_time=' in condition.lower():
+            try:
+                value = condition.lower().split('departure_delay_time=')[1]
+                delay_value = int(value)
+                return models.Q(departure_delay_time=delay_value)
+            except (IndexError, ValueError):
+                pass
+        
+        return None
