@@ -3742,6 +3742,24 @@ from .serializers import TableauDataSerializer
 from .pagination import FlexiblePageSizePagination
 
 
+# class TableauDataListView(generics.ListAPIView):
+#     serializer_class = TableauDataSerializer
+#     pagination_class = FlexiblePageSizePagination
+    
+#     # Password-based authentication
+#     authentication_classes = [BasicAuthentication, SessionAuthentication]
+#     permission_classes = [IsAuthenticated]
+    
+#     def get_queryset(self):
+#         """
+#         Filter records from TODAY upward (today and future data)
+#         """
+#         today = timezone.now().date()
+#         return TableauData.objects.filter(
+#             operation_day__gte=today
+#         ).order_by('operation_day', 'std')
+
+
 class TableauDataListView(generics.ListAPIView):
     serializer_class = TableauDataSerializer
     pagination_class = FlexiblePageSizePagination
@@ -3753,8 +3771,14 @@ class TableauDataListView(generics.ListAPIView):
     def get_queryset(self):
         """
         Filter records from TODAY upward (today and future data)
+        Return only disrupted flights:
+        - Cancelled flights (cancelled_deleted = True)
+        - Delayed flights (departure_delay_time > 0)
         """
         today = timezone.now().date()
         return TableauData.objects.filter(
             operation_day__gte=today
+        ).filter(
+            models.Q(cancelled_deleted=True) | 
+            models.Q(departure_delay_time__gt=0)
         ).order_by('operation_day', 'std')
