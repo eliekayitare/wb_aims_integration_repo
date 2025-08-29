@@ -3760,6 +3760,30 @@ from .pagination import FlexiblePageSizePagination
 #         ).order_by('operation_day', 'std')
 
 
+# class TableauDataListView(generics.ListAPIView):
+#     serializer_class = TableauDataSerializer
+#     pagination_class = FlexiblePageSizePagination
+    
+#     # Password-based authentication
+#     authentication_classes = [BasicAuthentication, SessionAuthentication]
+#     permission_classes = [IsAuthenticated]
+    
+#     def get_queryset(self):
+#         """
+#         Filter records from TODAY upward (today and future data)
+#         Return only disrupted flights:
+#         - Cancelled flights (cancelled_deleted = True)
+#         - Delayed flights (departure_delay_time > 0)
+#         """
+#         today = timezone.now().date()
+#         return TableauData.objects.filter(
+#             models.Q(cancelled_deleted=True) | 
+#             models.Q(departure_delay_time__gt=0)
+#         ).order_by('operation_day', 'std').filter(
+#             operation_day__gte=today
+#         )
+
+
 class TableauDataListView(generics.ListAPIView):
     serializer_class = TableauDataSerializer
     pagination_class = FlexiblePageSizePagination
@@ -3771,14 +3795,33 @@ class TableauDataListView(generics.ListAPIView):
     def get_queryset(self):
         """
         Filter records from TODAY upward (today and future data)
-        Return only disrupted flights:
-        - Cancelled flights (cancelled_deleted = True)
-        - Delayed flights (departure_delay_time > 0)
+        Optional query parameters:
+        - disrupted_only: if 'true', returns only cancelled or delayed flights
+        - cancelled_only: if 'true', returns only cancelled flights
+        - delayed_only: if 'true', returns only delayed flights
         """
         today = timezone.now().date()
-        return TableauData.objects.filter(
-            models.Q(cancelled_deleted=True) | 
-            models.Q(departure_delay_time__gt=0)
-        ).order_by('operation_day', 'std').filter(
+        queryset = TableauData.objects.filter(
             operation_day__gte=today
         )
+        
+        # Check query parameters
+        disrupted_only = self.request.query_params.get('disrupted_only', '').lower() == 'true'
+        cancelled_only = self.request.query_params.get('cancelled_only', '').lower() == 'true'
+        delayed_only = self.request.query_params.get('delayed_only', '').lower() == 'true'
+        
+        # Apply filters based on parameters
+        if disrupted_only:
+            # Return cancelled OR delayed flights
+            queryset = queryset.filter(
+                models.Q(cancelled_deleted=True) | 
+                models.Q(departure_delay_time__gt=0)
+            )
+        elif cancelled_only:
+            # Return only cancelled flights
+            queryset = queryset.filter(cancelled_deleted=True)
+        elif delayed_only:
+            # Return only delayed flights
+            queryset = queryset.filter(departure_delay_time__gt=0)
+        
+        return queryset.order_by('operation_day', 'std')
