@@ -3777,8 +3777,8 @@ class TableauDataListView(generics.ListAPIView):
         """
         today = timezone.now().date()
         return TableauData.objects.filter(
-            operation_day__gte=today
-        ).filter(
             models.Q(cancelled_deleted=True) | 
             models.Q(departure_delay_time__gt=0)
-        ).order_by('operation_day', 'std')
+        ).order_by('operation_day', 'std').filter(
+            operation_day__gte=today
+        )
