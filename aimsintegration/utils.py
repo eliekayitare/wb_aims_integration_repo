@@ -1621,7 +1621,7 @@ def process_tableau_data_email_attachment(item, process_function):
 
 
 #=================================================================================
-# CLEAN QATAR APIS UTILS - NO ISSUING_STATE FIELD
+# CLEAN QATAR APIS UTILS 
 #==================================================================================
 import re
 import csv
@@ -1661,17 +1661,6 @@ def rtf_to_text(rtf_content):
     return "\n".join(lines)
 
 
-# def process_email_attachment(item, process_function):
-#     """
-#     General handler to process FileAttachment items.
-#     """
-#     try:
-#         for attachment in getattr(item, 'attachments', []):
-#             if isinstance(attachment, FileAttachment):
-#                 logger.info(f"Processing attachment: {attachment.name}")
-#                 process_function(attachment)
-#     except Exception as e:
-#         logger.error(f"Error processing email attachment: {e}")
 
 
 def process_email_attachment(item, process_function):
@@ -2103,10 +2092,17 @@ def process_job97_file(attachment):
 
     return flight_date
 
+
+
 # def build_qatar_apis_edifact(direction, date):
 #     """
 #     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
 #     Updated to include all required crew fields and proper EDIFACT formatting.
+#     Fixes applied based on Qatar Airways feedback:
+#     - Use 'F' for complete crew lists in UNH segment
+#     - Remove extra separators in NAD segment when no address info
+#     - Remove issuing state from DOC segment  
+#     - Ensure all uppercase characters
 #     """
 #     lines = ["UNA:+.?*'"]
 #     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
@@ -2119,7 +2115,6 @@ def process_job97_file(attachment):
 #     msg_count = 0
     
 #     # Get crew assignments for the specified direction and date
-#     # Use correct model name: QatarFlightDetails
 #     # Map direction to proper airport codes (both IATA and ICAO)
 #     if direction == 'O':  # Outbound (KGL to DOH)
 #         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
@@ -2173,10 +2168,10 @@ def process_job97_file(attachment):
 #         msg_ref = f"{ctrl_ref}{msg_count:02d}"
 #         segments = []
         
-#         # Message header with flight info
+#         # Message header with flight info - Use 'F' for complete crew list
 #         segments.append(
 #             f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+WB{asg.flight.flight_no}"
-#             f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:C'"
+#             f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:F'"
 #         )
         
 #         # Beginning of message - crew list
@@ -2224,19 +2219,29 @@ def process_job97_file(attachment):
 #                 logger.warning(f"No crew detail found for crew_id: {crew_asg.crew_id}")
 #                 continue
             
-#             crew_count += 1
-            
 #             # Crew member name and address - handle full names properly
-#             surname = crew_detail.surname or ''
-#             firstname = crew_detail.firstname or ''
-#             middlename = crew_detail.middlename or ''
+#             surname = (crew_detail.surname or '').upper().strip()
+#             firstname = (crew_detail.firstname or '').upper().strip() 
+#             middlename = (crew_detail.middlename or '').upper().strip()
+            
+#             # Skip crew members with no name data
+#             if not surname and not firstname:
+#                 logger.warning(f"Skipping crew member {crew_asg.crew_id} - no name data available")
+#                 continue
             
 #             # Combine first and middle names
 #             full_given_name = f"{firstname} {middlename}".strip() if middlename else firstname
-#             segments.append(f"NAD+FM+++{surname}:{full_given_name}+++++'")
+            
+#             # Format NAD segment without extra separators - only add what's needed
+#             if full_given_name:
+#                 segments.append(f"NAD+FM+++{surname}:{full_given_name}'")
+#             else:
+#                 segments.append(f"NAD+FM+++{surname}'")
+            
+#             crew_count += 1
             
 #             # Gender/Sex
-#             sex = crew_detail.sex or 'M'  # Default to M if not specified
+#             sex = (crew_detail.sex or 'M').upper()  # Default to M if not specified, ensure uppercase
 #             segments.append(f"ATT+2++{sex}'")
             
 #             # Birth date
@@ -2251,14 +2256,13 @@ def process_job97_file(attachment):
 #             segments.append(f"LOC+178+{dep_iata}'")  # Origin
 #             segments.append(f"LOC+179+{arr_iata}'")  # Final destination
             
-#             # Nationality - use nationality_code from Job 97 (3-letter code)
-#             nationality_code = crew_detail.nationality_code or 'RWA'  # Default to RWA if not specified
+#             # Nationality - use nationality_code from Job 97 (3-letter code, uppercase)
+#             nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
 #             segments.append(f"NAT+2+{nationality_code}'")
             
-#             # Document (Passport) information with issuing state
-#             passport_number = crew_detail.passport_number or ''
-#             issuing_state = crew_detail.place_of_issue or ''  # Use place_of_issue directly as issuing state
-#             segments.append(f"DOC+P:110:111+{passport_number}+{issuing_state}'")
+#             # Document (Passport) information - NO ISSUING STATE as per IATA guidelines
+#             passport_number = (crew_detail.passport_number or '').upper()  # Ensure uppercase
+#             segments.append(f"DOC+P:110:111+{passport_number}'")
             
 #             # Passport expiry date
 #             if crew_detail.passport_expiry:
@@ -2267,8 +2271,8 @@ def process_job97_file(attachment):
 #             else:
 #                 segments.append("DTM+36:'")
             
-#             # Birth place (country code) - use nationality_code as fallback
-#             birth_place = crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA'
+#             # Birth place (country code) - use nationality_code as fallback, uppercase
+#             birth_place = (crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA').upper()
 #             segments.append(f"LOC+91+{birth_place}'")
         
 #         # Crew count
@@ -2311,23 +2315,30 @@ def build_qatar_apis_edifact(direction, date):
     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
     Updated to include all required crew fields and proper EDIFACT formatting.
     Fixes applied based on Qatar Airways feedback:
+    - Added COM segment for reporting party contact info (CRITICAL FIX)
     - Use 'F' for complete crew lists in UNH segment
     - Remove extra separators in NAD segment when no address info
-    - Remove issuing state from DOC segment  
     - Ensure all uppercase characters
+    - Enhanced validation and error handling
     """
+    from django.core.mail import send_mail
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
     lines = ["UNA:+.?*'"]
     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
-    sender = "RWANDAIR"  # Updated sender name
+    sender = "RWANDAIR"
     
     lines.append(f"UNB+UNOA:4+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}'")
     lines.append(f"UNG+PAXLST+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
     
     msg_count = 0
+    validation_errors = []
     
     # Get crew assignments for the specified direction and date
-    # Map direction to proper airport codes (both IATA and ICAO)
     if direction == 'O':  # Outbound (KGL to DOH)
         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
         arr_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
@@ -2363,11 +2374,13 @@ def build_qatar_apis_edifact(direction, date):
         assignments = all_assignments
     
     if not assignments.exists():
-        logger.warning(f"No crew assignments found for direction {direction} on {date}")
+        validation_errors.append(f"No crew assignments found for direction {direction} on {date}")
+        send_validation_error_email(validation_errors, direction, date)
         return None
     
     # Group assignments by flight to create one message per flight
     flights_processed = set()
+    total_crew_count = 0
     
     for asg in assignments:
         # Create one message per unique flight (avoid duplicates)
@@ -2391,6 +2404,11 @@ def build_qatar_apis_edifact(direction, date):
         
         # Sender information
         segments.append(f"NAD+MS+++{sender}:CREW APIS TEAM'")
+        
+        # *** CRITICAL FIX: Add COM segment for reporting party contact info ***
+        # This is what Qatar Airways was missing in their feedback
+        segments.append("COM+ELIE.KAYITARE@RWANDAIR.COM:EM'")  # Email contact
+        segments.append("COM+250788500000:TE'")  # Phone contact (adjust number as needed)
         
         # Transport information
         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
@@ -2422,23 +2440,33 @@ def build_qatar_apis_edifact(direction, date):
         ).select_related('flight')
         
         crew_count = 0
+        flight_validation_errors = []
         
-        # Process each crew member
+        # Process each crew member with enhanced validation
         for crew_asg in flight_crew:
             crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_asg.crew_id).first()
             
             if not crew_detail:
-                logger.warning(f"No crew detail found for crew_id: {crew_asg.crew_id}")
+                flight_validation_errors.append(f"No crew detail found for crew_id: {crew_asg.crew_id}")
                 continue
             
-            # Crew member name and address - handle full names properly
+            # Mandatory field validation
             surname = (crew_detail.surname or '').upper().strip()
             firstname = (crew_detail.firstname or '').upper().strip() 
             middlename = (crew_detail.middlename or '').upper().strip()
+            passport_number = (crew_detail.passport_number or '').upper()
             
-            # Skip crew members with no name data
-            if not surname and not firstname:
-                logger.warning(f"Skipping crew member {crew_asg.crew_id} - no name data available")
+            # Skip crew members with insufficient mandatory data
+            if not surname:
+                flight_validation_errors.append(f"Missing mandatory surname for crew {crew_asg.crew_id}")
+                continue
+                
+            if not firstname:
+                flight_validation_errors.append(f"Missing mandatory given name for crew {crew_asg.crew_id}")
+                continue
+                
+            if not passport_number:
+                flight_validation_errors.append(f"Missing mandatory passport number for crew {crew_asg.crew_id}")
                 continue
             
             # Combine first and middle names
@@ -2452,15 +2480,16 @@ def build_qatar_apis_edifact(direction, date):
             
             crew_count += 1
             
-            # Gender/Sex
+            # Gender/Sex (mandatory)
             sex = (crew_detail.sex or 'M').upper()  # Default to M if not specified, ensure uppercase
             segments.append(f"ATT+2++{sex}'")
             
-            # Birth date
+            # Birth date (mandatory)
             if crew_detail.birth_date:
                 birth_date_str = crew_detail.birth_date.strftime('%y%m%d')
                 segments.append(f"DTM+329:{birth_date_str}'")
             else:
+                flight_validation_errors.append(f"Missing mandatory birth date for crew {crew_asg.crew_id}")
                 segments.append("DTM+329:'")  # Empty if no birth date
             
             # Location information (departure and arrival ports for crew positioning)
@@ -2472,20 +2501,27 @@ def build_qatar_apis_edifact(direction, date):
             nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
             segments.append(f"NAT+2+{nationality_code}'")
             
-            # Document (Passport) information - NO ISSUING STATE as per IATA guidelines
-            passport_number = (crew_detail.passport_number or '').upper()  # Ensure uppercase
+            # Document (Passport) information - Keep as per your original implementation (no issuing state)
             segments.append(f"DOC+P:110:111+{passport_number}'")
             
-            # Passport expiry date
+            # Passport expiry date (mandatory)
             if crew_detail.passport_expiry:
                 expiry_str = crew_detail.passport_expiry.strftime('%y%m%d')
                 segments.append(f"DTM+36:{expiry_str}'")
             else:
+                flight_validation_errors.append(f"Missing mandatory passport expiry for crew {crew_asg.crew_id}")
                 segments.append("DTM+36:'")
             
             # Birth place (country code) - use nationality_code as fallback, uppercase
             birth_place = (crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA').upper()
             segments.append(f"LOC+91+{birth_place}'")
+        
+        # Validate minimum crew count (5 for certification)
+        if crew_count < 5:
+            flight_validation_errors.append(f"Flight WB{asg.flight.flight_no} has only {crew_count} crew members, minimum 5 required for Qatar certification")
+        
+        validation_errors.extend(flight_validation_errors)
+        total_crew_count += crew_count
         
         # Crew count
         segments.append(f"CNT+41:{crew_count:04d}'")
@@ -2502,6 +2538,15 @@ def build_qatar_apis_edifact(direction, date):
     # Interchange trailer
     lines.append(f"UNZ+{msg_count}+{ctrl_ref}'")
     
+    # Final validation check
+    if total_crew_count < 5:
+        validation_errors.append(f"Total crew count ({total_crew_count}) is less than minimum requirement of 5")
+    
+    # If validation errors exist, send email and don't generate file
+    if validation_errors:
+        send_validation_error_email(validation_errors, direction, date)
+        return None
+    
     # Create output directory and file using settings.QATAR_APIS_OUTPUT_PATH
     try:
         out_dir = settings.QATAR_APIS_OUTPUT_PATH
@@ -2513,10 +2558,57 @@ def build_qatar_apis_edifact(direction, date):
             f.write("\n".join(lines))
         
         logger.info(f"Generated EDIFACT file: {out_path}")
-        logger.info(f"File contains {msg_count} flight(s) with crew data")
+        logger.info(f"File contains {msg_count} flight(s) with {total_crew_count} crew members")
         
         return out_path
         
     except Exception as e:
         logger.error(f"Error writing EDIFACT file: {e}")
+        validation_errors.append(f"File generation error: {str(e)}")
+        send_validation_error_email(validation_errors, direction, date)
         return None
+
+
+def send_validation_error_email(validation_errors, direction, date):
+    """
+    Send email notification about validation errors that prevent file generation.
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    error_summary = "\n".join([f"• {error}" for error in validation_errors])
+    direction_text = 'Outbound KGL→DOH' if direction == 'O' else 'Inbound DOH→KGL'
+    
+    try:
+        send_mail(
+            subject=f"Qatar APIS File Generation Failed - {direction_text} {date}",
+            message=(
+                f"Dear Team,\n\n"
+                f"The Qatar APIS EDIFACT file generation failed due to the following validation issues:\n\n"
+                f"{error_summary}\n\n"
+                f"Direction: {direction_text}\n"
+                f"Date: {date}\n"
+                f"Timestamp: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+                f"Required for Qatar Airways certification:\n"
+                f"• Minimum 5 crew members per flight\n"
+                f"• COM segment with reporting party contact info (NOW INCLUDED)\n"
+                f"• All mandatory fields: surname, given name, birth date, passport number, expiry date\n\n"
+                f"Please review the crew data and ensure all mandatory fields are populated.\n"
+                f"The file will be generated automatically once all validation requirements are met.\n\n"
+                f"Regards,\nQatar APIS System"
+            ),
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[
+                'elie.kayitare@rwandair.com'
+                # settings.FIRST_EMAIL_RECEIVER,
+                # settings.SECOND_EMAIL_RECEIVER,
+                # settings.THIRD_EMAIL_RECEIVER,
+            ],
+            fail_silently=False,
+        )
+        logger.info("Validation error email sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send validation error email: {e}")
