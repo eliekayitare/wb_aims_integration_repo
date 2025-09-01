@@ -2609,6 +2609,9 @@ def send_validation_error_email(validation_errors, direction, date):
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
                 'elie.kayitare@rwandair.com',
+                'saif.zawahreh@rwandair.com',
+                'peace.ndahigwa@rwandair.com',
+                'fred.mugisha@rwandair.com',
                 settings.FIRST_EMAIL_RECEIVER,
                 settings.SECOND_EMAIL_RECEIVER,
                 settings.THIRD_EMAIL_RECEIVER,
