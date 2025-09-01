@@ -2408,7 +2408,7 @@ def build_qatar_apis_edifact(direction, date):
         # *** CRITICAL FIX: Add COM segment for reporting party contact info ***
         # This is what Qatar Airways was missing in their feedback
         segments.append("COM+ELIE.KAYITARE@RWANDAIR.COM:EM'")  # Email contact
-        segments.append("COM+250781442755:TE'")  # Phone contact (adjust number as needed)
+        segments.append("COM+250788500000:TE'")  # Phone contact (adjust number as needed)
         
         # Transport information
         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
@@ -2461,16 +2461,22 @@ def build_qatar_apis_edifact(direction, date):
                 flight_validation_errors.append(f"Missing mandatory surname for crew {crew_asg.crew_id}")
                 continue
                 
-            if not firstname:
-                flight_validation_errors.append(f"Missing mandatory given name for crew {crew_asg.crew_id}")
+            # Check if we have at least one given name (firstname OR middlename)
+            if not firstname and not middlename:
+                flight_validation_errors.append(f"Missing mandatory given name for crew {crew_asg.crew_id} (both firstname and middlename are empty)")
                 continue
                 
             if not passport_number:
                 flight_validation_errors.append(f"Missing mandatory passport number for crew {crew_asg.crew_id}")
                 continue
             
-            # Combine first and middle names
-            full_given_name = f"{firstname} {middlename}".strip() if middlename else firstname
+            # Combine first and middle names, or use whichever is available
+            if firstname and middlename:
+                full_given_name = f"{firstname} {middlename}".strip()
+            elif firstname:
+                full_given_name = firstname
+            else:
+                full_given_name = middlename  # Use middlename if firstname is empty
             
             # Format NAD segment without extra separators - only add what's needed
             if full_given_name:
@@ -2602,10 +2608,10 @@ def send_validation_error_email(validation_errors, direction, date):
             ),
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
-                'elie.kayitare@rwandair.com'
-                # settings.FIRST_EMAIL_RECEIVER,
-                # settings.SECOND_EMAIL_RECEIVER,
-                # settings.THIRD_EMAIL_RECEIVER,
+                'elie.kayitare@rwandair.com',
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.SECOND_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
             ],
             fail_silently=False,
         )
