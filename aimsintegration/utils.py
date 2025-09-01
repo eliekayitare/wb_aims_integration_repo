@@ -2408,7 +2408,7 @@ def build_qatar_apis_edifact(direction, date):
         # *** CRITICAL FIX: Add COM segment for reporting party contact info ***
         # This is what Qatar Airways was missing in their feedback
         segments.append("COM+ELIE.KAYITARE@RWANDAIR.COM:EM'")  # Email contact
-        segments.append("COM+250788500000:TE'")  # Phone contact (adjust number as needed)
+        segments.append("COM+250781442755:TE'")  # Phone contact (adjust number as needed)
         
         # Transport information
         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
