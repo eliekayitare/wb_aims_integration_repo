@@ -2599,12 +2599,10 @@ def send_validation_error_email(validation_errors, direction, date):
                 f"Date: {date}\n"
                 f"Timestamp: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
                 f"Required for Qatar Airways certification:\n"
-                f"• Minimum 5 crew members per flight\n"
-                f"• COM segment with reporting party contact info (NOW INCLUDED)\n"
                 f"• All mandatory fields: surname, given name, birth date, passport number, expiry date\n\n"
                 f"Please review the crew data and ensure all mandatory fields are populated.\n"
                 f"The file will be generated automatically once all validation requirements are met.\n\n"
-                f"Regards,\nQatar APIS System"
+                f"Regards,\nWBHUB System"
             ),
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
