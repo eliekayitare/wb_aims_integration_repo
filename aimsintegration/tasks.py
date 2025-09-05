@@ -1937,6 +1937,7 @@ def delete_emails_by_subject_list(self):
         "Load Message Edno",
         "METAR",
         "TAFs",
+        "TAF",
         "TAKE OFF DATA",
         "OPMET"
         # "EZFW",
