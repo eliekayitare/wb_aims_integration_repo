@@ -1934,7 +1934,7 @@ def delete_emails_by_subject_list(self):
     """
     # Specify the subject patterns to delete
     subject_patterns = [
-        "Altea Flight Management",
+        "Load Message Edno",
         "Altea CM",
         "MVT",
         "Met",
