@@ -1935,10 +1935,9 @@ def delete_emails_by_subject_list(self):
     # Specify the subject patterns to delete
     subject_patterns = [
         "Load Message Edno",
-        "Altea CM",
-        "MVT",
-        "Met",
-        "Aerometeo"
+        "METAR",
+        "TAFs",
+        "TAKE OFF DATA"
         # "EZFW",
         # "DoNotReply"
     ]  # Add or modify subjects as needed
