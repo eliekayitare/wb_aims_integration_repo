@@ -368,6 +368,12 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/180'),
     },
 
+
+     'delete-brave_old-emails-every-hour': {
+        'task': 'aimsintegration.tasks.delete_emails_by_subject_list',
+        'schedule': crontab(minute='*/1'),  
+    },
+
 }
 
 CORS_ALLOWED_ORIGINS = [

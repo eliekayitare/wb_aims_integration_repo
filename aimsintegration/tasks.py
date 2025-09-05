@@ -1897,3 +1897,83 @@ def fetch_job1008():
     except Exception as e:
         logger.error(f"Error in fetch_job1008: {e}")
         raise
+
+
+
+
+#==========================================================
+
+# Free brave email storages
+#==========================================================
+
+
+def get_new_email_exchange_account():
+    credentials = Credentials(
+        username=settings.BRAVE_EXCHANGE_EMAIL_USER,
+        password=settings.BRAVE_EXCHANGE_EMAIL_PASSWORD
+    )
+    config = Configuration(
+        server=settings.EXCHANGE_EMAIL_SERVER,
+        credentials=credentials
+    )
+    account = Account(
+        primary_smtp_address=settings.BRAVE_EXCHANGE_EMAIL_USER,
+        credentials=credentials,
+        autodiscover=False,
+        config=config,
+        access_type='delegate'
+    )
+    return account
+
+
+@shared_task(bind=True, max_retries=5)
+def delete_emails_by_subject_list(self):
+    """
+    Deletes all emails that match any of the specified subject patterns,
+    with a retry strategy to handle ErrorServerBusy.
+    """
+    # Specify the subject patterns to delete
+    subject_patterns = [
+        "Altea Flight Management",
+        "Altea CM",
+        "MVT",
+        "Met",
+        "Aerometeo"
+        # "EZFW",
+        # "DoNotReply"
+    ]  # Add or modify subjects as needed
+    exact_match = False  # Set to True for exact matches, False for partial matches
+    account = get_new_email_exchange_account()
+    total_deleted = 0
+    
+    try:
+        for subject_pattern in subject_patterns:
+            if exact_match:
+                logger.info(f"Filtering emails with exact subject: '{subject_pattern}'...")
+                target_emails = account.inbox.filter(subject=subject_pattern)
+            else:
+                logger.info(f"Filtering emails containing subject text: '{subject_pattern}'...")
+                target_emails = account.inbox.filter(subject__icontains=subject_pattern)
+            
+            count_emails = target_emails.count()
+            logger.info(f"Found {count_emails} email(s) matching subject pattern '{subject_pattern}'.")
+            
+            if count_emails > 0:
+                target_emails.delete()
+                logger.info(f"Deleted {count_emails} email(s) with subject pattern '{subject_pattern}'.")
+                total_deleted += count_emails
+        
+        match_type = "exact" if exact_match else "partial"
+        logger.info(f"Total deleted: {total_deleted} email(s)")
+        return f"Purged {total_deleted} email(s) with {match_type} subject matches from {len(subject_patterns)} pattern(s)"
+    
+    except ErrorServerBusy as e:
+        # If the Exchange server is busy, wait and retry
+        wait_time = 2 ** self.request.retries * 5  # Exponential backoff
+        logger.warning(
+            f"Server is busy (attempt {self.request.retries + 1}/{self.max_retries}). "
+            f"Retrying in {wait_time} seconds..."
+        )
+        
+        # Retry the task after `wait_time` seconds
+        raise self.retry(exc=e, countdown=wait_time)
