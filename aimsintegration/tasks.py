@@ -1926,10 +1926,13 @@ def get_new_email_exchange_account():
     return account
 
 
+
+
 # @shared_task(bind=True, max_retries=5)
 # def delete_emails_by_subject_list(self):
 #     """
-#     Deletes all emails that match any of the specified subject patterns,
+#     Deletes all emails that match any of the specified subject patterns
+#     OR come from any of the specified senders,
 #     with a retry strategy to handle ErrorServerBusy.
 #     """
 #     # Specify the subject patterns to delete
@@ -1943,11 +1946,19 @@ def get_new_email_exchange_account():
 #         # "EZFW",
 #         # "DoNotReply"
 #     ]  # Add or modify subjects as needed
+    
+#     # Specify the sender emails to delete from
+#     sender_emails = [
+#         "dcscm-no-reply@amadeus.com"
+#         # Add your specific sender emails here
+#     ]  
+    
 #     exact_match = False  # Set to True for exact matches, False for partial matches
 #     account = get_new_email_exchange_account()
 #     total_deleted = 0
     
 #     try:
+#         # First, delete by subject patterns
 #         for subject_pattern in subject_patterns:
 #             if exact_match:
 #                 logger.info(f"Filtering emails with exact subject: '{subject_pattern}'...")
@@ -1964,9 +1975,22 @@ def get_new_email_exchange_account():
 #                 logger.info(f"Deleted {count_emails} email(s) with subject pattern '{subject_pattern}'.")
 #                 total_deleted += count_emails
         
+#         # Then, delete by sender emails
+#         for sender_email in sender_emails:
+#             logger.info(f"Filtering emails from sender: '{sender_email}'...")
+#             target_emails = account.inbox.filter(sender=sender_email)
+            
+#             count_emails = target_emails.count()
+#             logger.info(f"Found {count_emails} email(s) from sender '{sender_email}'.")
+            
+#             if count_emails > 0:
+#                 target_emails.delete()
+#                 logger.info(f"Deleted {count_emails} email(s) from sender '{sender_email}'.")
+#                 total_deleted += count_emails
+        
 #         match_type = "exact" if exact_match else "partial"
 #         logger.info(f"Total deleted: {total_deleted} email(s)")
-#         return f"Purged {total_deleted} email(s) with {match_type} subject matches from {len(subject_patterns)} pattern(s)"
+#         return f"Purged {total_deleted} email(s) with {match_type} subject matches from {len(subject_patterns)} pattern(s) and {len(sender_emails)} sender(s)"
     
 #     except ErrorServerBusy as e:
 #         # If the Exchange server is busy, wait and retry
@@ -1979,8 +2003,6 @@ def get_new_email_exchange_account():
 #         # Retry the task after `wait_time` seconds
 #         raise self.retry(exc=e, countdown=wait_time)
 
-
-
 @shared_task(bind=True, max_retries=5)
 def delete_emails_by_subject_list(self):
     """
@@ -1988,30 +2010,46 @@ def delete_emails_by_subject_list(self):
     OR come from any of the specified senders,
     with a retry strategy to handle ErrorServerBusy.
     """
-    # Specify the subject patterns to delete
+    # Specify the subject patterns to delete (all emails regardless of age)
     subject_patterns = [
         "Edno",
         "METAR",
         "TAFs",
         "TAF",
         "TAKE OFF DATA",
-        "OPMET"
+        "OPMET",
+        "DoNotReply"
         # "EZFW",
-        # "DoNotReply"
     ]  # Add or modify subjects as needed
     
-    # Specify the sender emails to delete from
+    # Specify the sender emails to delete from (all emails regardless of age)
     sender_emails = [
         "dcscm-no-reply@amadeus.com"
         # Add your specific sender emails here
-    ]  
+    ]
+    
+    # Specify sender emails to delete only if older than 24 hours
+    time_sensitive_senders = [
+        "noreply@doc.mail.amadeus.com",
+        "DoNotReply@fi.boeingservices.com",
+
+    ] 
     
     exact_match = False  # Set to True for exact matches, False for partial matches
     account = get_new_email_exchange_account()
     total_deleted = 0
     
+    # Create cutoff date for time-sensitive senders (24 hours ago)
+    from datetime import datetime, timedelta
+    import pytz
+    from exchangelib import EWSDateTime
+    
+    cutoff_date = datetime.utcnow() - timedelta(hours=24)
+    cutoff_date = cutoff_date.replace(tzinfo=pytz.UTC)
+    threshold_datetime = EWSDateTime.from_datetime(cutoff_date)
+    
     try:
-        # First, delete by subject patterns
+        # First, delete by subject patterns (all emails regardless of age)
         for subject_pattern in subject_patterns:
             if exact_match:
                 logger.info(f"Filtering emails with exact subject: '{subject_pattern}'...")
@@ -2028,7 +2066,7 @@ def delete_emails_by_subject_list(self):
                 logger.info(f"Deleted {count_emails} email(s) with subject pattern '{subject_pattern}'.")
                 total_deleted += count_emails
         
-        # Then, delete by sender emails
+        # Second, delete by sender emails (all emails regardless of age)
         for sender_email in sender_emails:
             logger.info(f"Filtering emails from sender: '{sender_email}'...")
             target_emails = account.inbox.filter(sender=sender_email)
@@ -2041,9 +2079,25 @@ def delete_emails_by_subject_list(self):
                 logger.info(f"Deleted {count_emails} email(s) from sender '{sender_email}'.")
                 total_deleted += count_emails
         
+        # Third, delete by time-sensitive sender emails only if older than 24 hours
+        for sender_email in time_sensitive_senders:
+            logger.info(f"Filtering emails from sender: '{sender_email}' older than 24 hours...")
+            target_emails = account.inbox.filter(
+                sender=sender_email,
+                datetime_received__lt=threshold_datetime
+            )
+            
+            count_emails = target_emails.count()
+            logger.info(f"Found {count_emails} email(s) from sender '{sender_email}' older than 24 hours.")
+            
+            if count_emails > 0:
+                target_emails.delete()
+                logger.info(f"Deleted {count_emails} email(s) from sender '{sender_email}' older than 24 hours.")
+                total_deleted += count_emails
+        
         match_type = "exact" if exact_match else "partial"
         logger.info(f"Total deleted: {total_deleted} email(s)")
-        return f"Purged {total_deleted} email(s) with {match_type} subject matches from {len(subject_patterns)} pattern(s) and {len(sender_emails)} sender(s)"
+        return f"Purged {total_deleted} email(s) with {match_type} subject matches from {len(subject_patterns)} pattern(s), {len(sender_emails)} sender(s), and {len(time_sensitive_senders)} time-sensitive sender(s)"
     
     except ErrorServerBusy as e:
         # If the Exchange server is busy, wait and retry
