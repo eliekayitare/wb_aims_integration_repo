@@ -371,7 +371,7 @@ CELERY_BEAT_SCHEDULE = {
 
      'delete-brave_old-emails-every-hour': {
         'task': 'aimsintegration.tasks.delete_emails_by_subject_list',
-        'schedule': crontab(minute='*/1'),  
+        'schedule': crontab(minute='*/240'),  
     },
 
 }
