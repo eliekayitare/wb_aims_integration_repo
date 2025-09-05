@@ -1937,7 +1937,8 @@ def delete_emails_by_subject_list(self):
         "Load Message Edno",
         "METAR",
         "TAFs",
-        "TAKE OFF DATA"
+        "TAKE OFF DATA",
+        "OPMET"
         # "EZFW",
         # "DoNotReply"
     ]  # Add or modify subjects as needed
