@@ -824,6 +824,127 @@ from aimsintegration.models import FlightData
 logger = logging.getLogger(__name__)
 
 
+# def process_acars_message(item, file_path):
+#     try:
+#         email_received_date = item.datetime_received.date()  # Get only the date part
+#         message_body = item.body
+
+#         if "M16" in message_body:
+#             logger.info("Skipping 'M16' ACARS message.")
+#             return
+
+#         logger.info(f"ACARS message received at: {email_received_date} UTC")
+#         logger.info(f"ACARS message body: {message_body}")
+
+#         # Extract fields from the message
+#         flight_no = extract_flight_number(message_body)
+#         acars_event, event_time_str = extract_acars_event(message_body)
+#         dep_code, arr_code = extract_departure_and_arrival_codes(message_body)
+#         tail_number = extract_tail_number(message_body)
+
+#         if not re.match(r'^\d{2}:\d{2}$', event_time_str):
+#             logger.error("Invalid time format in ACARS message.")
+#             return
+
+#         event_time = datetime.strptime(event_time_str, "%H:%M").time()
+
+#         # FIXED: Only search yesterday and today (2 days only)
+#         # ACARS should never update flights that haven't happened yet
+#         search_dates = [
+#             email_received_date + timedelta(days=i) 
+#             for i in range(-1, 1)  # -1, 0 days (yesterday + today only)
+#         ]
+
+#         logger.info(f"Searching flights from {search_dates[0]} to {search_dates[-1]} for ACARS event {acars_event}")
+
+#         # First, try to get matching flights with flight number and date range
+#         flights = FlightData.objects.filter(
+#             flight_no=flight_no,
+#             tail_no=tail_number,
+#             dep_code_iata=dep_code,
+#             arr_code_iata=arr_code,
+#             sd_date_utc__in=search_dates  # Now only includes yesterday + today
+#         )
+
+#         # If no flights found, try matching without flight number but with date range
+#         if not flights.exists():
+#             flights = FlightData.objects.filter(
+#                 tail_no=tail_number,
+#                 dep_code_iata=dep_code,
+#                 arr_code_iata=arr_code,
+#                 sd_date_utc__in=search_dates
+#             )
+
+#         # Additional safety check: Never update flights scheduled for future dates
+#         if flights.exists():
+#             # Filter out any flights scheduled for future dates as an extra safety measure
+#             flights = flights.filter(sd_date_utc__lte=email_received_date)
+            
+#         if not flights.exists():
+#             logger.info(f"No matching YESTERDAY/TODAY flights found for flight number: {flight_no}")
+#             send_mail(
+#                 subject=f"No matching flights found for flight number: {flight_no}",
+#                 message=(
+#                     f"Dear Team,\n\n"
+#                     f"The ACARS message for flight {flight_no} could not be matched to any yesterday or today flights.\n"
+#                     f"Message details:\n\n{message_body}\n\n"
+#                     f"ACARS received date: {email_received_date}\n"
+#                     f"Flight details: {flight_no}, Tail: {tail_number}, Route: {dep_code}-{arr_code}\n"
+#                     f"ACARS Event: {acars_event}\n"
+#                     f"Search range: {search_dates[0]} to {search_dates[-1]} (yesterday and today only)\n\n"
+#                     f"Note: ACARS only processes flights from yesterday and today, not future flights.\n\n"
+#                     f"Please review and update manually if needed.\n\n"
+#                     f"Regards,\nFlightOps Team"
+#                 ),
+#                 from_email=settings.EMAIL_HOST_USER,
+#                 recipient_list=[
+#                     settings.FIRST_EMAIL_RECEIVER,
+#                     settings.SECOND_EMAIL_RECEIVER,
+#                     settings.THIRD_EMAIL_RECEIVER,
+#                 ],
+#                 fail_silently=False,
+#             )
+#             return
+
+#         # Comprehensive flight selection logic covering all scenarios
+#         selected_flight = select_best_flight_match(flights, acars_event, email_received_date)
+
+#         if not selected_flight:
+#             logger.error("No flight could be selected for update")
+#             return
+
+#         # Additional verification: Ensure we're not updating a future flight
+#         if selected_flight.sd_date_utc > email_received_date:
+#             logger.error(f"SAFETY CHECK FAILED: Attempted to update future flight {selected_flight.flight_no} "
+#                         f"scheduled for {selected_flight.sd_date_utc} with ACARS received on {email_received_date}")
+#             return
+
+#         logger.info(f"Selected flight: {selected_flight.flight_no} ({selected_flight.tail_no}) on {selected_flight.sd_date_utc} for {acars_event} event")
+
+#         # Update the appropriate field based on ACARS event
+#         if acars_event == "OT":
+#             selected_flight.atd_utc = event_time
+#             logger.info(f"Updated ATD to {event_time}")
+#         elif acars_event == "OF":
+#             selected_flight.takeoff_utc = event_time
+#             logger.info(f"Updated takeoff to {event_time}")
+#         elif acars_event == "ON":
+#             selected_flight.touchdown_utc = event_time
+#             logger.info(f"Updated touchdown to {event_time}")
+#         elif acars_event == "IN":
+#             selected_flight.ata_utc = event_time
+#             logger.info(f"Updated ATA to {event_time}")
+
+#         selected_flight.save()
+
+#         # Append the updated flight details to the job file
+#         write_job_one_row(file_path, selected_flight, acars_event, event_time, email_received_date)
+
+#     except Exception as e:
+#         logger.error(f"Error processing ACARS message: {e}", exc_info=True)
+
+
+
 def process_acars_message(item, file_path):
     try:
         email_received_date = item.datetime_received.date()  # Get only the date part
@@ -856,32 +977,81 @@ def process_acars_message(item, file_path):
         ]
 
         logger.info(f"Searching flights from {search_dates[0]} to {search_dates[-1]} for ACARS event {acars_event}")
+        logger.info(f"ACARS codes: {dep_code}-{arr_code} (these could be IATA or ICAO)")
 
-        # First, try to get matching flights with flight number and date range
+        # Try multiple search strategies to find the flight
+        flights = None
+
+        # Strategy 1: Try with IATA codes first (most common)
+        logger.info("Strategy 1: Searching with IATA codes")
         flights = FlightData.objects.filter(
             flight_no=flight_no,
             tail_no=tail_number,
             dep_code_iata=dep_code,
             arr_code_iata=arr_code,
-            sd_date_utc__in=search_dates  # Now only includes yesterday + today
+            sd_date_utc__in=search_dates
         )
+        if flights.exists():
+            logger.info(f"Found {flights.count()} flights using IATA codes")
 
-        # If no flights found, try matching without flight number but with date range
+        # Strategy 2: If no flights found with IATA, try with ICAO codes
         if not flights.exists():
+            logger.info("Strategy 2: Searching with ICAO codes")
+            flights = FlightData.objects.filter(
+                flight_no=flight_no,
+                tail_no=tail_number,
+                dep_code_icao=dep_code,
+                arr_code_icao=arr_code,
+                sd_date_utc__in=search_dates
+            )
+            if flights.exists():
+                logger.info(f"Found {flights.count()} flights using ICAO codes")
+
+        # Strategy 3: Try without flight number but with IATA codes
+        if not flights.exists():
+            logger.info("Strategy 3: Searching without flight number, using IATA codes")
             flights = FlightData.objects.filter(
                 tail_no=tail_number,
                 dep_code_iata=dep_code,
                 arr_code_iata=arr_code,
                 sd_date_utc__in=search_dates
             )
+            if flights.exists():
+                logger.info(f"Found {flights.count()} flights using tail + IATA codes")
+
+        # Strategy 4: Try without flight number but with ICAO codes
+        if not flights.exists():
+            logger.info("Strategy 4: Searching without flight number, using ICAO codes")
+            flights = FlightData.objects.filter(
+                tail_no=tail_number,
+                dep_code_icao=dep_code,
+                arr_code_icao=arr_code,
+                sd_date_utc__in=search_dates
+            )
+            if flights.exists():
+                logger.info(f"Found {flights.count()} flights using tail + ICAO codes")
+
+        # Strategy 5: Try with just flight number and tail (broadest search)
+        if not flights.exists():
+            logger.info("Strategy 5: Searching with just flight number and tail")
+            flights = FlightData.objects.filter(
+                flight_no=flight_no,
+                tail_no=tail_number,
+                sd_date_utc__in=search_dates
+            )
+            if flights.exists():
+                logger.info(f"Found {flights.count()} flights using flight number + tail only")
+                # Log the routes found to help debug
+                for flight in flights:
+                    logger.info(f"  Flight found: {flight.flight_no} {flight.dep_code_iata}/{flight.dep_code_icao} -> {flight.arr_code_iata}/{flight.arr_code_icao}")
 
         # Additional safety check: Never update flights scheduled for future dates
-        if flights.exists():
+        if flights and flights.exists():
             # Filter out any flights scheduled for future dates as an extra safety measure
             flights = flights.filter(sd_date_utc__lte=email_received_date)
             
-        if not flights.exists():
-            logger.info(f"No matching YESTERDAY/TODAY flights found for flight number: {flight_no}")
+        if not flights or not flights.exists():
+            logger.warning(f"No matching flights found after all search strategies")
             send_mail(
                 subject=f"No matching flights found for flight number: {flight_no}",
                 message=(
@@ -892,8 +1062,14 @@ def process_acars_message(item, file_path):
                     f"Flight details: {flight_no}, Tail: {tail_number}, Route: {dep_code}-{arr_code}\n"
                     f"ACARS Event: {acars_event}\n"
                     f"Search range: {search_dates[0]} to {search_dates[-1]} (yesterday and today only)\n\n"
-                    f"Note: ACARS only processes flights from yesterday and today, not future flights.\n\n"
-                    f"Please review and update manually if needed.\n\n"
+                    f"Search strategies attempted:\n"
+                    f"1. Flight + Tail + IATA codes ({dep_code}-{arr_code})\n"
+                    f"2. Flight + Tail + ICAO codes ({dep_code}-{arr_code})\n"
+                    f"3. Tail + IATA codes ({dep_code}-{arr_code})\n"
+                    f"4. Tail + ICAO codes ({dep_code}-{arr_code})\n"
+                    f"5. Flight + Tail only\n\n"
+                    f"Note: ACARS codes could be either IATA or ICAO format.\n"
+                    f"Please verify the flight exists in the system and airport codes match.\n\n"
                     f"Regards,\nFlightOps Team"
                 ),
                 from_email=settings.EMAIL_HOST_USER,
@@ -919,7 +1095,9 @@ def process_acars_message(item, file_path):
                         f"scheduled for {selected_flight.sd_date_utc} with ACARS received on {email_received_date}")
             return
 
-        logger.info(f"Selected flight: {selected_flight.flight_no} ({selected_flight.tail_no}) on {selected_flight.sd_date_utc} for {acars_event} event")
+        logger.info(f"Selected flight: {selected_flight.flight_no} ({selected_flight.tail_no}) on {selected_flight.sd_date_utc}")
+        logger.info(f"Flight route: {selected_flight.dep_code_iata}/{selected_flight.dep_code_icao} -> {selected_flight.arr_code_iata}/{selected_flight.arr_code_icao}")
+        logger.info(f"Updating {acars_event} event to {event_time}")
 
         # Update the appropriate field based on ACARS event
         if acars_event == "OT":
