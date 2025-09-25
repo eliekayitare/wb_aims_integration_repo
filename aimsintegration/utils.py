@@ -582,7 +582,7 @@ def process_acars_message(item, file_path):
         # If no flights found, try matching without flight number but with date range
         if not flights.exists():
             flights = FlightData.objects.filter(
-                tail_number=tail_number,
+                tail_no=tail_number,
                 dep_code_iata=dep_code,
                 arr_code_iata=arr_code,
                 sd_date_utc__in=search_dates
