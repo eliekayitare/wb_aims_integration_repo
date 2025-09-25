@@ -274,7 +274,7 @@ CELERY_BEAT_SCHEDULE = {
     # Flight Schedules - Runs every 10 minutes after initial run
     'fetch-flight-schedules-every-10-minutes': {
         'task': 'aimsintegration.tasks.fetch_flight_schedules',
-        'schedule': crontab(minute='*/2'),  # Every 10 minutes
+        'schedule': crontab(minute='*/10'),  # Every 10 minutes
         
     },
     # ACARS Messages - Runs every 3 minutes
@@ -360,7 +360,7 @@ CELERY_BEAT_SCHEDULE = {
      # Job 97: fetch flight-crew assignments every 10 minutes
     'fetch-job97-every-10-minutes': {
         'task': 'aimsintegration.tasks.fetch_job97',
-        'schedule': crontab(minute='*/2'),
+        'schedule': crontab(minute='*/240'),
     },
     # Job 1008: fetch static crew details every 15 minutes
     'fetch-job1008-every-15-minutes': {
