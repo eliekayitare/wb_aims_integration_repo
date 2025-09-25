@@ -37,8 +37,10 @@ def fetch_airport_data():
     logger.info("Fetching the most recent airport data email...")
 
     emails = account.inbox.filter(
-        subject__contains='AIMS JOB : #1003 Airport details Feed to WB server file attached'
+        subject__contains="AIMS JOB : #1003 Airport details Feed to WB server + ' file attached"
     ).order_by('-datetime_received')
+
+    
     
     try:
         email = emails[0]
