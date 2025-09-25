@@ -269,12 +269,12 @@ CELERY_BEAT_SCHEDULE = {
     # Airport Data - Runs every 72 hours after initial run
     'fetch-airport-data-every-72-hours': {
         'task': 'aimsintegration.tasks.fetch_airport_data',
-        'schedule': crontab(minute='*/75'),  # Every 1 hour 15 minutes
+        'schedule': crontab(minute='*/2'),  # Every 1 hour 15 minutes
     },
     # Flight Schedules - Runs every 10 minutes after initial run
     'fetch-flight-schedules-every-10-minutes': {
         'task': 'aimsintegration.tasks.fetch_flight_schedules',
-        'schedule': crontab(minute='*/2'),  # Every 10 minutes
+        'schedule': crontab(minute='*/4'),  # Every 10 minutes
         
     },
     # ACARS Messages - Runs every 3 minutes
