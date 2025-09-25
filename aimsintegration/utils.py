@@ -152,6 +152,192 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# def process_flight_schedule_file(attachment):
+#     """
+#     Process the flight schedule file with proper duplicate prevention.
+#     Ensures one unique flight number per day per route.
+#     """
+#     try:
+#         content = attachment.content.decode('utf-8').splitlines()
+#         logger.info("Starting to process the flight schedule file...")
+
+#         for line_num, line in enumerate(content, start=1):
+#             try:
+#                 # Split the line based on comma delimiter
+#                 fields = line.split(',')
+
+#                 # Ensure all fields are stripped of surrounding quotes
+#                 fields = [field.strip().replace('"', '') for field in fields]
+
+#                 # Extract fields
+#                 flight_date = fields[0]
+#                 tail_no = fields[1]
+#                 flight_no = fields[2]
+#                 flight_leg_code = fields[3] if len(fields) > 3 else None
+#                 dep_code_icao = fields[4]
+#                 arr_code_icao = fields[5]
+#                 std = fields[6]
+#                 sta = fields[7]
+#                 flight_service_type = fields[8] if len(fields) > 8 else None
+#                 etd = fields[9] if len(fields) > 9 else None
+#                 eta = fields[10] if len(fields) > 10 else None
+#                 atd = fields[11] if len(fields) > 11 else None
+#                 takeoff = fields[12] if len(fields) > 12 else None
+#                 touchdown = fields[13] if len(fields) > 13 else None
+#                 ata = fields[14] if len(fields) > 14 else None
+#                 arrival_date = fields[15] if len(fields) > 15 else None
+
+#                 logger.info(f"Processing: Flight {flight_no}, Tail {tail_no}, Date {flight_date}, Route {dep_code_icao}-{arr_code_icao}")
+
+#                 # Parse dates and times
+#                 try:
+#                     sd_date_utc = datetime.strptime(flight_date, "%m%d%Y").date()
+#                     sa_date_utc = datetime.strptime(arrival_date, "%m/%d/%Y").date() if arrival_date else None
+#                     std_utc = datetime.strptime(std, "%H:%M").time()
+#                     sta_utc = datetime.strptime(sta, "%H:%M").time()
+#                     atd_utc = datetime.strptime(atd, "%H:%M").time() if atd else None
+#                     takeoff_utc = datetime.strptime(takeoff, "%H:%M").time() if takeoff else None
+#                     touchdown_utc = datetime.strptime(touchdown, "%H:%M").time() if touchdown else None
+#                     ata_utc = datetime.strptime(ata, "%H:%M").time() if ata else None
+#                 except ValueError as e:
+#                     logger.error(f"Skipping line {line_num} due to date/time format error: {e} - {line}")
+#                     continue
+
+#                 # Fetch airport data
+#                 dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
+#                 arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
+
+#                 if not dep_airport or not arr_airport:
+#                     logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
+#                     continue
+
+#                 dep_code_iata = dep_airport.iata_code
+#                 arr_code_iata = arr_airport.iata_code
+
+#                 # FIXED: Proper duplicate detection - flight number should be unique per day per route
+#                 # Don't include tail_no, std_utc, sta_utc in the filter as these can change during rescheduling
+#                 flight_no = flight_no+flight_leg_code if flight_leg_code else flight_no
+#                 existing_record = FlightData.objects.filter(
+#                     flight_no=flight_no,
+#                     sd_date_utc=sd_date_utc,
+#                     dep_code_icao=dep_code_icao,
+#                     arr_code_icao=arr_code_icao,
+#                 ).first()
+
+#                 # Process record with transaction.atomic()
+#                 with transaction.atomic():
+#                     if existing_record:
+#                         logger.info(f"Found existing record for flight {flight_no} on {sd_date_utc}. Updating...")
+                        
+#                         # Always update scheduled data (this handles reschedules)
+#                         updated = False
+                        
+#                         # Update tail number (aircraft swap)
+#                         if existing_record.tail_no != tail_no:
+#                             logger.info(f"Updating tail number: {existing_record.tail_no} → {tail_no}")
+#                             existing_record.tail_no = tail_no
+#                             updated = True
+                        
+#                         # Update scheduled times (reschedule)
+#                         if existing_record.std_utc != std_utc:
+#                             logger.info(f"Updating STD: {existing_record.std_utc} → {std_utc}")
+#                             existing_record.std_utc = std_utc
+#                             updated = True
+                            
+#                         if existing_record.sta_utc != sta_utc:
+#                             logger.info(f"Updating STA: {existing_record.sta_utc} → {sta_utc}")
+#                             existing_record.sta_utc = sta_utc
+#                             updated = True
+                        
+#                         # Update scheduled arrival date
+#                         if sa_date_utc and existing_record.sa_date_utc != sa_date_utc:
+#                             logger.info(f"Updating SA date: {existing_record.sa_date_utc} → {sa_date_utc}")
+#                             existing_record.sa_date_utc = sa_date_utc
+#                             updated = True
+                        
+#                         # Update IATA codes if they changed (unlikely but possible)
+#                         if existing_record.dep_code_iata != dep_code_iata:
+#                             existing_record.dep_code_iata = dep_code_iata
+#                             updated = True
+#                         if existing_record.arr_code_iata != arr_code_iata:
+#                             existing_record.arr_code_iata = arr_code_iata
+#                             updated = True
+                        
+#                         # IMPORTANT: Only update actual times if they don't exist yet
+#                         # This prevents overwriting ACARS data with schedule data
+#                         if atd_utc and not existing_record.atd_utc:
+#                             logger.info(f"Setting initial ATD from schedule: {atd_utc}")
+#                             existing_record.atd_utc = atd_utc
+#                             updated = True
+#                         elif atd_utc and existing_record.atd_utc:
+#                             logger.info(f"Preserving existing ATD: {existing_record.atd_utc} (ignoring schedule ATD: {atd_utc})")
+                        
+#                         if takeoff_utc and not existing_record.takeoff_utc:
+#                             logger.info(f"Setting initial takeoff from schedule: {takeoff_utc}")
+#                             existing_record.takeoff_utc = takeoff_utc
+#                             updated = True
+#                         elif takeoff_utc and existing_record.takeoff_utc:
+#                             logger.info(f"Preserving existing takeoff: {existing_record.takeoff_utc} (ignoring schedule: {takeoff_utc})")
+                        
+#                         if touchdown_utc and not existing_record.touchdown_utc:
+#                             logger.info(f"Setting initial touchdown from schedule: {touchdown_utc}")
+#                             existing_record.touchdown_utc = touchdown_utc
+#                             updated = True
+#                         elif touchdown_utc and existing_record.touchdown_utc:
+#                             logger.info(f"Preserving existing touchdown: {existing_record.touchdown_utc} (ignoring schedule: {touchdown_utc})")
+                        
+#                         if ata_utc and not existing_record.ata_utc:
+#                             logger.info(f"Setting initial ATA from schedule: {ata_utc}")
+#                             existing_record.ata_utc = ata_utc
+#                             updated = True
+#                         elif ata_utc and existing_record.ata_utc:
+#                             logger.info(f"Preserving existing ATA: {existing_record.ata_utc} (ignoring schedule: {ata_utc})")
+                        
+#                         # Update raw content for audit trail
+#                         new_raw_content = ",".join(fields)
+#                         if existing_record.raw_content != new_raw_content:
+#                             existing_record.raw_content = new_raw_content
+#                             updated = True
+                        
+#                         if updated:
+#                             existing_record.save()
+#                             logger.info(f"✅ Updated flight {flight_no} on {sd_date_utc}")
+#                         else:
+#                             logger.info(f"ℹ️  No changes needed for flight {flight_no} on {sd_date_utc}")
+                    
+#                     else:
+#                         # Create a new record - this should only happen for truly new flights
+#                         new_flight = FlightData.objects.create(
+#                             flight_no=flight_no,
+#                             tail_no=tail_no,
+#                             dep_code_iata=dep_code_iata,
+#                             dep_code_icao=dep_code_icao,
+#                             arr_code_iata=arr_code_iata,
+#                             arr_code_icao=arr_code_icao,
+#                             sd_date_utc=sd_date_utc,
+#                             sa_date_utc=sa_date_utc,
+#                             std_utc=std_utc,
+#                             sta_utc=sta_utc,
+#                             atd_utc=atd_utc,
+#                             takeoff_utc=takeoff_utc,
+#                             touchdown_utc=touchdown_utc,
+#                             ata_utc=ata_utc,
+#                             source_type="FDM",
+#                             raw_content=",".join(fields),
+#                         )
+#                         logger.info(f"✨ Created new flight record: {flight_no} on {sd_date_utc} (ID: {new_flight.id})")
+
+#             except Exception as e:
+#                 logger.error(f"❌ Error processing line {line_num}: {e} - {fields}", exc_info=True)
+#                 continue
+
+#         logger.info("✅ Flight schedule file processed successfully.")
+
+#     except Exception as e:
+#         logger.error(f"❌ Error processing flight schedule file: {e}", exc_info=True)
+
+
+
 def process_flight_schedule_file(attachment):
     """
     Process the flight schedule file with proper duplicate prevention.
@@ -174,8 +360,8 @@ def process_flight_schedule_file(attachment):
                 tail_no = fields[1]
                 flight_no = fields[2]
                 flight_leg_code = fields[3] if len(fields) > 3 else None
-                dep_code_icao = fields[4]
-                arr_code_icao = fields[5]
+                dep_code = fields[4]  # Could be IATA or ICAO
+                arr_code = fields[5]  # Could be IATA or ICAO
                 std = fields[6]
                 sta = fields[7]
                 flight_service_type = fields[8] if len(fields) > 8 else None
@@ -187,7 +373,7 @@ def process_flight_schedule_file(attachment):
                 ata = fields[14] if len(fields) > 14 else None
                 arrival_date = fields[15] if len(fields) > 15 else None
 
-                logger.info(f"Processing: Flight {flight_no}, Tail {tail_no}, Date {flight_date}, Route {dep_code_icao}-{arr_code_icao}")
+                logger.info(f"Processing: Flight {flight_no}, Tail {tail_no}, Date {flight_date}, Route {dep_code}-{arr_code}")
 
                 # Parse dates and times
                 try:
@@ -203,16 +389,24 @@ def process_flight_schedule_file(attachment):
                     logger.error(f"Skipping line {line_num} due to date/time format error: {e} - {line}")
                     continue
 
-                # Fetch airport data
-                dep_airport = AirportData.objects.filter(icao_code=dep_code_icao).first()
-                arr_airport = AirportData.objects.filter(icao_code=arr_code_icao).first()
+                # Fetch airport data - try IATA first, then ICAO as fallback
+                dep_airport = AirportData.objects.filter(iata_code=dep_code).first()
+                if not dep_airport:
+                    dep_airport = AirportData.objects.filter(icao_code=dep_code).first()
+
+                arr_airport = AirportData.objects.filter(iata_code=arr_code).first()
+                if not arr_airport:
+                    arr_airport = AirportData.objects.filter(icao_code=arr_code).first()
 
                 if not dep_airport or not arr_airport:
-                    logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code_icao} or {arr_code_icao}")
+                    logger.warning(f"Skipping line {line_num} due to missing airport data: {dep_code} or {arr_code}")
                     continue
 
+                # Get both IATA and ICAO codes for storage
                 dep_code_iata = dep_airport.iata_code
+                dep_code_icao = dep_airport.icao_code
                 arr_code_iata = arr_airport.iata_code
+                arr_code_icao = arr_airport.icao_code
 
                 # FIXED: Proper duplicate detection - flight number should be unique per day per route
                 # Don't include tail_no, std_utc, sta_utc in the filter as these can change during rescheduling
