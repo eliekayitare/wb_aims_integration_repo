@@ -6,50 +6,140 @@ import re
 from django.core.mail import send_mail
 logger = logging.getLogger(__name__)
 
+# def process_airport_file(attachment):
+#     """
+#     Process the airport data file and store records in the AirportData table.
+#     """
+#     try:
+#         content = attachment.content.decode('utf-8').splitlines()
+
+#         logger.info(f"Processing {len(content)} lines of airport data.")
+
+#         for line in content:
+#             fields = line.split()
+#             logger.info(f"Processing line: {line}")
+
+#             if len(fields) >= 3:
+#                 icao_code = fields[0]
+#                 iata_code = fields[1]
+#                 airport_name = " ".join(fields[2:])
+                
+#                 # Log the data extracted from the line
+#                 logger.info(f"Extracted data - ICAO: {icao_code}, IATA: {iata_code}, Airport Name: {airport_name}")
+
+#                 # Insert or update the airport data
+#                 airport, created = AirportData.objects.get_or_create(
+#                     iata_code=iata_code,
+#                     defaults={
+#                         'icao_code': icao_code,
+#                         'airport_name': airport_name,
+#                         'raw_content': line  # Store raw line for reference
+#                     }
+#                 )
+
+#                 if created:
+#                     logger.info(f"Inserted new airport record for {iata_code} - {airport_name}")
+#                 else:
+#                     airport.icao_code = icao_code
+#                     airport.airport_name = airport_name
+#                     airport.save()
+#                     logger.info(f"Updated existing airport record for {iata_code}")
+
+#         logger.info("Airport data processed successfully.")
+#     except Exception as e:
+#         logger.error(f"Error processing airport data file: {e}")
+
+import csv
+from io import StringIO
+
 def process_airport_file(attachment):
     """
     Process the airport data file and store records in the AirportData table.
+    Updated to handle CSV format with quoted fields.
     """
     try:
-        content = attachment.content.decode('utf-8').splitlines()
-
-        logger.info(f"Processing {len(content)} lines of airport data.")
-
-        for line in content:
-            fields = line.split()
-            logger.info(f"Processing line: {line}")
-
-            if len(fields) >= 3:
-                icao_code = fields[0]
-                iata_code = fields[1]
-                airport_name = " ".join(fields[2:])
+        content = attachment.content.decode('utf-8')
+        logger.info(f"Processing airport data file with {len(content)} characters.")
+        
+        # Split content into lines and process each line
+        lines = content.strip().splitlines()
+        processed_count = 0
+        error_count = 0
+        
+        for line_num, line in enumerate(lines, 1):
+            try:
+                # Skip empty lines
+                if not line.strip():
+                    continue
+                
+                # Split by comma
+                fields = line.split(',')
+                
+                # Skip rows with insufficient data
+                if len(fields) < 4:
+                    logger.warning(f"Line {line_num}: Insufficient data - {line}")
+                    continue
+                
+                # Extract fields
+                iata_code = fields[0].strip() if fields[0] else None
+                icao_code = fields[1].strip() if fields[1] else None
+                airport_name = fields[2].strip() if fields[2] else None
+                country_code = fields[3].strip() if fields[3] else None
+                
+                # Skip rows with missing essential data
+                if not iata_code or not airport_name:
+                    logger.warning(f"Line {line_num}: Missing IATA code or airport name - IATA: {iata_code}, Name: {airport_name}")
+                    continue
+                
+                # Handle empty ICAO codes (some entries have empty ICAO)
+                if not icao_code:
+                    icao_code = None
+                
+                # Clean up airport name (remove extra spaces)
+                airport_name = ' '.join(airport_name.split())
                 
                 # Log the data extracted from the line
-                logger.info(f"Extracted data - ICAO: {icao_code}, IATA: {iata_code}, Airport Name: {airport_name}")
-
+                logger.info(f"Line {line_num}: IATA: {iata_code}, ICAO: {icao_code}, Airport: {airport_name}, Country: {country_code}")
+                
                 # Insert or update the airport data
                 airport, created = AirportData.objects.get_or_create(
                     iata_code=iata_code,
                     defaults={
                         'icao_code': icao_code,
                         'airport_name': airport_name,
-                        'raw_content': line  # Store raw line for reference
+                        'raw_content': line  # Store original line
                     }
                 )
-
+                
                 if created:
                     logger.info(f"Inserted new airport record for {iata_code} - {airport_name}")
+                    processed_count += 1
                 else:
-                    airport.icao_code = icao_code
-                    airport.airport_name = airport_name
-                    airport.save()
-                    logger.info(f"Updated existing airport record for {iata_code}")
-
-        logger.info("Airport data processed successfully.")
+                    # Update existing record
+                    updated = False
+                    if airport.icao_code != icao_code:
+                        airport.icao_code = icao_code
+                        updated = True
+                    if airport.airport_name != airport_name:
+                        airport.airport_name = airport_name
+                        updated = True
+                    
+                    if updated:
+                        airport.save()
+                        logger.info(f"Updated existing airport record for {iata_code}")
+                        processed_count += 1
+                    else:
+                        logger.info(f"No changes needed for airport {iata_code}")
+                        
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Line {line_num}: Error processing line '{line}': {e}")
+        
+        logger.info(f"Airport data processing complete: {processed_count} processed, {error_count} errors")
+        
     except Exception as e:
         logger.error(f"Error processing airport data file: {e}")
-
-
+        raise
 
 
 from datetime import datetime
