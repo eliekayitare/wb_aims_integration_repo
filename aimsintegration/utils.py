@@ -52,6 +52,9 @@ logger = logging.getLogger(__name__)
 import csv
 from io import StringIO
 
+import csv
+from io import StringIO
+
 def process_airport_file(attachment):
     """
     Process the airport data file and store records in the AirportData table.
@@ -80,11 +83,11 @@ def process_airport_file(attachment):
                     logger.warning(f"Line {line_num}: Insufficient data - {line}")
                     continue
                 
-                # Extract fields
-                iata_code = fields[0].strip() if fields[0] else None
-                icao_code = fields[1].strip() if fields[1] else None
-                airport_name = fields[2].strip() if fields[2] else None
-                country_code = fields[3].strip() if fields[3] else None
+                # Extract fields and strip any quotes
+                iata_code = fields[0].strip().strip('"') if fields[0] else None
+                icao_code = fields[1].strip().strip('"') if fields[1] else None
+                airport_name = fields[2].strip().strip('"') if fields[2] else None
+                country_code = fields[3].strip().strip('"') if fields[3] else None
                 
                 # Skip rows with missing essential data
                 if not iata_code or not airport_name:
