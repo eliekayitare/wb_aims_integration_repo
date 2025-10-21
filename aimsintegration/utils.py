@@ -2522,19 +2522,15 @@ def process_job1008_file(attachment):
 #     return flight_date
 
 
-
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
-    Also create QatarFlightCrewAssignment records for the flight.
-    Uses Job 97 data for crew/tail/date and FlightData for operational details.
-    UPDATED: Always updates database with RTF data (RTF is source of truth)
+    IMPROVED: Detects crew entries by crew ID (2-4 digits) on each line, then parses entire line.
+    Returns tuple: (flight_date, crew_entries) for use in EDIFACT generation.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
-    logger.debug(f"RTF raw size: {len(raw)} characters")
     text = rtf_to_text(raw)
     lines = [ln for ln in text.splitlines() if ln.strip()]
-    logger.debug(f"Extracted {len(lines)} non-empty lines")
 
     logger.info(f"Total lines in RTF: {len(lines)}")
 
@@ -2543,16 +2539,13 @@ def process_job97_file(attachment):
     flight_date = None
     tail_number = None
     
-    # Parse flight details from header
-    for i, line in enumerate(lines[:25]):  # Check first 25 lines for flight info
+    for i, line in enumerate(lines[:25]):
         line = line.strip()
         
-        # Look for flight number (e.g., "WB301")
         if re.match(r'^WB\d+$', line):
             flight_number = line
             logger.info(f"Found flight number: {flight_number}")
         
-        # Look for date (e.g., "03/08/2025" or "24/07/2025")
         elif re.match(r'^\d{2}/\d{2}/\d{4}$', line):
             try:
                 flight_date = datetime.strptime(line, '%d/%m/%Y').date()
@@ -2560,7 +2553,6 @@ def process_job97_file(attachment):
             except ValueError:
                 pass
         
-        # Look for tail number (e.g., "9XR-WQ")
         elif re.match(r'^\d[A-Z]{2}-[A-Z]{2}$', line):
             tail_number = line
             logger.info(f"Found tail number: {tail_number}")
@@ -2568,156 +2560,142 @@ def process_job97_file(attachment):
     logger.info(f"Job 97 flight info - Number: {flight_number}, Date: {flight_date}, Tail: {tail_number}")
 
     crew_entries = []
-    
-    # Look for the start of crew data - after "EXPIRY" header
     crew_data_started = False
-    i = 0
     
-    while i < len(lines):
-        line = lines[i].strip()
+    for line in lines:
+        line = line.strip()
         
-        # Skip until we find the crew data section
+        # Start looking for crew after "EXPIRY" or "ON THIS STAGE" header
         if not crew_data_started:
-            if "EXPIRY" in line:
+            if "EXPIRY" in line or "ON THIS STAGE" in line:
                 crew_data_started = True
-                logger.info(f"Crew data section starts after line {i}: {line}")
-            i += 1
+                logger.info(f"Crew data section started")
             continue
         
-        # Skip location markers, empty lines, and section dividers
-        if (line in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 'Embarking:', 
-                    'Disembarking:', 'Through on same flight', 'ON THIS STAGE'] or 
-            line.startswith('...') or 
-            not line or
-            'DECLARATION OF HEALTH' in line or
-            'FOR OFFICIAL USE' in line):
-            i += 1
+        # Stop at declaration section
+        if "DECLARATION OF HEALTH" in line or "FOR OFFICIAL USE" in line:
+            break
+        
+        # Skip section markers and empty lines
+        if (line in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 
+                    'Embarking:', 'Disembarking:', 'Through on same flight'] or 
+            line.startswith('...') or not line):
             continue
         
-        # Check if this line is a crew ID (3-4 digits)
-        if line.isdigit() and len(line) >= 3 and len(line) <= 4:
-            crew_id = line
-            logger.info(f"Found crew ID: {crew_id} at line {i}")
-            
-            # Initialize crew data variables
-            name = None
-            role = None
-            passport = None
-            birth_date = None
-            gender = None
-            nationality = None
-            expiry = None
-            
-            # Parse the next lines for this crew member's data
-            j = i + 1
-            
-            # Look for name line (next non-empty line that's not a section marker)
-            while j < len(lines):
-                next_line = lines[j].strip()
-                if next_line and not next_line.startswith('...') and \
-                   next_line not in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 
-                                   'Embarking:', 'Disembarking:', 'Through on same flight']:
-                    # This should be the name line
-                    # Check if it contains an embedded role (uppercase 2-3 letter word at the end)
-                    name_parts = next_line.split()
-                    if len(name_parts) > 1 and len(name_parts[-1]) <= 3 and name_parts[-1].isupper():
-                        # Likely has embedded role
-                        embedded_role = name_parts[-1]
-                        name = ' '.join(name_parts[:-1]).strip()
-                        logger.info(f"  Found name with embedded role: {name} ({embedded_role})")
-                    else:
-                        name = next_line.strip()
-                        logger.info(f"  Found name: {name}")
-                    j += 1
-                    break
-                j += 1
-            
-            # Look for role line (if not embedded in name)
-            if j < len(lines):
-                next_line = lines[j].strip()
-                # Check if it's a short uppercase string (likely a role)
-                if len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
-                    role = next_line
-                    logger.info(f"  Found role: {role}")
-                    j += 1
-                elif 'embedded_role' in locals():
-                    role = embedded_role
-                    logger.info(f"  Using embedded role: {role}")
-            
-            # Look for passport line (alphanumeric string, often starting with letters)
-            if j < len(lines):
-                next_line = lines[j].strip()
-                # Passport: alphanumeric, usually 6+ chars, may start with letters
-                if len(next_line) >= 6 and next_line.isalnum():
-                    passport = next_line
-                    logger.info(f"  Found passport: {passport}")
-                    j += 1
-            
-            # Look for birth date line (dd/mm/yy format)
-            if j < len(lines):
-                next_line = lines[j].strip()
-                if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
-                    birth_date = next_line
-                    logger.info(f"  Found birth date: {birth_date}")
-                    j += 1
-            
-            # Look for gender line (single character M or F)
-            if j < len(lines):
-                next_line = lines[j].strip()
-                if len(next_line) == 1 and next_line.upper() in ['M', 'F']:
-                    gender = next_line.upper()
-                    logger.info(f"  Found gender: {gender}")
-                    j += 1
-            
-            # Look for nationality line (2-3 letter code or full country name)
-            if j < len(lines):
-                next_line = lines[j].strip()
-                # Nationality: 2-3 letter code OR longer country name (all uppercase/title case)
-                if (len(next_line) >= 2 and next_line.isalpha() and 
-                    (next_line.isupper() or next_line.istitle())):
-                    nationality = next_line
-                    logger.info(f"  Found nationality: {nationality}")
-                    j += 1
-            
-            # Look for expiry date line (dd/mm/yy format)
-            if j < len(lines):
-                next_line = lines[j].strip()
-                if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
-                    expiry = next_line
-                    logger.info(f"  Found expiry: {expiry}")
-                    j += 1
-            
-            # Create crew entry if we have minimum required data
-            if crew_id and name:
-                crew_entry = {
-                    'crew_id': crew_id,
-                    'name': name,
-                    'role': role,
-                    'passport': passport,
-                    'birth_date': birth_date,
-                    'gender': gender,
-                    'nationality': nationality,
-                    'expiry': expiry
-                }
-                crew_entries.append(crew_entry)
-                logger.info(f"Successfully parsed crew entry: {crew_entry}")
-            
-            # Move to the next position
-            i = j
+        # Split line into tokens
+        tokens = line.split()
+        if not tokens:
+            continue
+        
+        first_token = tokens[0]
+        
+        # Check if this line starts with crew ID (2-4 digits)
+        if not (first_token.isdigit() and 2 <= len(first_token) <= 4):
+            continue
+        
+        crew_id = first_token
+        logger.info(f"\n🔍 Processing crew ID: {crew_id}")
+        logger.info(f"   Full line: {line}")
+        
+        # Parse the entire line - remove asterisks and dots
+        parts = [p for p in tokens[1:] if p not in ['*', '...', '...']]
+        
+        logger.info(f"   Tokens to parse: {parts}")
+        
+        # Initialize crew data
+        name_parts = []
+        role = None
+        passport = None
+        birth_date = None
+        gender = None
+        nationality = None
+        expiry = None
+        
+        idx = 0
+        
+        # Step 1: Collect name parts until we hit a role code
+        role_codes = ['CP', 'FP', 'SA', 'FA', 'AC', 'PIC']
+        while idx < len(parts):
+            part = parts[idx]
+            if part in role_codes:
+                role = part
+                idx += 1
+                logger.info(f"   ✓ Role: {role}")
+                break
+            else:
+                name_parts.append(part)
+                idx += 1
+        
+        name = ' '.join(name_parts).strip() if name_parts else None
+        if name:
+            logger.info(f"   ✓ Name: {name}")
+        
+        # Step 2: Next should be passport (alphanumeric, 6+ chars)
+        if idx < len(parts):
+            part = parts[idx]
+            if len(part) >= 6 and part.isalnum():
+                passport = part
+                idx += 1
+                logger.info(f"   ✓ Passport: {passport}")
+        
+        # Step 3: Birth date (dd/mm/yy format)
+        if idx < len(parts):
+            part = parts[idx]
+            if re.match(r'^\d{2}/\d{2}/\d{2}$', part):
+                birth_date = part
+                idx += 1
+                logger.info(f"   ✓ Birth Date: {birth_date}")
+        
+        # Step 4: Gender (M or F)
+        if idx < len(parts):
+            part = parts[idx]
+            if len(part) == 1 and part.upper() in ['M', 'F']:
+                gender = part.upper()
+                idx += 1
+                logger.info(f"   ✓ Gender: {gender}")
+        
+        # Step 5: Nationality (2-3 letter code)
+        if idx < len(parts):
+            part = parts[idx]
+            if 2 <= len(part) <= 3 and part.isupper() and part.isalpha():
+                nationality = part
+                idx += 1
+                logger.info(f"   ✓ Nationality: {nationality}")
+        
+        # Step 6: Expiry date (dd/mm/yy format)
+        if idx < len(parts):
+            part = parts[idx]
+            if re.match(r'^\d{2}/\d{2}/\d{2}$', part):
+                expiry = part
+                idx += 1
+                logger.info(f"   ✓ Expiry: {expiry}")
+        
+        # Create crew entry if we have minimum data
+        if crew_id and name:
+            crew_entry = {
+                'crew_id': crew_id,
+                'name': name,
+                'role': role,
+                'passport': passport,
+                'birth_date': birth_date,
+                'gender': gender,
+                'nationality': nationality,
+                'expiry': expiry
+            }
+            crew_entries.append(crew_entry)
+            logger.info(f"   ✅ Crew entry created successfully")
         else:
-            i += 1
+            logger.warning(f"   ⚠️  Skipped - missing crew_id or name")
 
-    logger.info(f"Found {len(crew_entries)} crew entries in Job 97")
+    logger.info(f"\n📊 Found {len(crew_entries)} crew entries in Job 97\n")
 
-    # Find the flight record using Job 97 data (tail, flight number, date)
+    # Find the flight record
     flight_record = None
     if flight_number and flight_date and tail_number:
         try:
-            # Extract numeric flight number (remove WB prefix if present)
             numeric_flight_no = flight_number[2:] if flight_number.startswith('WB') else flight_number
-            logger.info(f"Searching for flight using Job 97 data - Flight: {numeric_flight_no}, Date: {flight_date}, Tail: {tail_number}")
+            logger.info(f"Searching for flight - Flight: {numeric_flight_no}, Date: {flight_date}, Tail: {tail_number}")
             
-            # Primary search: Match flight number, date, and tail number
             flight_record = FlightData.objects.filter(
                 flight_no=numeric_flight_no,
                 sd_date_utc=flight_date,
@@ -2725,18 +2703,15 @@ def process_job97_file(attachment):
             ).first()
             
             if not flight_record:
-                # Fallback: Try without tail number (in case tail numbers don't match exactly)
                 flight_record = FlightData.objects.filter(
                     flight_no=numeric_flight_no,
                     sd_date_utc=flight_date
                 ).first()
                 
-                if flight_record:
-                    logger.info(f"Found flight record without tail match: {flight_record}")
-                else:
-                    logger.warning(f"Flight record not found for {numeric_flight_no} on {flight_date}")
+            if flight_record:
+                logger.info(f"✓ Found flight record: {flight_record}")
             else:
-                logger.info(f"Found exact flight record match: {flight_record}")
+                logger.warning(f"⚠️  No flight record found")
                 
         except Exception as e:
             logger.error(f"Error finding flight record: {e}")
@@ -2748,9 +2723,9 @@ def process_job97_file(attachment):
     
     for entry in crew_entries:
         try:
-            # Parse dates from RTF format
+            # Parse dates
             birth = None
-            expiry = None
+            expiry_date = None
             
             if entry['birth_date']:
                 try:
@@ -2760,7 +2735,7 @@ def process_job97_file(attachment):
             
             if entry['expiry']:
                 try:
-                    expiry = datetime.strptime(entry['expiry'], '%d/%m/%y').date()
+                    expiry_date = datetime.strptime(entry['expiry'], '%d/%m/%y').date()
                 except Exception as e:
                     logger.warning(f"Could not parse expiry date '{entry['expiry']}': {e}")
 
@@ -2770,47 +2745,40 @@ def process_job97_file(attachment):
             if entry['name']:
                 name_parts = entry['name'].split()
                 if len(name_parts) > 0:
-                    surname = name_parts[-1]  # Last word is surname
+                    surname = name_parts[-1]
                     firstname = ' '.join(name_parts[:-1]) if len(name_parts) > 1 else ''
 
-            # Get or create crew detail record
+            # Get or create crew detail
             crew_detail = QatarCrewDetail.objects.filter(crew_id=entry['crew_id']).first()
             
             if crew_detail:
-                # UPDATE EXISTING RECORD - RTF is source of truth
+                # Update only if RTF has non-None data
                 updated = False
                 
-                # Update birth date if present in RTF
                 if birth and crew_detail.birth_date != birth:
                     crew_detail.birth_date = birth
                     updated = True
                 
-                # Update gender if present in RTF
-                if entry['gender'] and crew_detail.sex != entry['gender']:
+                if entry.get('gender') and crew_detail.sex != entry['gender']:
                     crew_detail.sex = entry['gender']
                     updated = True
                 
-                # Update passport expiry if present in RTF
-                if expiry and crew_detail.passport_expiry != expiry:
-                    crew_detail.passport_expiry = expiry
+                if expiry_date and crew_detail.passport_expiry != expiry_date:
+                    crew_detail.passport_expiry = expiry_date
                     updated = True
                 
-                # Update nationality code if present in RTF
-                if entry['nationality'] and crew_detail.nationality_code != entry['nationality']:
+                if entry.get('nationality') and crew_detail.nationality_code != entry['nationality']:
                     crew_detail.nationality_code = entry['nationality']
                     updated = True
                 
-                # Update passport number if present in RTF
-                if entry['passport'] and crew_detail.passport_number != entry['passport']:
+                if entry.get('passport') and crew_detail.passport_number != entry['passport']:
                     crew_detail.passport_number = entry['passport']
                     updated = True
                 
-                # Update surname if present in RTF
                 if surname and crew_detail.surname != surname:
                     crew_detail.surname = surname
                     updated = True
                 
-                # Update firstname if present in RTF
                 if firstname and crew_detail.firstname != firstname:
                     crew_detail.firstname = firstname
                     updated = True
@@ -2818,154 +2786,62 @@ def process_job97_file(attachment):
                 if updated:
                     crew_detail.save()
                     updated_count += 1
-                    logger.info(f"✅ Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']})")
+                    logger.info(f"✅ Updated crew detail for {entry['crew_id']} - {entry['name']}")
                 else:
-                    logger.info(f"ℹ️  No updates needed for crew detail {entry['crew_id']} - {entry['name']} ({entry['role']})")
+                    logger.info(f"ℹ️  No updates for crew {entry['crew_id']} - {entry['name']}")
             else:
-                # CREATE NEW RECORD from Job 97 data
-                logger.warning(f"⚠️  Creating NEW crew detail for {entry['crew_id']} from Job 97")
-                
+                # Create new crew member
                 crew_detail = QatarCrewDetail.objects.create(
                     crew_id=entry['crew_id'],
                     surname=surname or '',
                     firstname=firstname or '',
-                    passport_number=entry['passport'],
+                    passport_number=entry.get('passport'),
                     birth_date=birth,
-                    sex=entry['gender'],
-                    passport_expiry=expiry,
-                    nationality_code=entry['nationality']
+                    sex=entry.get('gender'),
+                    passport_expiry=expiry_date,
+                    nationality_code=entry.get('nationality')
                 )
                 created_count += 1
-                logger.info(f"✅ Created new crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']})")
+                logger.info(f"✅ Created new crew detail for {entry['crew_id']} - {entry['name']}")
 
-            # Create flight crew assignment if we have a flight record
+            # Create flight assignment
             if flight_record:
                 try:
-                    # Use Job 97 data for crew assignment and FlightData for operational details
                     assignment, created = QatarFlightDetails.objects.update_or_create(
                         crew_id=entry['crew_id'],
                         flight=flight_record,
                         defaults={
-                            # From Job 97 (RTF)
-                            'tail_no': tail_number,  # From Job 97
-                            'dep_date_utc': flight_date,  # From Job 97
-                            'arr_date_utc': flight_date,  # Assume same day
-                            # From FlightData (operational details)
-                            'std_utc': flight_record.std_utc,  # From FlightData
-                            'sta_utc': flight_record.sta_utc,  # From FlightData
+                            'tail_no': tail_number,
+                            'dep_date_utc': flight_date,
+                            'arr_date_utc': flight_date,
+                            'std_utc': flight_record.std_utc,
+                            'sta_utc': flight_record.sta_utc,
                         }
                     )
+                    assignment_count += 1
                     if created:
-                        assignment_count += 1
-                        logger.info(f"✅ Created flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
+                        logger.info(f"✅ Created flight assignment for {entry['crew_id']}")
                     else:
-                        assignment_count += 1  # Count updates too
-                        logger.info(f"🔄 Updated flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
+                        logger.info(f"🔄 Updated flight assignment for {entry['crew_id']}")
                 except Exception as e:
-                    logger.error(f"Failed to create flight assignment for {entry['crew_id']}: {e}")
+                    logger.error(f"Failed to create assignment for {entry['crew_id']}: {e}")
                 
         except Exception as e:
             logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
 
-    logger.info(f"✅ Job 97 processing complete: Updated {updated_count} crew records, created {created_count} new records, processed {assignment_count} flight assignments")
+    logger.info(f"\n✅ Job 97 processing complete:")
+    logger.info(f"   - Updated: {updated_count} crew records")
+    logger.info(f"   - Created: {created_count} new records")
+    logger.info(f"   - Assignments: {assignment_count}")
     
     if flight_record:
-        logger.info(f"📋 Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
+        logger.info(f"   - Flight: {flight_number}({tail_number}) on {flight_date}")
+        logger.info(f"   - Route: {flight_record.dep_code_iata}->{flight_record.arr_code_iata}\n")
 
-    # Return both flight_date and crew_entries for use in EDIFACT generation
+    # Return tuple for EDIFACT generation
     return flight_date, crew_entries
 
 
-
-
-def get_crew_data_with_rtf_fallback(crew_id, rtf_crew_dict):
-    """
-    Get crew data with priority: RTF data first, then database.
-    This ensures EDIFACT generation uses the freshest data from Job 97.
-    
-    Args:
-        crew_id: The crew member ID
-        rtf_crew_dict: Dictionary of crew entries from Job 97 RTF {crew_id: entry}
-    
-    Returns:
-        Dictionary with crew data or None if not found
-    """
-    from datetime import datetime
-    
-    # Check if we have RTF data for this crew
-    rtf_data = rtf_crew_dict.get(crew_id)
-    crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_id).first()
-    
-    if not crew_detail and not rtf_data:
-        return None
-    
-    # Merge data: RTF takes priority, database as fallback
-    result = {}
-    
-    # Name fields - parse from RTF name or use database
-    if rtf_data and rtf_data.get('name'):
-        name_parts = rtf_data['name'].split()
-        result['surname'] = name_parts[-1] if name_parts else ''
-        result['firstname'] = ' '.join(name_parts[:-1]) if len(name_parts) > 1 else ''
-        result['middlename'] = ''  # RTF doesn't have middlename
-    elif crew_detail:
-        result['surname'] = crew_detail.surname
-        result['firstname'] = crew_detail.firstname
-        result['middlename'] = crew_detail.middlename
-    else:
-        result['surname'] = ''
-        result['firstname'] = ''
-        result['middlename'] = ''
-    
-    # Passport number - RTF priority
-    result['passport_number'] = (
-        rtf_data.get('passport') if rtf_data and rtf_data.get('passport') 
-        else (crew_detail.passport_number if crew_detail else None)
-    )
-    
-    # Birth date - RTF priority
-    if rtf_data and rtf_data.get('birth_date'):
-        try:
-            result['birth_date'] = datetime.strptime(rtf_data['birth_date'], '%d/%m/%y').date()
-        except Exception:
-            result['birth_date'] = crew_detail.birth_date if crew_detail else None
-    else:
-        result['birth_date'] = crew_detail.birth_date if crew_detail else None
-    
-    # Gender - RTF priority
-    result['sex'] = (
-        rtf_data.get('gender') if rtf_data and rtf_data.get('gender')
-        else (crew_detail.sex if crew_detail else None)
-    )
-    
-    # Nationality - RTF priority
-    result['nationality_code'] = (
-        rtf_data.get('nationality') if rtf_data and rtf_data.get('nationality')
-        else (crew_detail.nationality_code if crew_detail else None)
-    )
-    
-    # Passport expiry - RTF priority
-    if rtf_data and rtf_data.get('expiry'):
-        try:
-            result['passport_expiry'] = datetime.strptime(rtf_data['expiry'], '%d/%m/%y').date()
-        except Exception:
-            result['passport_expiry'] = crew_detail.passport_expiry if crew_detail else None
-    else:
-        result['passport_expiry'] = crew_detail.passport_expiry if crew_detail else None
-    
-    # Other fields from database only (not in RTF)
-    if crew_detail:
-        result['place_of_issue'] = crew_detail.place_of_issue
-        result['birth_place_cc'] = crew_detail.birth_place_cc
-        result['passport_issue_date'] = crew_detail.passport_issue_date
-        result['nationality'] = crew_detail.nationality  # Full nationality name
-    else:
-        result['place_of_issue'] = None
-        result['birth_place_cc'] = None
-        result['passport_issue_date'] = None
-        result['nationality'] = None
-    
-    return result
 
 
 # def build_qatar_apis_edifact(direction, date):
@@ -3233,20 +3109,14 @@ def get_crew_data_with_rtf_fallback(crew_id, rtf_crew_dict):
 #         return None
 
 
-
-def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
+def build_qatar_apis_edifact(direction, date):
     """
     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
     Updated to include all required crew fields and proper EDIFACT formatting.
     
-    Args:
-        direction: 'O' for outbound (KGL->DOH), 'I' for inbound (DOH->KGL)
-        date: Flight date
-        rtf_crew_data: Optional list of crew entries from Job 97 RTF (for data priority)
-    
-    Sender/Receiver addresses configured in settings:
-    - Sender: KGLCAWB (Kigali RwandAir)
-    - Receiver: DOHQAXS (Doha Qatar Airways)
+    UPDATES:
+    - Sender/receiver addresses from settings (.env)
+    - Success email notification when file is generated
     
     Fixes applied based on Qatar Airways feedback:
     - Added COM segment for reporting party contact info (CRITICAL FIX)
@@ -3254,8 +3124,6 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
     - Remove extra separators in NAD segment when no address info
     - Ensure all uppercase characters
     - Enhanced validation and error handling
-    - RTF data takes priority over database (UPDATED)
-    - Configurable sender/receiver addresses (UPDATED)
     """
     from django.core.mail import send_mail
     from django.conf import settings
@@ -3268,8 +3136,8 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
     
     # Get sender and receiver from settings
-    sender = settings.QATAR_APIS_SENDER  
-    receiver = settings.QATAR_APIS_RECEIVER
+    sender = settings.QATAR_APIS_SENDER  # KGLCAWB or RWANDAIR
+    receiver = settings.QATAR_APIS_RECEIVER  # DOHQAXS or QATAPIS
     
     logger.info(f"📤 Building EDIFACT - Sender: {sender}, Receiver: {receiver}, Direction: {direction}, Date: {date}")
     
@@ -3278,12 +3146,6 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
     
     msg_count = 0
     validation_errors = []
-    
-    # Convert rtf_crew_data list to dictionary for easy lookup
-    rtf_crew_dict = {}
-    if rtf_crew_data:
-        rtf_crew_dict = {entry['crew_id']: entry for entry in rtf_crew_data}
-        logger.info(f"🔄 Using RTF data for {len(rtf_crew_dict)} crew members as priority source")
     
     # Get crew assignments for the specified direction and date
     if direction == 'O':  # Outbound (KGL to DOH)
@@ -3389,18 +3251,17 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
         
         # Process each crew member with enhanced validation
         for crew_asg in flight_crew:
-            # Use helper function to get data from RTF first, then database
-            crew_data = get_crew_data_with_rtf_fallback(crew_asg.crew_id, rtf_crew_dict)
+            crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_asg.crew_id).first()
             
-            if not crew_data:
+            if not crew_detail:
                 flight_validation_errors.append(f"No crew detail found for crew_id: {crew_asg.crew_id}")
                 continue
             
-            # Mandatory field validation using merged data
-            surname = (crew_data.get('surname') or '').upper().strip()
-            firstname = (crew_data.get('firstname') or '').upper().strip() 
-            middlename = (crew_data.get('middlename') or '').upper().strip()
-            passport_number = (crew_data.get('passport_number') or '').upper()
+            # Mandatory field validation
+            surname = (crew_detail.surname or '').upper().strip()
+            firstname = (crew_detail.firstname or '').upper().strip() 
+            middlename = (crew_detail.middlename or '').upper().strip()
+            passport_number = (crew_detail.passport_number or '').upper()
             
             # Skip crew members with insufficient mandatory data
             if not surname:
@@ -3433,12 +3294,12 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
             crew_count += 1
             
             # Gender/Sex (mandatory)
-            sex = (crew_data.get('sex') or 'M').upper()  # Default to M if not specified
+            sex = (crew_detail.sex or 'M').upper()  # Default to M if not specified, ensure uppercase
             segments.append(f"ATT+2++{sex}'")
             
             # Birth date (mandatory)
-            if crew_data.get('birth_date'):
-                birth_date_str = crew_data['birth_date'].strftime('%y%m%d')
+            if crew_detail.birth_date:
+                birth_date_str = crew_detail.birth_date.strftime('%y%m%d')
                 segments.append(f"DTM+329:{birth_date_str}'")
             else:
                 flight_validation_errors.append(f"Missing mandatory birth date for crew {crew_asg.crew_id}")
@@ -3449,23 +3310,23 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
             segments.append(f"LOC+178+{dep_iata}'")  # Origin
             segments.append(f"LOC+179+{arr_iata}'")  # Final destination
             
-            # Nationality - use nationality_code (3-letter code, uppercase)
-            nationality_code = (crew_data.get('nationality_code') or 'RWA').upper()
+            # Nationality - use nationality_code from Job 97 (3-letter code, uppercase)
+            nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
             segments.append(f"NAT+2+{nationality_code}'")
             
             # Document (Passport) information
             segments.append(f"DOC+P:110:111+{passport_number}'")
             
             # Passport expiry date (mandatory)
-            if crew_data.get('passport_expiry'):
-                expiry_str = crew_data['passport_expiry'].strftime('%y%m%d')
+            if crew_detail.passport_expiry:
+                expiry_str = crew_detail.passport_expiry.strftime('%y%m%d')
                 segments.append(f"DTM+36:{expiry_str}'")
             else:
                 flight_validation_errors.append(f"Missing mandatory passport expiry for crew {crew_asg.crew_id}")
                 segments.append("DTM+36:'")
             
             # Birth place (country code) - use nationality_code as fallback, uppercase
-            birth_place = (crew_data.get('birth_place_cc') or crew_data.get('nationality_code') or 'RWA').upper()
+            birth_place = (crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA').upper()
             segments.append(f"LOC+91+{birth_place}'")
         
         # Validate minimum crew count (5 for certification)
@@ -3512,8 +3373,9 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
         logger.info(f"✅ Generated EDIFACT file: {out_path}")
         logger.info(f"📊 File contains {msg_count} flight(s) with {total_crew_count} crew members")
         logger.info(f"📤 Sender: {sender}, Receiver: {receiver}")
-        if rtf_crew_dict:
-            logger.info(f"🔄 Used RTF data priority for {len(rtf_crew_dict)} crew members")
+        
+        # Send success email notification
+        send_success_email(out_path, direction, date, msg_count, total_crew_count)
         
         return out_path
         
@@ -3522,6 +3384,52 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
         validation_errors.append(f"File generation error: {str(e)}")
         send_validation_error_email(validation_errors, direction, date)
         return None
+    
+
+
+def send_success_email(file_path, direction, date, flight_count, crew_count):
+    """
+    Send email notification about successful EDIFACT file generation.
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    direction_text = 'Outbound KGL→DOH' if direction == 'O' else 'Inbound DOH→KGL'
+    filename = file_path.name if hasattr(file_path, 'name') else str(file_path).split('/')[-1]
+    
+    try:
+        send_mail(
+            subject=f"✅ Qatar APIS File Generated Successfully - {direction_text} {date}",
+            message=(
+                f"Dear Team,\n\n"
+                f"The Qatar APIS EDIFACT file has been generated successfully!\n\n"
+                f"File Details:\n"
+                f"• Filename: {filename}\n"
+                f"• Direction: {direction_text}\n"
+                f"• Flight Date: {date}\n"
+                f"• Number of Flights: {flight_count}\n"
+                f"• Total Crew Members: {crew_count}\n"
+                f"• File Path: {file_path}\n"
+                f"• Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+                f"The file is ready for transmission to Qatar Airways APIS system.\n\n"
+                f"Regards,\n"
+                f"WBHUB System"
+            ),
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[
+                'elie.kayitare@rwandair.com',
+                'saif.zawahreh@rwandair.com',
+                'training&records@rwandair.com',
+            ],
+            fail_silently=False,
+        )
+        logger.info("✅ Success notification email sent")
+    except Exception as e:
+        logger.error(f"Failed to send success email: {e}")
+
 
 def send_validation_error_email(validation_errors, direction, date):
     """

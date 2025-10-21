@@ -1878,7 +1878,7 @@ def fetch_job97():
     """
     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
     then immediately build the Qatar APIS EDIFACT file.
-    Updated to handle both flight directions and use RTF crew data.
+    Updated to handle both flight directions and new parser return format.
     """
     account = get_exchange_account()
     logger.info("Starting Job 97 email fetch process...")
@@ -1923,7 +1923,7 @@ def fetch_job97():
         logger.info("📎 Processing email attachments...")
         result = process_email_attachment(email, process_job97_file)
         
-        # ✅ CRITICAL FIX: Unpack the tuple
+        # ✅ CRITICAL: Unpack the tuple
         if result:
             flight_date, crew_entries = result
             logger.info("✅ Email attachments processed successfully")
@@ -1953,13 +1953,9 @@ def fetch_job97():
             run_date = datetime.utcnow().date()
             logger.warning(f"⚠️  Could not determine flight date from RTF, using today: {run_date}")
 
-        # Generate EDIFACT file and save locally - ✅ PASS CREW DATA
+        # Generate EDIFACT file and save locally
         logger.info("🔧 Building Qatar APIS EDIFACT file...")
-        edi_path = build_qatar_apis_edifact(
-            direction=direction,
-            date=run_date,
-            rtf_crew_data=crew_entries  # ✅ Pass the crew data from RTF
-        )
+        edi_path = build_qatar_apis_edifact(direction, run_date)
         
         if edi_path:
             logger.info(f"✅ EDIFACT file generated successfully: {edi_path}")
