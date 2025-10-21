@@ -2525,21 +2525,13 @@ def process_job1008_file(attachment):
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
-    DEBUG VERSION: Shows first 100 lines to understand RTF structure.
+    RTF converts to multi-line format with each field on a separate line.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     text = rtf_to_text(raw)
     lines = [ln for ln in text.splitlines() if ln.strip()]
 
     logger.info(f"Total lines in RTF: {len(lines)}")
-    
-    # ✅ TEMPORARY DEBUG BLOCK - Shows RTF structure
-    logger.info("=" * 80)
-    logger.info("SHOWING FIRST 100 LINES OF CONVERTED RTF:")
-    for i, line in enumerate(lines[:100]):
-        logger.info(f"Line {i:3d}: '{line}'")
-    logger.info("=" * 80)
-    # ✅ END OF DEBUG BLOCK
 
     # Extract flight information from RTF header
     flight_number = None
@@ -2568,131 +2560,151 @@ def process_job97_file(attachment):
 
     crew_entries = []
     crew_data_started = False
+    i = 0
     
-    for line in lines:
-        line = line.strip()
+    while i < len(lines):
+        line = lines[i].strip()
         
-        # Start looking for crew after "EXPIRY" or "ON THIS STAGE" header
+        # Start looking for crew after "EXPIRY" or "ON THIS STAGE"
         if not crew_data_started:
             if "EXPIRY" in line or "ON THIS STAGE" in line:
                 crew_data_started = True
-                logger.info(f"Crew data section started")
+                logger.info(f"Crew data section started at line {i}")
+            i += 1
             continue
         
         # Stop at declaration section
         if "DECLARATION OF HEALTH" in line or "FOR OFFICIAL USE" in line:
             break
         
-        # Skip section markers and empty lines
+        # Skip section markers
         if (line in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 
-                    'Embarking:', 'Disembarking:', 'Through on same flight'] or 
-            line.startswith('...') or not line):
+                    'Embarking:', 'Disembarking:', 'Through on same flight', 'Arrival Place:'] or 
+            line.startswith('...') or 
+            line == '*' or
+            not line):
+            i += 1
             continue
         
-        # Split line into tokens
-        tokens = line.split()
-        if not tokens:
-            continue
-        
-        first_token = tokens[0]
-        
-        # Check if this line starts with crew ID (2-4 digits)
-        if not (first_token.isdigit() and 2 <= len(first_token) <= 4):
-            continue
-        
-        crew_id = first_token
-        logger.info(f"\n🔍 Processing crew ID: {crew_id}")
-        logger.info(f"   Full line: {line}")
-        
-        # Parse the entire line - remove asterisks and dots
-        parts = [p for p in tokens[1:] if p not in ['*', '...', '...']]
-        
-        logger.info(f"   Tokens to parse: {parts}")
-        
-        # Initialize crew data
-        name_parts = []
-        role = None
-        passport = None
-        birth_date = None
-        gender = None
-        nationality = None
-        expiry = None
-        
-        idx = 0
-        
-        # Step 1: Collect name parts until we hit a role code
-        role_codes = ['CP', 'FP', 'SA', 'FA', 'AC', 'PIC']
-        while idx < len(parts):
-            part = parts[idx]
-            if part in role_codes:
-                role = part
-                idx += 1
-                logger.info(f"   ✓ Role: {role}")
-                break
+        # Check if this line is a crew ID (2-4 digits)
+        if line.isdigit() and 2 <= len(line) <= 4:
+            crew_id = line
+            logger.info(f"\n🔍 Crew ID: {crew_id} at line {i}")
+            
+            # Initialize crew data
+            name = None
+            role = None
+            passport = None
+            birth_date = None
+            gender = None
+            nationality = None
+            expiry = None
+            
+            j = i + 1
+            
+            # STEP 1: Get name (next non-empty, non-marker line)
+            while j < len(lines):
+                next_line = lines[j].strip()
+                if next_line and next_line not in ['*', '...', '......................'] and \
+                   not next_line.startswith('...') and \
+                   next_line not in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 
+                                   'Embarking:', 'Disembarking:', 'Through on same flight']:
+                    # Check if name has embedded role (e.g., "DURAN NAMIK KEMAL  PIC")
+                    if '  ' in next_line:  # Double space might indicate embedded role
+                        parts = next_line.split()
+                        # Check if last part looks like a role (short, uppercase)
+                        if len(parts) > 1 and len(parts[-1]) <= 3 and parts[-1].isupper():
+                            embedded_role = parts[-1]
+                            name = ' '.join(parts[:-1]).strip()
+                            logger.info(f"   Name: {name} (embedded role: {embedded_role})")
+                        else:
+                            name = next_line
+                            logger.info(f"   Name: {name}")
+                    else:
+                        name = next_line
+                        logger.info(f"   Name: {name}")
+                    j += 1
+                    break
+                elif next_line == '*':
+                    j += 1  # Skip asterisk
+                    continue
+                j += 1
+            
+            # STEP 2: Get role (2-3 letter uppercase)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if next_line == '*':
+                    j += 1  # Skip asterisk
+                    if j < len(lines):
+                        next_line = lines[j].strip()
+                
+                if len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
+                    role = next_line
+                    logger.info(f"   Role: {role}")
+                    j += 1
+                elif 'embedded_role' in locals():
+                    role = embedded_role
+            
+            # STEP 3: Get passport (alphanumeric, 6+ chars)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if len(next_line) >= 6 and next_line.isalnum():
+                    passport = next_line
+                    logger.info(f"   Passport: {passport}")
+                    j += 1
+            
+            # STEP 4: Get birth date (dd/mm/yy)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
+                    birth_date = next_line
+                    logger.info(f"   Birth: {birth_date}")
+                    j += 1
+            
+            # STEP 5: Get gender (M or F)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if len(next_line) == 1 and next_line.upper() in ['M', 'F']:
+                    gender = next_line.upper()
+                    logger.info(f"   Gender: {gender}")
+                    j += 1
+            
+            # STEP 6: Get nationality (2-3 letters)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if 2 <= len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
+                    nationality = next_line
+                    logger.info(f"   Nationality: {nationality}")
+                    j += 1
+            
+            # STEP 7: Get expiry (dd/mm/yy)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
+                    expiry = next_line
+                    logger.info(f"   Expiry: {expiry}")
+                    j += 1
+            
+            # Create crew entry
+            if crew_id and name:
+                crew_entry = {
+                    'crew_id': crew_id,
+                    'name': name,
+                    'role': role,
+                    'passport': passport,
+                    'birth_date': birth_date,
+                    'gender': gender,
+                    'nationality': nationality,
+                    'expiry': expiry
+                }
+                crew_entries.append(crew_entry)
+                logger.info(f"   ✅ Parsed successfully")
             else:
-                name_parts.append(part)
-                idx += 1
-        
-        name = ' '.join(name_parts).strip() if name_parts else None
-        if name:
-            logger.info(f"   ✓ Name: {name}")
-        
-        # Step 2: Next should be passport (alphanumeric, 6+ chars)
-        if idx < len(parts):
-            part = parts[idx]
-            if len(part) >= 6 and part.isalnum():
-                passport = part
-                idx += 1
-                logger.info(f"   ✓ Passport: {passport}")
-        
-        # Step 3: Birth date (dd/mm/yy format)
-        if idx < len(parts):
-            part = parts[idx]
-            if re.match(r'^\d{2}/\d{2}/\d{2}$', part):
-                birth_date = part
-                idx += 1
-                logger.info(f"   ✓ Birth Date: {birth_date}")
-        
-        # Step 4: Gender (M or F)
-        if idx < len(parts):
-            part = parts[idx]
-            if len(part) == 1 and part.upper() in ['M', 'F']:
-                gender = part.upper()
-                idx += 1
-                logger.info(f"   ✓ Gender: {gender}")
-        
-        # Step 5: Nationality (2-3 letter code)
-        if idx < len(parts):
-            part = parts[idx]
-            if 2 <= len(part) <= 3 and part.isupper() and part.isalpha():
-                nationality = part
-                idx += 1
-                logger.info(f"   ✓ Nationality: {nationality}")
-        
-        # Step 6: Expiry date (dd/mm/yy format)
-        if idx < len(parts):
-            part = parts[idx]
-            if re.match(r'^\d{2}/\d{2}/\d{2}$', part):
-                expiry = part
-                idx += 1
-                logger.info(f"   ✓ Expiry: {expiry}")
-        
-        # Create crew entry if we have minimum data
-        if crew_id and name:
-            crew_entry = {
-                'crew_id': crew_id,
-                'name': name,
-                'role': role,
-                'passport': passport,
-                'birth_date': birth_date,
-                'gender': gender,
-                'nationality': nationality,
-                'expiry': expiry
-            }
-            crew_entries.append(crew_entry)
-            logger.info(f"   ✅ Crew entry created successfully")
+                logger.warning(f"   ⚠️  Skipped - missing name")
+            
+            i = j
         else:
-            logger.warning(f"   ⚠️  Skipped - missing crew_id or name")
+            i += 1
 
     logger.info(f"\n📊 Found {len(crew_entries)} crew entries in Job 97\n")
 
@@ -2746,7 +2758,7 @@ def process_job97_file(attachment):
                 except Exception as e:
                     logger.warning(f"Could not parse expiry date '{entry['expiry']}': {e}")
 
-            # Parse name into surname and firstname
+            # Parse name
             surname = None
             firstname = None
             if entry['name']:
@@ -2793,9 +2805,9 @@ def process_job97_file(attachment):
                 if updated:
                     crew_detail.save()
                     updated_count += 1
-                    logger.info(f"✅ Updated crew detail for {entry['crew_id']} - {entry['name']}")
+                    logger.info(f"✅ Updated crew {entry['crew_id']} - {entry['name']}")
                 else:
-                    logger.info(f"ℹ️  No updates for crew {entry['crew_id']} - {entry['name']}")
+                    logger.info(f"ℹ️  No updates for crew {entry['crew_id']}")
             else:
                 # Create new crew member
                 crew_detail = QatarCrewDetail.objects.create(
@@ -2809,7 +2821,7 @@ def process_job97_file(attachment):
                     nationality_code=entry.get('nationality')
                 )
                 created_count += 1
-                logger.info(f"✅ Created new crew detail for {entry['crew_id']} - {entry['name']}")
+                logger.info(f"✅ Created crew {entry['crew_id']}")
 
             # Create flight assignment
             if flight_record:
@@ -2826,26 +2838,18 @@ def process_job97_file(attachment):
                         }
                     )
                     assignment_count += 1
-                    if created:
-                        logger.info(f"✅ Created flight assignment for {entry['crew_id']}")
-                    else:
-                        logger.info(f"🔄 Updated flight assignment for {entry['crew_id']}")
                 except Exception as e:
                     logger.error(f"Failed to create assignment for {entry['crew_id']}: {e}")
                 
         except Exception as e:
-            logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
+            logger.error(f"Failed to process crew {entry['crew_id']}: {e}")
 
-    logger.info(f"\n✅ Job 97 processing complete:")
-    logger.info(f"   - Updated: {updated_count} crew records")
-    logger.info(f"   - Created: {created_count} new records")
-    logger.info(f"   - Assignments: {assignment_count}")
+    logger.info(f"\n✅ Job 97 complete: Updated {updated_count}, created {created_count}, {assignment_count} assignments")
     
     if flight_record:
-        logger.info(f"   - Flight: {flight_number}({tail_number}) on {flight_date}")
-        logger.info(f"   - Route: {flight_record.dep_code_iata}->{flight_record.arr_code_iata}\n")
+        logger.info(f"   Flight: {flight_number}({tail_number}) on {flight_date}")
+        logger.info(f"   Route: {flight_record.dep_code_iata}->{flight_record.arr_code_iata}\n")
 
-    # Return tuple for EDIFACT generation
     return flight_date, crew_entries
 
 
