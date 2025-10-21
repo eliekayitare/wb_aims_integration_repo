@@ -1786,12 +1786,99 @@ import logging
 
 
 
+# @shared_task
+# def fetch_job97():
+#     """
+#     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
+#     then immediately build the Qatar APIS EDIFACT file.
+#     Updated to handle both flight directions.
+#     """
+#     account = get_exchange_account()
+#     logger.info("Starting Job 97 email fetch process...")
+    
+#     # Only get emails from the last 7 days to avoid processing thousands of emails
+#     from datetime import timedelta
+#     from django.utils import timezone
+#     cutoff_date = timezone.now() - timedelta(days=7)
+    
+#     logger.info(f"Searching for Job 97 emails from {cutoff_date.strftime('%Y-%m-%d')} onwards...")
+    
+#     # Filter emails by date first, then check subjects
+#     recent_emails = account.inbox.filter(
+#         datetime_received__gte=cutoff_date
+#     ).order_by('-datetime_received')
+    
+#     # Count emails being checked
+#     email_count = 0
+#     job97_emails = []
+    
+#     for email in recent_emails:
+#         email_count += 1
+#         if email.subject and ('DOH KGL' in email.subject.upper() or 'KGL DOH' in email.subject.upper()):
+#             logger.info(f"✓ Found Job 97 email after checking {email_count} emails: {email.subject}")
+#             job97_emails.append(email)
+#             break  # Get the most recent one
+    
+#     if not job97_emails and email_count > 0:
+#         logger.info(f"✗ No Job 97 emails found after checking {email_count} recent emails")
+
+#     try:
+#         if not job97_emails:
+#             logger.info("❌ No Job 97 emails found. Task completed.")
+#             return
+                     
+#         email = job97_emails[0]
+#         subject = email.subject.upper()
+#         logger.info(f"📧 Processing Job 97 email: '{email.subject}'")
+#         logger.info(f"📅 Email received: {email.datetime_received.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+#         # Ingest and process attachments - this will return the flight date
+#         logger.info("📎 Processing email attachments...")
+#         flight_date = process_email_attachment(email, process_job97_file)
+#         logger.info("✅ Email attachments processed successfully")
+
+#         # Determine direction based on subject line
+#         if 'DOH KGL' in subject:
+#             direction = 'I'  # Inbound (DOH to KGL)
+#             logger.info("🛬 Detected INBOUND flight direction (DOH → KGL)")
+#         elif 'KGL DOH' in subject:
+#             direction = 'O'  # Outbound (KGL to DOH)
+#             logger.info("🛫 Detected OUTBOUND flight direction (KGL → DOH)")
+#         else:
+#             # Fallback: try to detect from email content or use default
+#             logger.warning("⚠️  Could not determine flight direction from subject, defaulting to INBOUND")
+#             direction = 'I'
+                 
+#         # Use the actual flight date from the RTF file, not today's date
+#         if flight_date:
+#             run_date = flight_date
+#             logger.info(f"📋 Using flight date from RTF: {run_date}")
+#         else:
+#             # Fallback to today's date if we couldn't parse the flight date
+#             run_date = datetime.utcnow().date()
+#             logger.warning(f"⚠️  Could not determine flight date from RTF, using today: {run_date}")
+
+#         # Generate EDIFACT file and save locally
+#         logger.info("🔧 Building Qatar APIS EDIFACT file...")
+#         edi_path = build_qatar_apis_edifact(direction, run_date)
+#         if edi_path:
+#             logger.info(f"✅ EDIFACT file generated successfully: {edi_path}")
+#             logger.info("🎉 Job 97 processing completed successfully!")
+#         else:
+#             logger.warning("⚠️  EDIFACT file generation returned None - check crew assignments for the flight date")
+
+#     except Exception as e:
+#         logger.error(f"❌ Error in fetch_job97: {e}")
+#         logger.error(f"🔍 Error details: {str(e)}")
+#         raise
+
+
 @shared_task
 def fetch_job97():
     """
     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
     then immediately build the Qatar APIS EDIFACT file.
-    Updated to handle both flight directions.
+    Updated to handle both flight directions and use RTF crew data.
     """
     account = get_exchange_account()
     logger.info("Starting Job 97 email fetch process...")
@@ -1832,10 +1919,18 @@ def fetch_job97():
         logger.info(f"📧 Processing Job 97 email: '{email.subject}'")
         logger.info(f"📅 Email received: {email.datetime_received.strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
-        # Ingest and process attachments - this will return the flight date
+        # Ingest and process attachments - this now returns (flight_date, crew_entries)
         logger.info("📎 Processing email attachments...")
-        flight_date = process_email_attachment(email, process_job97_file)
-        logger.info("✅ Email attachments processed successfully")
+        result = process_email_attachment(email, process_job97_file)
+        
+        # ✅ CRITICAL FIX: Unpack the tuple
+        if result:
+            flight_date, crew_entries = result
+            logger.info("✅ Email attachments processed successfully")
+            logger.info(f"📊 Extracted {len(crew_entries)} crew entries from RTF")
+        else:
+            logger.error("❌ Failed to process Job 97 attachment")
+            return
 
         # Determine direction based on subject line
         if 'DOH KGL' in subject:
@@ -1858,9 +1953,14 @@ def fetch_job97():
             run_date = datetime.utcnow().date()
             logger.warning(f"⚠️  Could not determine flight date from RTF, using today: {run_date}")
 
-        # Generate EDIFACT file and save locally
+        # Generate EDIFACT file and save locally - ✅ PASS CREW DATA
         logger.info("🔧 Building Qatar APIS EDIFACT file...")
-        edi_path = build_qatar_apis_edifact(direction, run_date)
+        edi_path = build_qatar_apis_edifact(
+            direction=direction,
+            date=run_date,
+            rtf_crew_data=crew_entries  # ✅ Pass the crew data from RTF
+        )
+        
         if edi_path:
             logger.info(f"✅ EDIFACT file generated successfully: {edi_path}")
             logger.info("🎉 Job 97 processing completed successfully!")
@@ -1871,7 +1971,6 @@ def fetch_job97():
         logger.error(f"❌ Error in fetch_job97: {e}")
         logger.error(f"🔍 Error details: {str(e)}")
         raise
-
 
 
 
