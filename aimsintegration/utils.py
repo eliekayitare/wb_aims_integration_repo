@@ -2525,14 +2525,21 @@ def process_job1008_file(attachment):
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
-    IMPROVED: Detects crew entries by crew ID (2-4 digits) on each line, then parses entire line.
-    Returns tuple: (flight_date, crew_entries) for use in EDIFACT generation.
+    DEBUG VERSION: Shows first 100 lines to understand RTF structure.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     text = rtf_to_text(raw)
     lines = [ln for ln in text.splitlines() if ln.strip()]
 
     logger.info(f"Total lines in RTF: {len(lines)}")
+    
+    # ✅ TEMPORARY DEBUG BLOCK - Shows RTF structure
+    logger.info("=" * 80)
+    logger.info("SHOWING FIRST 100 LINES OF CONVERTED RTF:")
+    for i, line in enumerate(lines[:100]):
+        logger.info(f"Line {i:3d}: '{line}'")
+    logger.info("=" * 80)
+    # ✅ END OF DEBUG BLOCK
 
     # Extract flight information from RTF header
     flight_number = None
