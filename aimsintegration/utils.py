@@ -2219,11 +2219,315 @@ def process_job1008_file(attachment):
 
 
 
+# def process_job97_file(attachment):
+#     """
+#     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
+#     Also create QatarFlightCrewAssignment records for the flight.
+#     Uses Job 97 data for crew/tail/date and FlightData for operational details.
+#     """
+#     raw = attachment.content.decode('utf-8', errors='ignore')
+#     logger.debug(f"RTF raw size: {len(raw)} characters")
+#     text = rtf_to_text(raw)
+#     lines = [ln for ln in text.splitlines() if ln.strip()]
+#     logger.debug(f"Extracted {len(lines)} non-empty lines")
+
+#     logger.info(f"Total lines in RTF: {len(lines)}")
+
+#     # Extract flight information from RTF header
+#     flight_number = None
+#     flight_date = None
+#     tail_number = None
+    
+#     # Parse flight details from header
+#     for i, line in enumerate(lines[:25]):  # Check first 25 lines for flight info
+#         line = line.strip()
+        
+#         # Look for flight number (e.g., "WB301")
+#         if re.match(r'^WB\d+$', line):
+#             flight_number = line
+#             logger.info(f"Found flight number: {flight_number}")
+        
+#         # Look for date (e.g., "03/08/2025" or "24/07/2025")
+#         elif re.match(r'^\d{2}/\d{2}/\d{4}$', line):
+#             try:
+#                 flight_date = datetime.strptime(line, '%d/%m/%Y').date()
+#                 logger.info(f"Found flight date: {flight_date}")
+#             except ValueError:
+#                 pass
+        
+#         # Look for tail number (e.g., "9XR-WQ")
+#         elif re.match(r'^\d[A-Z]{2}-[A-Z]{2}$', line):
+#             tail_number = line
+#             logger.info(f"Found tail number: {tail_number}")
+
+#     logger.info(f"Job 97 flight info - Number: {flight_number}, Date: {flight_date}, Tail: {tail_number}")
+
+#     crew_entries = []
+    
+#     # Look for the start of crew data - after "EXPIRY" header
+#     crew_data_started = False
+#     i = 0
+    
+#     while i < len(lines):
+#         line = lines[i].strip()
+        
+#         # Skip until we find the crew data section
+#         if not crew_data_started:
+#             if "EXPIRY" in line:
+#                 crew_data_started = True
+#                 logger.info(f"Crew data section starts after line {i}: {line}")
+#             i += 1
+#             continue
+        
+#         # Skip location markers, empty lines, and section dividers
+#         if (line in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 'Embarking:', 
+#                     'Disembarking:', 'Through on same flight', 'ON THIS STAGE'] or 
+#             line.startswith('...') or 
+#             not line or
+#             'DECLARATION OF HEALTH' in line or
+#             'FOR OFFICIAL USE' in line):
+#             i += 1
+#             continue
+        
+#         # Check if this line is a crew ID (3-4 digits)
+#         if line.isdigit() and len(line) >= 3 and len(line) <= 4:
+#             crew_id = line
+#             logger.info(f"Found crew ID: {crew_id} at line {i}")
+            
+#             # Initialize crew data variables
+#             name = None
+#             role = None
+#             passport = None
+#             birth_date = None
+#             gender = None
+#             nationality = None
+#             expiry = None
+            
+#             # Parse the next lines for this crew member's data
+#             j = i + 1
+            
+#             # Look for name line (next non-empty line that's not a section marker)
+#             while j < len(lines):
+#                 next_line = lines[j].strip()
+#                 if next_line and not next_line.startswith('...') and \
+#                    next_line not in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 
+#                                    'Embarking:', 'Disembarking:', 'Through on same flight']:
+#                     # This should be the name line
+#                     # Check if it contains an embedded role (uppercase 2-3 letter word at the end)
+#                     name_parts = next_line.split()
+#                     if len(name_parts) > 1 and len(name_parts[-1]) <= 3 and name_parts[-1].isupper():
+#                         # Likely has embedded role
+#                         embedded_role = name_parts[-1]
+#                         name = ' '.join(name_parts[:-1]).strip()
+#                         logger.info(f"  Found name with embedded role: {name} ({embedded_role})")
+#                     else:
+#                         name = next_line.strip()
+#                         logger.info(f"  Found name: {name}")
+#                     j += 1
+#                     break
+#                 j += 1
+            
+#             # Look for role line (if not embedded in name)
+#             if j < len(lines):
+#                 next_line = lines[j].strip()
+#                 # Check if it's a short uppercase string (likely a role)
+#                 if len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
+#                     role = next_line
+#                     logger.info(f"  Found role: {role}")
+#                     j += 1
+#                 elif 'embedded_role' in locals():
+#                     role = embedded_role
+#                     logger.info(f"  Using embedded role: {role}")
+            
+#             # Look for passport line (alphanumeric string, often starting with letters)
+#             if j < len(lines):
+#                 next_line = lines[j].strip()
+#                 # Passport: alphanumeric, usually 6+ chars, may start with letters
+#                 if len(next_line) >= 6 and next_line.isalnum():
+#                     passport = next_line
+#                     logger.info(f"  Found passport: {passport}")
+#                     j += 1
+            
+#             # Look for birth date line (dd/mm/yy format)
+#             if j < len(lines):
+#                 next_line = lines[j].strip()
+#                 if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
+#                     birth_date = next_line
+#                     logger.info(f"  Found birth date: {birth_date}")
+#                     j += 1
+            
+#             # Look for gender line (single character M or F)
+#             if j < len(lines):
+#                 next_line = lines[j].strip()
+#                 if len(next_line) == 1 and next_line.upper() in ['M', 'F']:
+#                     gender = next_line.upper()
+#                     logger.info(f"  Found gender: {gender}")
+#                     j += 1
+            
+#             # Look for nationality line (2-3 letter code or full country name)
+#             if j < len(lines):
+#                 next_line = lines[j].strip()
+#                 # Nationality: 2-3 letter code OR longer country name (all uppercase/title case)
+#                 if (len(next_line) >= 2 and next_line.isalpha() and 
+#                     (next_line.isupper() or next_line.istitle())):
+#                     nationality = next_line
+#                     logger.info(f"  Found nationality: {nationality}")
+#                     j += 1
+            
+#             # Look for expiry date line (dd/mm/yy format)
+#             if j < len(lines):
+#                 next_line = lines[j].strip()
+#                 if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
+#                     expiry = next_line
+#                     logger.info(f"  Found expiry: {expiry}")
+#                     j += 1
+            
+#             # Create crew entry if we have minimum required data
+#             if crew_id and name:
+#                 crew_entry = {
+#                     'crew_id': crew_id,
+#                     'name': name,
+#                     'role': role,
+#                     'passport': passport,
+#                     'birth_date': birth_date,
+#                     'gender': gender,
+#                     'nationality': nationality,
+#                     'expiry': expiry
+#                 }
+#                 crew_entries.append(crew_entry)
+#                 logger.info(f"Successfully parsed crew entry: {crew_entry}")
+            
+#             # Move to the next position
+#             i = j
+#         else:
+#             i += 1
+
+#     logger.info(f"Found {len(crew_entries)} crew entries in Job 97")
+
+#     # Find the flight record using Job 97 data (tail, flight number, date)
+#     flight_record = None
+#     if flight_number and flight_date and tail_number:
+#         try:
+#             # Extract numeric flight number (remove WB prefix if present)
+#             numeric_flight_no = flight_number[2:] if flight_number.startswith('WB') else flight_number
+#             logger.info(f"Searching for flight using Job 97 data - Flight: {numeric_flight_no}, Date: {flight_date}, Tail: {tail_number}")
+            
+#             # Primary search: Match flight number, date, and tail number
+#             flight_record = FlightData.objects.filter(
+#                 flight_no=numeric_flight_no,
+#                 sd_date_utc=flight_date,
+#                 tail_no=tail_number
+#             ).first()
+            
+#             if not flight_record:
+#                 # Fallback: Try without tail number (in case tail numbers don't match exactly)
+#                 flight_record = FlightData.objects.filter(
+#                     flight_no=numeric_flight_no,
+#                     sd_date_utc=flight_date
+#                 ).first()
+                
+#                 if flight_record:
+#                     logger.info(f"Found flight record without tail match: {flight_record}")
+#                 else:
+#                     logger.warning(f"Flight record not found for {numeric_flight_no} on {flight_date}")
+#             else:
+#                 logger.info(f"Found exact flight record match: {flight_record}")
+                
+#         except Exception as e:
+#             logger.error(f"Error finding flight record: {e}")
+
+#     # Update crew details and create flight assignments
+#     updated_count = 0
+#     assignment_count = 0
+    
+#     for entry in crew_entries:
+#         try:
+#             # Parse dates
+#             birth = None
+#             expiry = None
+            
+#             if entry['birth_date']:
+#                 try:
+#                     birth = datetime.strptime(entry['birth_date'], '%d/%m/%y').date()
+#                 except Exception as e:
+#                     logger.warning(f"Could not parse birth date '{entry['birth_date']}': {e}")
+            
+#             if entry['expiry']:
+#                 try:
+#                     expiry = datetime.strptime(entry['expiry'], '%d/%m/%y').date()
+#                 except Exception as e:
+#                     logger.warning(f"Could not parse expiry date '{entry['expiry']}': {e}")
+
+#             # Update the existing crew detail record with Job 97 data
+#             crew_detail = QatarCrewDetail.objects.filter(crew_id=entry['crew_id']).first()
+#             if crew_detail:
+#                 updated = False
+#                 if birth and not crew_detail.birth_date:
+#                     crew_detail.birth_date = birth
+#                     updated = True
+#                 if entry['gender'] and not crew_detail.sex:
+#                     crew_detail.sex = entry['gender']
+#                     updated = True
+#                 if expiry and not crew_detail.passport_expiry:
+#                     crew_detail.passport_expiry = expiry
+#                     updated = True
+#                 # Update nationality_code from Job 97 (3-letter code like RWA, UKR)
+#                 if entry['nationality'] and (not crew_detail.nationality_code or crew_detail.nationality_code != entry['nationality']):
+#                     crew_detail.nationality_code = entry['nationality']
+#                     updated = True
+                
+#                 if updated:
+#                     crew_detail.save()
+#                     updated_count += 1
+#                     logger.info(f"Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']}) - Nationality Code: {entry['nationality']}")
+#                 else:
+#                     logger.info(f"No updates needed for crew detail {entry['crew_id']} - {entry['name']} ({entry['role']})")
+#             else:
+#                 logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97")
+
+#             # Create flight crew assignment if we have a flight record
+#             if flight_record:
+#                 try:
+#                     # Use Job 97 data for crew assignment and FlightData for operational details
+#                     assignment, created = QatarFlightDetails.objects.update_or_create(
+#                         crew_id=entry['crew_id'],
+#                         flight=flight_record,
+#                         defaults={
+#                             # From Job 97 (RTF)
+#                             'tail_no': tail_number,  # From Job 97
+#                             'dep_date_utc': flight_date,  # From Job 97
+#                             'arr_date_utc': flight_date,  # Assume same day
+#                             # From FlightData (operational details)
+#                             'std_utc': flight_record.std_utc,  # From FlightData
+#                             'sta_utc': flight_record.sta_utc,  # From FlightData
+#                         }
+#                     )
+#                     if created:
+#                         assignment_count += 1
+#                         logger.info(f"Created flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
+#                     else:
+#                         assignment_count += 1  # Count updates too
+#                         logger.info(f"Updated flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
+#                 except Exception as e:
+#                     logger.error(f"Failed to create flight assignment for {entry['crew_id']}: {e}")
+                
+#         except Exception as e:
+#             logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
+
+#     logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, processed {assignment_count} flight assignments")
+    
+#     if flight_record:
+#         logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
+
+#     return flight_date
+
+
 def process_job97_file(attachment):
     """
     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
     Also create QatarFlightCrewAssignment records for the flight.
     Uses Job 97 data for crew/tail/date and FlightData for operational details.
+    UPDATED: Now always updates birth_date, sex, and passport_expiry from Job 97.
     """
     raw = attachment.content.decode('utf-8', errors='ignore')
     logger.debug(f"RTF raw size: {len(raw)} characters")
@@ -2462,28 +2766,43 @@ def process_job97_file(attachment):
             crew_detail = QatarCrewDetail.objects.filter(crew_id=entry['crew_id']).first()
             if crew_detail:
                 updated = False
-                if birth and not crew_detail.birth_date:
+                
+                # CHANGED: Always update birth_date from Job 97 if we have it
+                if birth and crew_detail.birth_date != birth:
+                    old_birth = crew_detail.birth_date
                     crew_detail.birth_date = birth
                     updated = True
-                if entry['gender'] and not crew_detail.sex:
+                    logger.info(f"  Updated birth_date for {entry['crew_id']}: {old_birth} → {birth}")
+                
+                # CHANGED: Always update sex from Job 97 if we have it
+                if entry['gender'] and crew_detail.sex != entry['gender']:
+                    old_sex = crew_detail.sex
                     crew_detail.sex = entry['gender']
                     updated = True
-                if expiry and not crew_detail.passport_expiry:
+                    logger.info(f"  Updated sex for {entry['crew_id']}: {old_sex} → {entry['gender']}")
+                
+                # CHANGED: Always update passport_expiry from Job 97 if we have it
+                if expiry and crew_detail.passport_expiry != expiry:
+                    old_expiry = crew_detail.passport_expiry
                     crew_detail.passport_expiry = expiry
                     updated = True
+                    logger.info(f"  Updated passport_expiry for {entry['crew_id']}: {old_expiry} → {expiry}")
+                
                 # Update nationality_code from Job 97 (3-letter code like RWA, UKR)
                 if entry['nationality'] and (not crew_detail.nationality_code or crew_detail.nationality_code != entry['nationality']):
+                    old_nationality = crew_detail.nationality_code
                     crew_detail.nationality_code = entry['nationality']
                     updated = True
+                    logger.info(f"  Updated nationality_code for {entry['crew_id']}: {old_nationality} → {entry['nationality']}")
                 
                 if updated:
                     crew_detail.save()
                     updated_count += 1
-                    logger.info(f"Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']}) - Nationality Code: {entry['nationality']}")
+                    logger.info(f"✅ Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']})")
                 else:
-                    logger.info(f"No updates needed for crew detail {entry['crew_id']} - {entry['name']} ({entry['role']})")
+                    logger.info(f"ℹ️  No updates needed for crew detail {entry['crew_id']} - {entry['name']} ({entry['role']})")
             else:
-                logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97")
+                logger.warning(f"⚠️  No crew detail found for {entry['crew_id']} from Job 97")
 
             # Create flight crew assignment if we have a flight record
             if flight_record:
@@ -2504,20 +2823,20 @@ def process_job97_file(attachment):
                     )
                     if created:
                         assignment_count += 1
-                        logger.info(f"Created flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
+                        logger.info(f"✨ Created flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
                     else:
                         assignment_count += 1  # Count updates too
-                        logger.info(f"Updated flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
+                        logger.info(f"🔄 Updated flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
                 except Exception as e:
-                    logger.error(f"Failed to create flight assignment for {entry['crew_id']}: {e}")
+                    logger.error(f"❌ Failed to create flight assignment for {entry['crew_id']}: {e}")
                 
         except Exception as e:
-            logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
+            logger.error(f"❌ Failed to process crew member {entry['crew_id']}: {e}")
 
-    logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, processed {assignment_count} flight assignments")
+    logger.info(f"✅ Job 97 processing complete: Updated {updated_count} crew records, processed {assignment_count} flight assignments")
     
     if flight_record:
-        logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
+        logger.info(f"📋 Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
 
     return flight_date
 
