@@ -3377,6 +3377,10 @@ def build_qatar_apis_edifact(direction, date):
         out_dir.mkdir(parents=True, exist_ok=True)
         filename = f"QATAPIS_{direction}_{date:%Y%m%d}.edi"
         out_path = out_dir / filename
+
+        if out_path.exists():
+            logger.info(f"⚠️ File already exists, skipping: {out_path}")
+            return out_path
         
         with open(out_path, 'w', encoding='utf-8') as f:
             f.write("\n".join(lines))
