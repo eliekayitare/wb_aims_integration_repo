@@ -3244,6 +3244,10 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
         date: Flight date
         rtf_crew_data: Optional list of crew entries from Job 97 RTF (for data priority)
     
+    Sender/Receiver addresses configured in settings:
+    - Sender: KGLCAWB (Kigali RwandAir)
+    - Receiver: DOHQAXS (Doha Qatar Airways)
+    
     Fixes applied based on Qatar Airways feedback:
     - Added COM segment for reporting party contact info (CRITICAL FIX)
     - Use 'F' for complete crew lists in UNH segment
@@ -3251,6 +3255,7 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
     - Ensure all uppercase characters
     - Enhanced validation and error handling
     - RTF data takes priority over database (UPDATED)
+    - Configurable sender/receiver addresses (UPDATED)
     """
     from django.core.mail import send_mail
     from django.conf import settings
@@ -3261,10 +3266,15 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
     lines = ["UNA:+.?*'"]
     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
-    sender = "RWANDAIR"
     
-    lines.append(f"UNB+UNOA:4+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}'")
-    lines.append(f"UNG+PAXLST+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
+    # Get sender and receiver from settings
+    sender = settings.QATAR_APIS_SENDER  
+    receiver = settings.QATAR_APIS_RECEIVER
+    
+    logger.info(f"📤 Building EDIFACT - Sender: {sender}, Receiver: {receiver}, Direction: {direction}, Date: {date}")
+    
+    lines.append(f"UNB+UNOA:4+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}'")
+    lines.append(f"UNG+PAXLST+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
     
     msg_count = 0
     validation_errors = []
@@ -3273,7 +3283,7 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
     rtf_crew_dict = {}
     if rtf_crew_data:
         rtf_crew_dict = {entry['crew_id']: entry for entry in rtf_crew_data}
-        logger.info(f"Using RTF data for {len(rtf_crew_dict)} crew members as priority source")
+        logger.info(f"🔄 Using RTF data for {len(rtf_crew_dict)} crew members as priority source")
     
     # Get crew assignments for the specified direction and date
     if direction == 'O':  # Outbound (KGL to DOH)
@@ -3379,7 +3389,7 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
         
         # Process each crew member with enhanced validation
         for crew_asg in flight_crew:
-            # ✅ NEW: Use helper function to get data from RTF first, then database
+            # Use helper function to get data from RTF first, then database
             crew_data = get_crew_data_with_rtf_fallback(crew_asg.crew_id, rtf_crew_dict)
             
             if not crew_data:
@@ -3501,6 +3511,7 @@ def build_qatar_apis_edifact(direction, date, rtf_crew_data=None):
         
         logger.info(f"✅ Generated EDIFACT file: {out_path}")
         logger.info(f"📊 File contains {msg_count} flight(s) with {total_crew_count} crew members")
+        logger.info(f"📤 Sender: {sender}, Receiver: {receiver}")
         if rtf_crew_dict:
             logger.info(f"🔄 Used RTF data priority for {len(rtf_crew_dict)} crew members")
         
