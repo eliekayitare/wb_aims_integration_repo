@@ -2854,11 +2854,15 @@ def process_job97_file(attachment):
 
 
 
-
 # def build_qatar_apis_edifact(direction, date):
 #     """
 #     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
 #     Updated to include all required crew fields and proper EDIFACT formatting.
+    
+#     UPDATES:
+#     - Sender/receiver addresses from settings (.env)
+#     - Success email notification when file is generated
+    
 #     Fixes applied based on Qatar Airways feedback:
 #     - Added COM segment for reporting party contact info (CRITICAL FIX)
 #     - Use 'F' for complete crew lists in UNH segment
@@ -2875,10 +2879,15 @@ def process_job97_file(attachment):
 #     lines = ["UNA:+.?*'"]
 #     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
 #     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
-#     sender = "RWANDAIR"
     
-#     lines.append(f"UNB+UNOA:4+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}'")
-#     lines.append(f"UNG+PAXLST+{sender}:ZZ+QATAPIS:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
+#     # Get sender and receiver from settings
+#     sender = settings.QATAR_APIS_SENDER  # KGLCAWB or RWANDAIR
+#     receiver = settings.QATAR_APIS_RECEIVER  # DOHQAXS or QATAPIS
+    
+#     logger.info(f"📤 Building EDIFACT - Sender: {sender}, Receiver: {receiver}, Direction: {direction}, Date: {date}")
+    
+#     lines.append(f"UNB+UNOA:4+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}'")
+#     lines.append(f"UNG+PAXLST+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
     
 #     msg_count = 0
 #     validation_errors = []
@@ -2950,9 +2959,7 @@ def process_job97_file(attachment):
 #         # Sender information
 #         segments.append(f"NAD+MS+++{sender}:CREW APIS TEAM'")
         
-        
-#         # segments.append("COM+AIMS@RWANDAIR.COM:EM'")  # Email contact
-#         # segments.append("COM+250781442755:TE'")  # Phone contact (adjust number as needed)
+#         # Contact information - CRITICAL FIX
 #         segments.append("COM+AIMS@RWANDAIR.COM:EM+250781442755:TE'")
         
 #         # Transport information
@@ -3052,7 +3059,7 @@ def process_job97_file(attachment):
 #             nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
 #             segments.append(f"NAT+2+{nationality_code}'")
             
-#             # Document (Passport) information - Keep as per your original implementation (no issuing state)
+#             # Document (Passport) information
 #             segments.append(f"DOC+P:110:111+{passport_number}'")
             
 #             # Passport expiry date (mandatory)
@@ -3104,12 +3111,20 @@ def process_job97_file(attachment):
 #         out_dir.mkdir(parents=True, exist_ok=True)
 #         filename = f"QATAPIS_{direction}_{date:%Y%m%d}.edi"
 #         out_path = out_dir / filename
+
+#         if out_path.exists():
+#             logger.info(f"⚠️ File already exists, skipping: {out_path}")
+#             return out_path
         
 #         with open(out_path, 'w', encoding='utf-8') as f:
 #             f.write("\n".join(lines))
         
-#         logger.info(f"Generated EDIFACT file: {out_path}")
-#         logger.info(f"File contains {msg_count} flight(s) with {total_crew_count} crew members")
+#         logger.info(f"✅ Generated EDIFACT file: {out_path}")
+#         logger.info(f"📊 File contains {msg_count} flight(s) with {total_crew_count} crew members")
+#         logger.info(f"📤 Sender: {sender}, Receiver: {receiver}")
+        
+#         # Send success email notification
+#         send_success_email(out_path, direction, date, msg_count, total_crew_count)
         
 #         return out_path
         
@@ -3118,6 +3133,8 @@ def process_job97_file(attachment):
 #         validation_errors.append(f"File generation error: {str(e)}")
 #         send_validation_error_email(validation_errors, direction, date)
 #         return None
+    
+
 
 
 def build_qatar_apis_edifact(direction, date):
@@ -3128,6 +3145,8 @@ def build_qatar_apis_edifact(direction, date):
     UPDATES:
     - Sender/receiver addresses from settings (.env)
     - Success email notification when file is generated
+    - Filename format: YYYYMMDD_FlightNo_Direction.snd
+    - Updates crew assignment status to GENERATED with direction
     
     Fixes applied based on Qatar Airways feedback:
     - Added COM segment for reporting party contact info (CRITICAL FIX)
@@ -3138,6 +3157,7 @@ def build_qatar_apis_edifact(direction, date):
     """
     from django.core.mail import send_mail
     from django.conf import settings
+    from django.utils import timezone
     import logging
     
     logger = logging.getLogger(__name__)
@@ -3162,9 +3182,11 @@ def build_qatar_apis_edifact(direction, date):
     if direction == 'O':  # Outbound (KGL to DOH)
         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
         arr_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
+        direction_text = 'O'
     else:  # Inbound (DOH to KGL)
         dep_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
         arr_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
+        direction_text = 'I'
     
     assignments = QatarFlightDetails.objects.filter(
         dep_date_utc=date,
@@ -3201,6 +3223,7 @@ def build_qatar_apis_edifact(direction, date):
     # Group assignments by flight to create one message per flight
     flights_processed = set()
     total_crew_count = 0
+    flight_numbers = []  # Collect flight numbers for filename
     
     for asg in assignments:
         # Create one message per unique flight (avoid duplicates)
@@ -3208,6 +3231,9 @@ def build_qatar_apis_edifact(direction, date):
         if flight_key in flights_processed:
             continue
         flights_processed.add(flight_key)
+        
+        # Collect flight number for filename
+        flight_numbers.append(asg.flight.flight_no)
         
         msg_count += 1
         msg_ref = f"{ctrl_ref}{msg_count:02d}"
@@ -3375,7 +3401,10 @@ def build_qatar_apis_edifact(direction, date):
     try:
         out_dir = settings.QATAR_APIS_OUTPUT_PATH
         out_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"QATAPIS_{direction}_{date:%Y%m%d}.edi"
+        
+        # Build filename: YYYYMMDD_FlightNo_Direction.snd
+        flight_no_str = '_'.join(flight_numbers) if flight_numbers else 'UNKNOWN'
+        filename = f"{date.strftime('%Y%m%d')}_{flight_no_str}_{direction_text}.snd"
         out_path = out_dir / filename
 
         if out_path.exists():
@@ -3388,6 +3417,48 @@ def build_qatar_apis_edifact(direction, date):
         logger.info(f"✅ Generated EDIFACT file: {out_path}")
         logger.info(f"📊 File contains {msg_count} flight(s) with {total_crew_count} crew members")
         logger.info(f"📤 Sender: {sender}, Receiver: {receiver}")
+        logger.info(f"✈️  Flight(s): {', '.join(flight_numbers)}")
+        
+        # Update status for all crew assignments included in this file
+        try:
+            updated_count = 0
+            
+            for asg in assignments:
+                flight_key = f"{asg.flight.flight_no}_{asg.flight.sd_date_utc}_{asg.std_utc}"
+                if flight_key not in flights_processed:
+                    continue
+                
+                # Get all crew for this flight
+                flight_crew = QatarFlightDetails.objects.filter(
+                    flight=asg.flight,
+                    dep_date_utc=date
+                )
+                
+                # Update status and direction for all crew assignments in this flight
+                for crew_assignment in flight_crew:
+                    crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_assignment.crew_id).first()
+                    
+                    # Only update status for crew that were actually included (had valid data)
+                    if crew_detail:
+                        surname = (crew_detail.surname or '').strip()
+                        firstname = (crew_detail.firstname or '').strip()
+                        middlename = (crew_detail.middlename or '').strip()
+                        passport_number = (crew_detail.passport_number or '').strip()
+                        
+                        # Only set status if they were included in the file
+                        if (surname and (firstname or middlename) and passport_number and 
+                            crew_detail.birth_date and crew_detail.passport_expiry):
+                            crew_assignment.status = 'GENERATED'
+                            crew_assignment.status_updated_at = timezone.now()
+                            crew_assignment.apis_filename = filename
+                            crew_assignment.direction = direction_text
+                            crew_assignment.save(update_fields=['status', 'status_updated_at', 'apis_filename', 'direction', 'updated_at'])
+                            updated_count += 1
+            
+            logger.info(f"✅ Set status to GENERATED for {updated_count} crew assignments")
+            
+        except Exception as e:
+            logger.error(f"⚠️  Failed to update crew assignment status: {e}")
         
         # Send success email notification
         send_success_email(out_path, direction, date, msg_count, total_crew_count)
@@ -3399,7 +3470,6 @@ def build_qatar_apis_edifact(direction, date):
         validation_errors.append(f"File generation error: {str(e)}")
         send_validation_error_email(validation_errors, direction, date)
         return None
-    
 
 
 def send_success_email(file_path, direction, date, flight_count, crew_count):

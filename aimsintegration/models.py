@@ -465,7 +465,37 @@ class QatarCrewDetail(models.Model):
         return f"{self.crew_id} {self.surname}, {self.firstname}"
 
 
+# class QatarFlightDetails(models.Model):
+#     crew_id = models.CharField(max_length=11)
+#     flight = models.ForeignKey(FlightData, on_delete=models.CASCADE, related_name='assignments')
+#     tail_no = models.CharField(max_length=10, null=True, blank=True)
+#     dep_date_utc = models.DateField()
+#     arr_date_utc = models.DateField(null=True, blank=True)
+#     std_utc = models.TimeField(null=True, blank=True)
+#     sta_utc = models.TimeField(null=True, blank=True)
+#     # Removed duplicate fields: birth_date, sex, passport_expiry (now only in QatarCrewDetail)
+
+#     class Meta:
+#         db_table = 'qatar_flight_details'
+#         unique_together = ('crew_id', 'flight')
+
+#     def __str__(self):
+#         return f"{self.crew_id} on {self.flight}"
+
+
 class QatarFlightDetails(models.Model):
+    STATUS_CHOICES = [
+        ('GENERATED', 'Generated'),
+        ('SENT', 'Sent'),
+        ('PROCESSED', 'Processed'),
+        ('RECEIVED', 'Received'),
+    ]
+    
+    DIRECTION_CHOICES = [
+        ('I', 'Inbound'),   # DOH -> KGL
+        ('O', 'Outbound'),  # KGL -> DOH
+    ]
+    
     crew_id = models.CharField(max_length=11)
     flight = models.ForeignKey(FlightData, on_delete=models.CASCADE, related_name='assignments')
     tail_no = models.CharField(max_length=10, null=True, blank=True)
@@ -473,11 +503,22 @@ class QatarFlightDetails(models.Model):
     arr_date_utc = models.DateField(null=True, blank=True)
     std_utc = models.TimeField(null=True, blank=True)
     sta_utc = models.TimeField(null=True, blank=True)
-    # Removed duplicate fields: birth_date, sex, passport_expiry (now only in QatarCrewDetail)
+    
+    # APIS status tracking
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='GENERATED', db_index=True)
+    status_updated_at = models.DateTimeField(null=True, blank=True)
+    apis_filename = models.CharField(max_length=255, null=True, blank=True)
+    direction = models.CharField(max_length=1, choices=DIRECTION_CHOICES, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'qatar_flight_details'
         unique_together = ('crew_id', 'flight')
+        indexes = [
+            models.Index(fields=['status', 'dep_date_utc']),
+            models.Index(fields=['direction', 'dep_date_utc']),
+        ]
 
     def __str__(self):
         return f"{self.crew_id} on {self.flight}"
