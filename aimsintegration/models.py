@@ -212,8 +212,8 @@ class TableauData(models.Model):
     takeoff = models.TimeField(null=True, blank=True)
     touchdown = models.TimeField(null=True, blank=True)
     ata = models.TimeField(null=True, blank=True)
-    actual_block_time_mvt = models.TimeField(null=True, blank=True) 
-    flight_time_mvt = models.TimeField(null=True, blank=True)
+    # actual_block_time_mvt = models.TimeField(null=True, blank=True) 
+    # flight_time_mvt = models.TimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
