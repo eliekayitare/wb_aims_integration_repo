@@ -1939,8 +1939,8 @@ def process_tableau_data_file(attachment):
                 ata = parse_time(fields[28], "ATA") if len(fields) > 28 and fields[28] else None
 
                 # NEW FIELDS - Parse the two additional fields (indices 29 and 30)
-                actual_block_time_mvt = parse_time(fields[29], "Actual Block Time MVT") if len(fields) > 29 and fields[29] else None
-                flight_time_mvt = parse_time(fields[30], "Flight Time MVT") if len(fields) > 30 and fields[30] else None
+                # actual_block_time_mvt = parse_time(fields[29], "Actual Block Time MVT") if len(fields) > 29 and fields[29] else None
+                # flight_time_mvt = parse_time(fields[30], "Flight Time MVT") if len(fields) > 30 and fields[30] else None
 
                 print("\n=======================================================")
                 print(f"\nAircraft Config: {aircraft_config}\nOperation Day: {operation_day}\nDeparture Station: {departure_station}\nFlight No: {flight_no}\nFlight Leg Code: {flight_leg_code}\nCancelled/Deleted: {cancelled_deleted}\nArrival Station: {arrival_station}\nAircraft Reg ID: {aircraft_reg_id}\nAircraft Type Index: {aircraft_type_index}\nAircraft Category: {aircraft_category}\nFlight Service Type: {flight_service_type}\nSTD: {format_time(std)}\nSTA: {format_time(sta)}\nOriginal Operation Day: {original_operation_day}\nOriginal STD: {format_time(original_std)}\nOriginal STA: {format_time(original_sta)}\nDeparture Delay Time: {departure_delay_time}\nDelay Code Kind: {delay_code_kind}\nATD: {format_time(atd)}\nTakeoff: {format_time(takeoff)}\nTouchdown: {format_time(touchdown)}\nATA: {format_time(ata)}")
@@ -1978,8 +1978,8 @@ def process_tableau_data_file(attachment):
                         'delay_code_kind': delay_code_kind,
                         'aircraft_config': aircraft_config,
                         # ADD THE NEW FIELDS TO UPDATE DICTIONARY
-                        'actual_block_time_mvt': actual_block_time_mvt,
-                        'flight_time_mvt': flight_time_mvt,
+                        # 'actual_block_time_mvt': actual_block_time_mvt,
+                        # 'flight_time_mvt': flight_time_mvt,
                     }
 
                     for field, new_value in fields_to_update.items():
@@ -2017,8 +2017,8 @@ def process_tableau_data_file(attachment):
                         delay_code_kind=delay_code_kind,
                         aircraft_config=aircraft_config,
                         # ADD THE NEW FIELDS TO CREATE STATEMENT
-                        actual_block_time_mvt=format_time(actual_block_time_mvt),
-                        flight_time_mvt=format_time(flight_time_mvt),
+                        # actual_block_time_mvt=format_time(actual_block_time_mvt),
+                        # flight_time_mvt=format_time(flight_time_mvt),
                     )
                     logger.info(f"Created new record for flight {flight_no} on {operation_day}.")
             except Exception as e:
