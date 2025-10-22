@@ -3885,3 +3885,133 @@ class TableauDataListView(generics.ListAPIView):
                 pass
         
         return None
+    
+
+
+# ------------------------------------------------------------------------------------
+
+# Qatar APIS
+
+# ------------------------------------------------------------------------------------------
+
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.db.models import Count, Q
+from .models import QatarFlightDetails, QatarCrewDetail
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def qatar_apis_dashboard(request):
+    """
+    Main dashboard view for Qatar APIS records.
+    Shows all flight assignments with their status and crew counts.
+    """
+    try:
+        # Get unique flight assignments (group by flight, date, direction, and filename)
+        # We want one row per APIS file generated
+        apis_records = QatarFlightDetails.objects.select_related('flight').filter(
+            apis_filename__isnull=False  # Only show records that have been included in a file
+        ).distinct('flight', 'dep_date_utc', 'direction', 'apis_filename').order_by(
+            'flight', 'dep_date_utc', 'direction', 'apis_filename', '-status_updated_at'
+        )
+        
+        # Calculate crew count for each record
+        for record in apis_records:
+            record.crew_count = QatarFlightDetails.objects.filter(
+                flight=record.flight,
+                dep_date_utc=record.dep_date_utc,
+                apis_filename=record.apis_filename
+            ).count()
+        
+        # Summary statistics
+        total_flights = QatarFlightDetails.objects.filter(
+            apis_filename__isnull=False
+        ).values('flight', 'dep_date_utc').distinct().count()
+        
+        total_crew = QatarFlightDetails.objects.filter(
+            apis_filename__isnull=False
+        ).count()
+        
+        # Status counts
+        status_counts = QatarFlightDetails.objects.filter(
+            apis_filename__isnull=False
+        ).values('status').annotate(count=Count('status'))
+        
+        status_dict = {item['status']: item['count'] for item in status_counts}
+        
+        context = {
+            'apis_records': apis_records,
+            'total_flights': total_flights,
+            'total_crew': total_crew,
+            'status_counts': status_dict,
+        }
+        
+        return render(request, 'aimsintegration/qatar_apis_dashboard.html', context)
+        
+    except Exception as e:
+        logger.error(f"Error in qatar_apis_dashboard: {e}")
+        return render(request, 'aimsintegration/qatar_apis_dashboard.html', {
+            'apis_records': [],
+            'total_flights': 0,
+            'total_crew': 0,
+            'status_counts': {},
+        })
+
+
+def qatar_apis_details(request, record_id):
+    """
+    API endpoint to fetch detailed crew information for a specific flight assignment.
+    Returns JSON with flight info and all crew members.
+    """
+    try:
+        # Get the main record
+        record = QatarFlightDetails.objects.select_related('flight').get(id=record_id)
+        
+        # Get all crew for this flight with the same APIS filename
+        crew_assignments = QatarFlightDetails.objects.filter(
+            flight=record.flight,
+            dep_date_utc=record.dep_date_utc,
+            apis_filename=record.apis_filename
+        ).select_related('flight')
+        
+        # Collect crew details
+        crew_members = []
+        for crew_assignment in crew_assignments:
+            crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_assignment.crew_id).first()
+            
+            if crew_detail:
+                crew_members.append({
+                    'crew_id': crew_detail.crew_id,
+                    'surname': crew_detail.surname or '',
+                    'firstname': crew_detail.firstname or '',
+                    'middlename': crew_detail.middlename or '',
+                    'passport_number': crew_detail.passport_number or '',
+                    'nationality_code': crew_detail.nationality_code or '',
+                    'birth_date': crew_detail.birth_date.strftime('%Y-%m-%d') if crew_detail.birth_date else '--',
+                    'sex': crew_detail.sex or '--',
+                    'passport_expiry': crew_detail.passport_expiry.strftime('%Y-%m-%d') if crew_detail.passport_expiry else '--',
+                })
+        
+        # Prepare response data
+        data = {
+            'flight_no': record.flight.flight_no,
+            'tail_no': record.tail_no,
+            'dep_date': record.dep_date_utc.strftime('%Y-%m-%d'),
+            'route': f"{record.flight.dep_code_iata} → {record.flight.arr_code_iata}",
+            'direction': record.direction,
+            'status': record.get_status_display(),
+            'apis_filename': record.apis_filename or '--',
+            'std_utc': record.std_utc.strftime('%H:%M') if record.std_utc else '--',
+            'sta_utc': record.sta_utc.strftime('%H:%M') if record.sta_utc else '--',
+            'crew_members': crew_members,
+        }
+        
+        return JsonResponse(data)
+        
+    except QatarFlightDetails.DoesNotExist:
+        return JsonResponse({'error': 'Record not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error in qatar_apis_details: {e}")
+        return JsonResponse({'error': 'Internal server error'}, status=500)

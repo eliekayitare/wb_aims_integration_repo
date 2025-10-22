@@ -53,5 +53,10 @@ urlpatterns = [
     #HUBSPOT
     path('flight-disruption-data/', views.TableauDataListView.as_view(), name='flight-disruption-data'),
 
+    #QATAR APIS
+
+    path('qatar-apis/', views.qatar_apis_dashboard, name='qatar_apis_dashboard'),
+    path('qatar-apis/details/<int:record_id>/', views.qatar_apis_details, name='qatar_apis_details'),
+
 
 ]

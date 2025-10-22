@@ -1,0 +1,504 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+<style>
+  /* Status badge styling */
+  .status-badge {
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  
+  .status-generated { background-color: #ffc107; color: #000; }
+  .status-sent { background-color: #17a2b8; color: #fff; }
+  .status-processed { background-color: #fd7e14; color: #fff; }
+  .status-received { background-color: #28a745; color: #fff; }
+  
+  /* Direction badge */
+  .direction-badge {
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+  }
+  
+  .direction-outbound { background-color: #007bff; color: #fff; }
+  .direction-inbound { background-color: #6c757d; color: #fff; }
+  
+  /* Modal styling */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.6);
+    animation: fadeIn 0.3s;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  .modal-content {
+    background-color: #fefefe;
+    margin: 3% auto;
+    padding: 0;
+    border: 1px solid #888;
+    width: 90%;
+    max-width: 1200px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    animation: slideDown 0.3s;
+  }
+  
+  @keyframes slideDown {
+    from {
+      transform: translateY(-50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .modal-header {
+    padding: 20px 30px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px 10px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .modal-header h2 {
+    margin: 0;
+    font-size: 24px;
+  }
+  
+  .close {
+    color: white;
+    font-size: 35px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  
+  .close:hover,
+  .close:focus {
+    color: #f1f1f1;
+    transform: scale(1.1);
+  }
+  
+  .modal-body {
+    padding: 30px;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  
+  /* Flight info section */
+  .flight-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+  
+  .info-item {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .info-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+  
+  .info-value {
+    font-size: 16px;
+    color: #212529;
+    font-weight: 500;
+  }
+  
+  /* Crew table */
+  .crew-section-title {
+    font-size: 20px;
+    color: #212529;
+    margin: 30px 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #667eea;
+  }
+  
+  .crew-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+  
+  .crew-table th {
+    background: #667eea;
+    color: white;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  
+  .crew-table td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 14px;
+  }
+  
+  .crew-table tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .crew-table tr:last-child td {
+    border-bottom: none;
+  }
+  
+  /* Action buttons */
+  .btn-view {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.3s;
+  }
+  
+  .btn-view:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+  }
+  
+  /* Summary cards */
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  
+  .summary-card {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+  
+  .summary-card h3 {
+    font-size: 32px;
+    margin: 10px 0;
+    color: #667eea;
+  }
+  
+  .summary-card p {
+    color: #6c757d;
+    font-size: 14px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <ul>
+      <li><a href="{% url 'dashboard' %}">ACARS</a></li>
+      <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
+      <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
+      <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
+      <li><a href="{% url 'qatar_apis_dashboard' %}" class="active">Qatar APIS</a></li>
+      <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <h1 style="margin-bottom: 20px; color: #212529;">Qatar APIS Dashboard</h1>
+    
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+      <div class="summary-card">
+        <p>Total Flights</p>
+        <h3>{{ total_flights }}</h3>
+      </div>
+      <div class="summary-card">
+        <p>Total Crew</p>
+        <h3>{{ total_crew }}</h3>
+      </div>
+      <div class="summary-card">
+        <p>Generated</p>
+        <h3>{{ status_counts.GENERATED|default:0 }}</h3>
+      </div>
+      <div class="summary-card">
+        <p>Sent</p>
+        <h3>{{ status_counts.SENT|default:0 }}</h3>
+      </div>
+      <div class="summary-card">
+        <p>Received</p>
+        <h3>{{ status_counts.RECEIVED|default:0 }}</h3>
+      </div>
+    </div>
+    
+    <!-- Search and Filter -->
+    <div class="search-filter-container">
+      <input
+        type="text"
+        placeholder="Search by flight number, filename..."
+        class="search-input"
+        id="search-input"
+      />
+
+      <select class="filter-select" id="status-filter">
+        <option value="">All Status</option>
+        <option value="GENERATED">Generated</option>
+        <option value="SENT">Sent</option>
+        <option value="PROCESSED">Processed</option>
+        <option value="RECEIVED">Received</option>
+      </select>
+
+      <select class="filter-select" id="direction-filter">
+        <option value="">All Directions</option>
+        <option value="O">Outbound</option>
+        <option value="I">Inbound</option>
+      </select>
+
+      <input type="date" id="date-filter" class="search-input" style="width: 200px;" />
+    </div>
+
+    <!-- APIS Records Table -->
+    <div class="table-container">
+      <table id="apis-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Flight No.</th>
+            <th>Tail No.</th>
+            <th>Route</th>
+            <th>Direction</th>
+            <th>Crew Count</th>
+            <th>Status</th>
+            <th>APIS Filename</th>
+            <th>Generated At</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="apis-data">
+          {% for record in apis_records %}
+          <tr>
+            <td>{{ record.dep_date_utc|date:"Y-m-d" }}</td>
+            <td>WB{{ record.flight.flight_no }}</td>
+            <td>{{ record.tail_no }}</td>
+            <td>{{ record.flight.dep_code_iata }} → {{ record.flight.arr_code_iata }}</td>
+            <td>
+              <span class="direction-badge direction-{% if record.direction == 'O' %}outbound{% else %}inbound{% endif %}">
+                {% if record.direction == 'O' %}Outbound{% else %}Inbound{% endif %}
+              </span>
+            </td>
+            <td>{{ record.crew_count|default:"0" }}</td>
+            <td>
+              <span class="status-badge status-{{ record.status|lower }}">
+                {{ record.get_status_display }}
+              </span>
+            </td>
+            <td>{{ record.apis_filename|default:"--" }}</td>
+            <td>{{ record.status_updated_at|date:"Y-m-d H:i"|default:"--" }}</td>
+            <td>
+              <button class="btn-view" onclick="viewDetails('{{ record.id }}')">
+                View Details
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" style="text-align: center; padding: 20px; color: #6c757d;">
+              No APIS records found
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal for Crew Details -->
+<div id="crewModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Flight & Crew Details</h2>
+      <span class="close" onclick="closeModal()">&times;</span>
+    </div>
+    <div class="modal-body" id="modal-body-content">
+      <!-- Content will be loaded dynamically -->
+    </div>
+  </div>
+</div>
+
+<script>
+  // Filter functionality
+  document.getElementById('search-input').addEventListener('input', filterTable);
+  document.getElementById('status-filter').addEventListener('change', filterTable);
+  document.getElementById('direction-filter').addEventListener('change', filterTable);
+  document.getElementById('date-filter').addEventListener('change', filterTable);
+
+  function filterTable() {
+    const searchValue = document.getElementById('search-input').value.toLowerCase();
+    const statusValue = document.getElementById('status-filter').value;
+    const directionValue = document.getElementById('direction-filter').value;
+    const dateValue = document.getElementById('date-filter').value;
+    
+    const rows = document.querySelectorAll('#apis-data tr');
+    
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      const statusMatch = !statusValue || row.querySelector('.status-badge')?.textContent.includes(statusValue);
+      const directionMatch = !directionValue || row.querySelector('.direction-badge')?.textContent.includes(directionValue === 'O' ? 'Outbound' : 'Inbound');
+      const dateMatch = !dateValue || row.cells[0].textContent === dateValue;
+      const searchMatch = !searchValue || text.includes(searchValue);
+      
+      row.style.display = (statusMatch && directionMatch && dateMatch && searchMatch) ? '' : 'none';
+    });
+  }
+
+  // View details function
+  function viewDetails(recordId) {
+    fetch(`/aims/qatar-apis/details/${recordId}/`)
+      .then(response => response.json())
+      .then(data => {
+        displayModalContent(data);
+        document.getElementById('crewModal').style.display = 'block';
+      })
+      .catch(error => {
+        console.error('Error fetching details:', error);
+        alert('Error loading crew details');
+      });
+  }
+
+  function displayModalContent(data) {
+    const modalBody = document.getElementById('modal-body-content');
+    
+    let html = `
+      <div class="flight-info-grid">
+        <div class="info-item">
+          <span class="info-label">Flight Number</span>
+          <span class="info-value">WB${data.flight_no}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Tail Number</span>
+          <span class="info-value">${data.tail_no}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Date</span>
+          <span class="info-value">${data.dep_date}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Route</span>
+          <span class="info-value">${data.route}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Direction</span>
+          <span class="info-value">
+            <span class="direction-badge direction-${data.direction === 'O' ? 'outbound' : 'inbound'}">
+              ${data.direction === 'O' ? 'Outbound' : 'Inbound'}
+            </span>
+          </span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Status</span>
+          <span class="info-value">
+            <span class="status-badge status-${data.status.toLowerCase()}">
+              ${data.status}
+            </span>
+          </span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">APIS Filename</span>
+          <span class="info-value">${data.apis_filename || '--'}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">STD</span>
+          <span class="info-value">${data.std_utc}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">STA</span>
+          <span class="info-value">${data.sta_utc}</span>
+        </div>
+      </div>
+      
+      <h3 class="crew-section-title">Crew Members (${data.crew_members.length})</h3>
+      <table class="crew-table">
+        <thead>
+          <tr>
+            <th>Crew ID</th>
+            <th>Name</th>
+            <th>Passport</th>
+            <th>Nationality</th>
+            <th>Birth Date</th>
+            <th>Gender</th>
+            <th>Passport Expiry</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    data.crew_members.forEach(crew => {
+      html += `
+        <tr>
+          <td>${crew.crew_id}</td>
+          <td>${crew.surname}, ${crew.firstname || ''} ${crew.middlename || ''}</td>
+          <td>${crew.passport_number}</td>
+          <td>${crew.nationality_code}</td>
+          <td>${crew.birth_date}</td>
+          <td>${crew.sex}</td>
+          <td>${crew.passport_expiry}</td>
+        </tr>
+      `;
+    });
+    
+    html += `
+        </tbody>
+      </table>
+    `;
+    
+    modalBody.innerHTML = html;
+  }
+
+  function closeModal() {
+    document.getElementById('crewModal').style.display = 'none';
+  }
+
+  // Close modal when clicking outside
+  window.onclick = function(event) {
+    const modal = document.getElementById('crewModal');
+    if (event.target === modal) {
+      modal.style.display = 'none';
+    }
+  }
+</script>
+
+{% endblock %}
