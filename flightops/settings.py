@@ -281,7 +281,7 @@ CELERY_BEAT_SCHEDULE = {
     'fetch-acars-messages-every-3-minutes': {
         'task': 'aimsintegration.tasks.fetch_acars_messages',
         'schedule': crontab(minute='*/3'),  # Every 3 minutes
-    },
+    }, 
 
     # CARGO Project - Runs every 1 hour 20 minutes
     'fetch-cargo-data-every-1-hour': {
@@ -326,10 +326,10 @@ CELERY_BEAT_SCHEDULE = {
     },
 
     # Feed Tableau - Runs every 5 minutes
-    # 'feed-tableau-every-5-minutes': {
-    #     'task': 'aimsintegration.tasks.fetch_tableau',
-    #     'schedule': crontab(minute='*/5'),  # Every 5 minutes
-    # },
+    'feed-tableau-every-5-minutes': {
+        'task': 'aimsintegration.tasks.fetch_tableau',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    },
 
     # Delete old emails - Runs every 1 hour
 
@@ -360,12 +360,12 @@ CELERY_BEAT_SCHEDULE = {
      # Job 97: fetch flight-crew assignments every 10 minutes
     'fetch-job97-every-10-minutes': {
         'task': 'aimsintegration.tasks.fetch_job97',
-        'schedule': crontab(minute='*/5'),
+        'schedule': crontab(minute='*/12'),
     },
     # Job 1008: fetch static crew details every 15 minutes
     'fetch-job1008-every-15-minutes': {
         'task': 'aimsintegration.tasks.fetch_job1008',
-        'schedule': crontab(minute='*/4'),
+        'schedule': crontab(minute='*/180'),
     },
 
 
