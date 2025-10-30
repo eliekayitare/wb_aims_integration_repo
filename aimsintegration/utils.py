@@ -673,8 +673,8 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     flight_no = f"{flight_data.flight_no:>4}"  # Right-aligned with padding
     leg_code = " "  # Single letter leg code (empty space)
     service_type = "  "  # Two spaces for service type
-    dep_code_icao = flight_data.dep_code_icao if flight_data.dep_code_icao else "   "  # 3-letter departure airport code
-    arr_code_icao = flight_data.arr_code_icao if flight_data.arr_code_icao else "   "  # 3-letter arrival airport code
+    dep_code_iata = flight_data.dep_code_iata if flight_data.dep_code_iata else "   "  # 3-letter departure airport code
+    arr_code_iata = flight_data.arr_code_iata if flight_data.arr_code_iata else "   "  # 3-letter arrival airport code
     aircraft_type = get_aircraft_type(flight_data.tail_no)  # 3-letter aircraft type
     tail_number = f"{flight_data.tail_no:<12}"  # Left-aligned, filled to 12 characters with spaces
     scheduled_departure_day = flight_data.sd_date_utc.strftime("%Y%m%d") if flight_data.sd_date_utc else " " * 8
@@ -724,10 +724,10 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
         f"{flight_no}"
         f"{leg_code}"
         f"{service_type}"
-        f"{dep_code_icao:<3}"
+        f"{dep_code_iata:<3}"
         f"{aircraft_type}"
         f"{tail_number:<12}"
-        f"{arr_code_icao:<3}"
+        f"{arr_code_iata:<3}"
         f"{scheduled_departure_day}"
         f"{scheduled_departure_time}"
         f"{scheduled_arrival_day}"
