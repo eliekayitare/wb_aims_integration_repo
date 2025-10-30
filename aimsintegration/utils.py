@@ -762,40 +762,40 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     """
     Format flight data into JOB1 fixed-width format.
     
-    Total length: 172 characters (exactly)
+    Total length: 178 characters (exactly)
     
-    Field positions (1-indexed):
-    1-3:     Carrier code (3 chars)
+    Field positions (1-indexed as per specification):
+    1-3:     Carrier code (3 chars, alphabetic)
     4-7:     Flight number (4 chars, numeric)
-    8:       Leg code (1 char, alphabetic)
-    9-10:    Service type IATA code (2 chars)
-    11-13:   Departure airport code (3 chars)
-    14-16:   Aircraft type (3 chars)
-    17-28:   Tail number (12 chars)
-    29-31:   Arrival airport code (3 chars)
-    32-39:   Scheduled departure day (8 chars, YYYYMMDD)
-    40-43:   Scheduled departure time (4 chars, HHMM)
-    44-51:   Scheduled arrival day (8 chars, YYYYMMDD)
-    52-55:   Scheduled arrival time (4 chars, HHMM)
-    56-63:   Estimated departure day (8 chars, YYYYMMDD)
-    64-67:   Estimated departure time (4 chars, HHMM)
-    68-75:   Estimated arrival day (8 chars, YYYYMMDD)
-    76-79:   Estimated arrival time (4 chars, HHMM)
+    8:       Leg code (1 char, alphabetic - single letter leg code)
+    9-10:    Service type IATA code (2 chars, alphanumeric)
+    11-13:   Departure airport code (3 chars, alphabetic)
+    14-16:   Aircraft type (3 chars, alphanumeric)
+    17-28:   Tail number (12 chars, text)
+    29-31:   Arrival airport code (3 chars, alphabetic)
+    32-39:   Scheduled day of departure (8 chars, YYYYMMDD)
+    40-43:   Scheduled time of departure (STD) (4 chars, HHMM)
+    44-51:   Scheduled day of arrival (8 chars, YYYYMMDD)
+    52-55:   Scheduled time of arrival (STA) (4 chars, HHMM)
+    56-63:   Estimated day of departure (8 chars, YYYYMMDD)
+    64-67:   Estimated time of departure (ETD) (4 chars, HHMM)
+    68-75:   Estimated day of arrival (8 chars, YYYYMMDD)
+    76-79:   Estimated time of arrival (ETA) (4 chars, HHMM)
     80-87:   Blocks off day (8 chars, YYYYMMDD)
-    88-91:   Blocks off time (4 chars, HHMM)
+    88-91:   Blocks off time (ATD) (4 chars, HHMM)
     92-99:   Blocks on day (8 chars, YYYYMMDD)
-    100-103: Blocks on time (4 chars, HHMM)
+    100-103: Blocks on time (ATA) (4 chars, HHMM)
     104-111: Airborne day (8 chars, YYYYMMDD)
     112-115: Airborne time (4 chars, HHMM)
     116-123: Touch down day (8 chars, YYYYMMDD)
     124-127: Touch down time (4 chars, HHMM)
-    128-129: Flight status code (2 chars, optional)
+    128-129: Flight status code (2 chars, alphabetic, optional)
     130-153: General remarks (24 chars, free text)
-    154:     Operation code (1 char: N=new, U=update, D=delete)
+    154:     Operation code (1 char: "N"=new, "U"=update, "D"=delete)
     155-162: Crewmember ID - Take-off (8 chars, numeric)
     163-170: Crewmember ID - Landing (8 chars, numeric)
     171:     Rule set (1 char, numeric)
-    172:     Log Page Number (1 char, numeric)
+    172-178: Log Page Number (7 chars, numeric)
     """
     
     # Fixed base fields
@@ -881,7 +881,7 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     crew_id_takeoff = " " * 8   # 8 chars
     crew_id_landing = " " * 8   # 8 chars
     rule_set = " "        # 1 char
-    log_page = " "        # 1 char only (to make total 172)
+    log_page = " " * 7    # 7 chars (positions 172-178)
     
     # Construct the complete row
     row = (
@@ -915,11 +915,11 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
         f"{crew_id_takeoff}"     # Positions 155-162
         f"{crew_id_landing}"     # Positions 163-170
         f"{rule_set}"            # Position 171
-        f"{log_page}"            # Position 172
+        f"{log_page}"            # Positions 172-178
     )
     
-    # Verify the row is exactly 172 characters
-    assert len(row) == 172, f"Row length is {len(row)}, expected 172"
+    # Verify the row is exactly 178 characters
+    assert len(row) == 178, f"Row length is {len(row)}, expected 178"
     
     return row
 
