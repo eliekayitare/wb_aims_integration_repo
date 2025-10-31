@@ -667,97 +667,6 @@ def get_aircraft_type(tail_number):
     return TAIL_TO_AIRCRAFT_TYPE.get(tail_number, "   ")  # Default to 3 spaces if not found
 
 # # Function to format a single row based on the event type and highlighted fields
-# def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
-#     # Set up the initial base fields with appropriate padding and spacing
-#     carrier_code = " WB"
-#     flight_no = f"{flight_data.flight_no:>4}"  # Right-aligned with padding
-#     leg_code = " "  # Single letter leg code (empty space)
-#     service_type = "  "  # Two spaces for service type
-#     dep_code_iata = flight_data.dep_code_iata if flight_data.dep_code_iata else "   "  # 3-letter departure airport code
-#     arr_code_iata = flight_data.arr_code_iata if flight_data.arr_code_iata else "   "  # 3-letter arrival airport code
-#     aircraft_type = get_aircraft_type(flight_data.tail_no)  # 3-letter aircraft type
-#     tail_number = f"{flight_data.tail_no:<12}"  # Left-aligned, filled to 12 characters with spaces
-#     scheduled_departure_day = flight_data.sd_date_utc.strftime("%Y%m%d") if flight_data.sd_date_utc else " " * 8
-#     scheduled_departure_time = flight_data.std_utc.strftime("%H%M") if flight_data.std_utc else "    "
-#     scheduled_arrival_day = flight_data.sa_date_utc.strftime("%Y%m%d") if flight_data.sa_date_utc else "        "
-#     scheduled_arrival_time = flight_data.sta_utc.strftime("%H%M") if flight_data.sta_utc else "    "
-#     email_arrival_day = email_arrival_time.strftime("%Y%m%d")
-#     # Fields for estimated and actual times, initially empty (filled with spaces)
-#     estimated_departure_day = " " * 8
-#     estimated_departure_time = " " * 4
-#     estimated_arrival_day = " " * 8
-#     estimated_arrival_time = " " * 4
-#     block_off_day = " " * 8
-#     block_off_time = " " * 4
-#     block_on_day = " " * 8
-#     block_on_time = " " * 4
-#     airborne_day = " " * 8
-#     airborne_time = " " * 4
-#     touch_down_day = " " * 8
-#     touch_down_time = " " * 4
-
-#     # Populate actual values based on the ACARS event type
-#     if acars_event == "OT":
-#         block_off_day = email_arrival_day
-#         block_off_time = event_time.strftime("%H%M")
-#     elif acars_event == "IN":
-#         block_on_day = email_arrival_day
-#         block_on_time = event_time.strftime("%H%M")
-#     elif acars_event == "OF":
-#         airborne_day = email_arrival_day
-#         airborne_time = event_time.strftime("%H%M")
-#     elif acars_event == "ON":
-#         touch_down_day = email_arrival_day
-#         touch_down_time = event_time.strftime("%H%M")
-
-#     # Define U operation code placement and final padding
-#     operation_code = "U"
-#     free_text_remarks = " " * 24  # 24 spaces for remarks
-#     crew_id_takeoff = " " * 8
-#     crew_id_landing = " " * 8
-#     rule_set = " "  # One space for rule set
-#     log_page_number = " " * 7  # 7 spaces for log page number
-
-#     # Construct the row according to the required field lengths
-#     row = (
-#         f"{carrier_code}"
-#         f"{flight_no}"
-#         f"{leg_code}"
-#         f"{service_type}"
-#         f"{dep_code_iata:<3}"
-#         f"{aircraft_type}"
-#         f"{tail_number:<12}"
-#         f"{arr_code_iata:<3}"
-#         f"{scheduled_departure_day}"
-#         f"{scheduled_departure_time}"
-#         f"{scheduled_arrival_day}"
-#         f"{scheduled_arrival_time}"
-#         f"{estimated_departure_day}"
-#         f"{estimated_departure_time}"
-#         f"{estimated_arrival_day}"
-#         f"{estimated_arrival_time}"
-#         f"{block_off_day}"
-#         f"{block_off_time}"
-#         f"{block_on_day}"
-#         f"{block_on_time}"
-#         f"{airborne_day}"
-#         f"{airborne_time}"
-#         f"{touch_down_day}"
-#         f"{touch_down_time}"
-#         f"  "  # Flight status code (2 spaces, optional)
-#         f"{free_text_remarks}"  # 24 spaces for general remarks
-#         f"{operation_code}"  # Operation code U
-#         f"{crew_id_takeoff}"
-#         f"{crew_id_landing}"
-#         f"{rule_set}"
-#         f"{log_page_number}"
-#     )
-
-#     # Ensure the row is exactly 172 characters long
-#     row = row.ljust(172)
-#     return row
-
-
 def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
     """
     Format flight data into JOB1 fixed-width format.
@@ -3684,8 +3593,6 @@ def build_qatar_apis_edifact(direction, date):
         "QN",
         "=DESTINATION TYPE B",
         "STX,DOHQAXS",
-        "=SUBJECT",
-        "QATAPIS",
         "=TEXT",
         "UNA:+.?*'"
     ]
