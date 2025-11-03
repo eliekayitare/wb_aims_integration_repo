@@ -374,6 +374,14 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/240'),  
     },
 
+    #JEPPESEN Integration
+
+    'fetch_jeppessen_crew_data':{
+        'task':'aimsintegration.tasks.fetch_jeppessen_crew_data',
+        'schedule':crontab(minute='/3'),
+    }
+
+
 }
 
 CORS_ALLOWED_ORIGINS = [
