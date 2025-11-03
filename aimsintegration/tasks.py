@@ -2174,12 +2174,12 @@ def fetch_jeppessen_crew_data():
         
         # Email configuration
         credentials = Credentials(
-            username=settings.EMAIL_USERNAME,
-            password=settings.EMAIL_PASSWORD
+            username=settings.EXCHANGE_EMAIL_USER,
+            password=settings.EXCHANGE_EMAIL_PASSWORD
         )
         
         config = Configuration(
-            server=settings.EMAIL_SERVER,
+            server=settings.EXCHANGE_EMAIL_SERVER,
             credentials=credentials
         )
         
@@ -2191,7 +2191,7 @@ def fetch_jeppessen_crew_data():
         )
         
         # Search for Jeppessen emails
-        jeppessen_subject = "AIMS JOB : #16.B AIMS-Jeppessen integration"
+        jeppessen_subject = "AIMS JOB : #16.B AIMS-Jeppessen integration + ' file attached"
         inbox = account.inbox
         
         logger.info(f"Searching for emails with subject containing: '{jeppessen_subject}'")
