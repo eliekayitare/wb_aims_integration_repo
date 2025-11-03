@@ -378,7 +378,7 @@ CELERY_BEAT_SCHEDULE = {
 
     'fetch_jeppessen_crew_data':{
         'task':'aimsintegration.tasks.fetch_jeppessen_crew_data',
-        'schedule':crontab(minute='/3'),
+        'schedule':crontab(minute='*/3'),
     }
 
 
