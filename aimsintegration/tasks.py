@@ -2142,6 +2142,9 @@ def delete_emails_by_subject_list(self):
 # ============================================================================
 # JEPPESSEN INTEGRATION TASKS WITH ERP EMAIL INTEGRATION
 # ============================================================================
+# ============================================================================
+# JEPPESSEN INTEGRATION TASKS - UPDATED
+# ============================================================================
 
 import logging
 import time
@@ -2149,7 +2152,7 @@ from datetime import datetime, date
 from celery import shared_task
 from django.db import transaction, connections
 from django.conf import settings
-from exchangelib import DELEGATE, Account, Credentials, Configuration, FileAttachment
+from exchangelib import FileAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -2159,7 +2162,7 @@ def fetch_jeppessen_crew_data():
     """
     Celery task to fetch and process Jeppessen crew data from email.
     
-    Email Subject: "AIMS JOB : #16.B AIMS-Jeppessen integration"
+    Email Subject: "AIMS JOB : #16.B AIMS-Jeppessen integration + ' file attached"
     Runs: Every 16 minutes (configured in Celery Beat)
     
     Returns:
@@ -2172,30 +2175,23 @@ def fetch_jeppessen_crew_data():
         logger.info("Starting Jeppessen crew data fetch task...")
         logger.info("=" * 80)
         
-        # Email configuration
-        credentials = Credentials(
-            username=settings.EXCHANGE_EMAIL_USER,
-            password=settings.EXCHANGE_EMAIL_PASSWORD
-        )
-        
-        config = Configuration(
-            server=settings.EXCHANGE_EMAIL_SERVER,
-            credentials=credentials
-        )
-        
-        account = Account(
-            primary_smtp_address=settings.EMAIL_ADDRESS,
-            config=config,
-            autodiscover=False,
-            access_type=DELEGATE
-        )
+        # Get Exchange account using existing function
+        account = get_exchange_account()
         
         # Search for Jeppessen emails
         jeppessen_subject = "AIMS JOB : #16.B AIMS-Jeppessen integration + ' file attached"
-        inbox = account.inbox
         
         logger.info(f"Searching for emails with subject containing: '{jeppessen_subject}'")
-        unread_items = inbox.filter(is_read=False, subject__contains=jeppessen_subject)
+        
+        # Fetch emails, ordered by most recent first
+        emails = account.inbox.filter(
+            subject__contains=jeppessen_subject
+        ).order_by('-datetime_received')
+        
+        # Process only unread emails
+        unread_items = [email for email in emails if not email.is_read]
+        
+        logger.info(f"Found {len(unread_items)} unread Jeppessen emails")
         
         email_count = 0
         total_processed = 0
@@ -2408,13 +2404,7 @@ def parse_jeppessen_line(line):
         line (str): Raw line from file
     
     Returns:
-        dict: Parsed data with keys:
-            - flight_no (str)
-            - flight_date (date)
-            - origin_iata (str)
-            - destination_iata (str)
-            - crew_list (list): List of dicts with position, crew_id, full_crew_id, name
-        None: If parsing fails
+        dict: Parsed data or None if parsing fails
     """
     import re
     
@@ -2724,7 +2714,7 @@ def get_icao_from_iata(iata_code):
 
 
 # ============================================================================
-# Manual task to update emails for existing crew records
+# OPTIONAL: Manual task to update emails for existing crew records
 # ============================================================================
 
 @shared_task
