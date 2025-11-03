@@ -2131,3 +2131,675 @@ def delete_emails_by_subject_list(self):
         
         # Retry the task after `wait_time` seconds
         raise self.retry(exc=e, countdown=wait_time)
+    
+
+
+
+
+
+
+
+# ============================================================================
+# JEPPESSEN INTEGRATION TASKS WITH ERP EMAIL INTEGRATION
+# ============================================================================
+
+import logging
+import time
+from datetime import datetime, date
+from celery import shared_task
+from django.db import transaction, connections
+from django.conf import settings
+from exchangelib import DELEGATE, Account, Credentials, Configuration, FileAttachment
+
+logger = logging.getLogger(__name__)
+
+
+@shared_task
+def fetch_jeppessen_crew_data():
+    """
+    Celery task to fetch and process Jeppessen crew data from email.
+    
+    Email Subject: "AIMS JOB : #16.B AIMS-Jeppessen integration"
+    Runs: Every 16 minutes (configured in Celery Beat)
+    
+    Returns:
+        int: Number of emails processed
+    """
+    start_time = time.time()
+    
+    try:
+        logger.info("=" * 80)
+        logger.info("Starting Jeppessen crew data fetch task...")
+        logger.info("=" * 80)
+        
+        # Email configuration
+        credentials = Credentials(
+            username=settings.EMAIL_USERNAME,
+            password=settings.EMAIL_PASSWORD
+        )
+        
+        config = Configuration(
+            server=settings.EMAIL_SERVER,
+            credentials=credentials
+        )
+        
+        account = Account(
+            primary_smtp_address=settings.EMAIL_ADDRESS,
+            config=config,
+            autodiscover=False,
+            access_type=DELEGATE
+        )
+        
+        # Search for Jeppessen emails
+        jeppessen_subject = "AIMS JOB : #16.B AIMS-Jeppessen integration"
+        inbox = account.inbox
+        
+        logger.info(f"Searching for emails with subject containing: '{jeppessen_subject}'")
+        unread_items = inbox.filter(is_read=False, subject__contains=jeppessen_subject)
+        
+        email_count = 0
+        total_processed = 0
+        
+        for item in unread_items:
+            try:
+                logger.info("-" * 80)
+                logger.info(f"Processing email from: {item.sender}")
+                logger.info(f"Subject: {item.subject}")
+                logger.info(f"Received: {item.datetime_received}")
+                logger.info(f"Attachments: {len(item.attachments) if item.attachments else 0}")
+                
+                # Process attachments
+                if item.attachments:
+                    for attachment in item.attachments:
+                        if isinstance(attachment, FileAttachment):
+                            logger.info(f"Processing attachment: {attachment.name}")
+                            
+                            # Process the attachment
+                            result = process_jeppessen_attachment(
+                                attachment=attachment,
+                                email_subject=item.subject
+                            )
+                            
+                            if result:
+                                total_processed += 1
+                                logger.info(f"✓ Successfully processed attachment: {attachment.name}")
+                            else:
+                                logger.warning(f"⚠ Failed to process attachment: {attachment.name}")
+                else:
+                    logger.warning("No attachments found in email")
+                
+                # Mark email as read
+                item.is_read = True
+                item.save()
+                email_count += 1
+                
+                logger.info(f"✓ Email marked as read")
+                
+            except Exception as e:
+                logger.error(f"❌ Error processing email: {e}", exc_info=True)
+                continue
+        
+        # Calculate duration
+        duration = time.time() - start_time
+        
+        logger.info("=" * 80)
+        logger.info(f"Jeppessen crew data fetch completed")
+        logger.info(f"Emails processed: {email_count}")
+        logger.info(f"Attachments processed: {total_processed}")
+        logger.info(f"Duration: {duration:.2f} seconds")
+        logger.info("=" * 80)
+        
+        return email_count
+        
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"❌ Fatal error in Jeppessen crew data fetch: {e}", exc_info=True)
+        logger.error(f"Duration before failure: {duration:.2f} seconds")
+        return 0
+
+
+def process_jeppessen_attachment(attachment, email_subject):
+    """
+    Process a single Jeppessen crew data attachment.
+    
+    Args:
+        attachment: FileAttachment object from exchangelib
+        email_subject: Subject line of the email
+    
+    Returns:
+        bool: True if processing successful, False otherwise
+    """
+    from .models import JeppessenFlight, JeppessenCrew, JeppessenProcessingLog
+    
+    start_time = time.time()
+    
+    try:
+        # Decode file content
+        content = attachment.content.decode('utf-8').splitlines()
+        total_lines = len(content)
+        
+        logger.info(f"File contains {total_lines} lines")
+        
+        # Initialize counters
+        successful_lines = 0
+        failed_lines = 0
+        total_flights = 0
+        total_crew_members = 0
+        emails_found = 0
+        emails_not_found = 0
+        error_messages = []
+        
+        # Process each line
+        for line_num, line in enumerate(content, start=1):
+            line = line.strip()
+            
+            if not line:
+                continue
+            
+            try:
+                # Parse the line
+                parsed_data = parse_jeppessen_line(line)
+                
+                if not parsed_data:
+                    logger.warning(f"Line {line_num}: Could not parse - {line[:60]}...")
+                    failed_lines += 1
+                    error_messages.append(f"Line {line_num}: Parse failed")
+                    continue
+                
+                # Save to database (includes email fetching)
+                flight_obj, crew_count, email_stats = save_jeppessen_data(parsed_data, line)
+                
+                if flight_obj:
+                    successful_lines += 1
+                    total_flights += 1
+                    total_crew_members += crew_count
+                    emails_found += email_stats['found']
+                    emails_not_found += email_stats['not_found']
+                    
+                    logger.debug(f"Line {line_num}: ✓ Flight {parsed_data['flight_no']} - {crew_count} crew "
+                               f"({email_stats['found']} emails found)")
+                else:
+                    failed_lines += 1
+                    error_messages.append(f"Line {line_num}: Database save failed")
+                    
+            except Exception as e:
+                failed_lines += 1
+                error_msg = f"Line {line_num}: {str(e)[:100]}"
+                error_messages.append(error_msg)
+                logger.error(f"❌ {error_msg}", exc_info=True)
+                continue
+        
+        # Calculate duration
+        duration = time.time() - start_time
+        
+        # Determine status
+        if failed_lines == 0:
+            status = 'SUCCESS'
+        elif successful_lines > 0:
+            status = 'PARTIAL'
+        else:
+            status = 'FAILED'
+        
+        # Create processing log
+        log = JeppessenProcessingLog.objects.create(
+            email_subject=email_subject,
+            attachment_name=attachment.name,
+            total_lines=total_lines,
+            successful_lines=successful_lines,
+            failed_lines=failed_lines,
+            total_flights=total_flights,
+            total_crew=total_crew_members,
+            status=status,
+            error_message='\n'.join(error_messages[:50]) if error_messages else None,
+            processing_duration=duration
+        )
+        
+        # Log summary
+        logger.info("=" * 60)
+        logger.info(f"Processing Summary for {attachment.name}")
+        logger.info("-" * 60)
+        logger.info(f"Total lines:       {total_lines}")
+        logger.info(f"Successful:        {successful_lines}")
+        logger.info(f"Failed:            {failed_lines}")
+        logger.info(f"Success rate:      {(successful_lines/total_lines*100):.1f}%")
+        logger.info(f"Total flights:     {total_flights}")
+        logger.info(f"Total crew:        {total_crew_members}")
+        logger.info(f"Emails found:      {emails_found}")
+        logger.info(f"Emails not found:  {emails_not_found}")
+        logger.info(f"Email success:     {(emails_found/total_crew_members*100):.1f}%" if total_crew_members > 0 else "N/A")
+        logger.info(f"Avg crew/flight:   {(total_crew_members/total_flights):.1f}" if total_flights > 0 else "N/A")
+        logger.info(f"Duration:          {duration:.2f} seconds")
+        logger.info(f"Status:            {status}")
+        logger.info("=" * 60)
+        
+        return status in ['SUCCESS', 'PARTIAL']
+        
+    except Exception as e:
+        logger.error(f"❌ Fatal error processing attachment: {e}", exc_info=True)
+        
+        # Create error log
+        try:
+            JeppessenProcessingLog.objects.create(
+                email_subject=email_subject,
+                attachment_name=attachment.name if attachment else "Unknown",
+                total_lines=0,
+                successful_lines=0,
+                failed_lines=0,
+                total_flights=0,
+                total_crew=0,
+                status='FAILED',
+                error_message=str(e)[:1000],
+                processing_duration=time.time() - start_time
+            )
+        except:
+            pass
+        
+        return False
+
+
+def parse_jeppessen_line(line):
+    """
+    Parse a single line from Jeppessen crew file.
+    
+    Format: FLIGHT_NO DATE ORIGIN DEST POSITION1 CREW_ID1 NAME1 POSITION2 CREW_ID2 NAME2 ...
+    Example: 464  27102025EBB NBO  CP  00003537ROBERTO MANTJE  FO  00003139IRAFASHA PATRICK
+    
+    Args:
+        line (str): Raw line from file
+    
+    Returns:
+        dict: Parsed data with keys:
+            - flight_no (str)
+            - flight_date (date)
+            - origin_iata (str)
+            - destination_iata (str)
+            - crew_list (list): List of dicts with position, crew_id, full_crew_id, name
+        None: If parsing fails
+    """
+    import re
+    
+    try:
+        # Extract flight number (1-4 digits at start)
+        flight_match = re.match(r'^(\d{1,4})\s+', line)
+        if not flight_match:
+            return None
+        
+        flight_no = flight_match.group(1).strip()
+        remaining = line[flight_match.end():].strip()
+        
+        # Extract date (8 digits - DDMMYYYY)
+        date_match = re.match(r'^(\d{8})\s*', remaining)
+        if not date_match:
+            return None
+        
+        date_str = date_match.group(1)
+        try:
+            flight_date = datetime.strptime(date_str, "%d%m%Y").date()
+        except ValueError:
+            logger.error(f"Invalid date format: {date_str}")
+            return None
+        
+        remaining = remaining[date_match.end():].strip()
+        
+        # Extract origin (3 letters)
+        origin_match = re.match(r'^([A-Z]{3})\s+', remaining)
+        if not origin_match:
+            return None
+        
+        origin_iata = origin_match.group(1)
+        remaining = remaining[origin_match.end():].strip()
+        
+        # Extract destination (3 letters)
+        dest_match = re.match(r'^([A-Z]{3})\s*', remaining)
+        if not dest_match:
+            return None
+        
+        destination_iata = dest_match.group(1)
+        crew_data = remaining[dest_match.end():].strip()
+        
+        # Parse crew members
+        crew_list = parse_crew_members(crew_data)
+        
+        return {
+            'flight_no': flight_no,
+            'flight_date': flight_date,
+            'origin_iata': origin_iata,
+            'destination_iata': destination_iata,
+            'crew_list': crew_list
+        }
+        
+    except Exception as e:
+        logger.error(f"Error parsing line: {e}")
+        return None
+
+
+def parse_crew_members(crew_data):
+    """
+    Parse crew member data from the crew section.
+    
+    Args:
+        crew_data (str): Crew data string
+    
+    Returns:
+        list: List of dicts with keys: position, crew_id (last 4), full_crew_id, name
+    """
+    import re
+    
+    crew_list = []
+    
+    if not crew_data or not crew_data.strip():
+        return crew_list
+    
+    # Valid position codes
+    valid_positions = ['CP', 'FO', 'FP', 'SA', 'FA', 'MX', 'AC', 'FE']
+    
+    # Find all position markers
+    position_pattern = r'\b(' + '|'.join(valid_positions) + r')\b'
+    position_matches = list(re.finditer(position_pattern, crew_data))
+    
+    if not position_matches:
+        return crew_list
+    
+    # Process each position marker
+    for i, pos_match in enumerate(position_matches):
+        position = pos_match.group(1)
+        start = pos_match.end()
+        
+        # Determine where this crew member's data ends
+        if i + 1 < len(position_matches):
+            end = position_matches[i + 1].start()
+        else:
+            end = len(crew_data)
+        
+        # Extract the data for this crew member
+        crew_section = crew_data[start:end].strip()
+        
+        # Extract crew ID (8 digits with optional D prefix)
+        crew_id_match = re.match(r'\s*(D?\d{8})\s*(.+)', crew_section)
+        
+        if crew_id_match:
+            full_crew_id = crew_id_match.group(1)
+            name = crew_id_match.group(2).strip()
+            
+            # Extract only the last 4 digits from crew_id
+            numeric_id = full_crew_id.lstrip('D')
+            crew_id = numeric_id[-4:]
+            
+            crew_list.append({
+                'position': position,
+                'crew_id': crew_id,           # Last 4 digits only
+                'full_crew_id': full_crew_id, # Original (00003537 or D00002019)
+                'name': name
+            })
+    
+    return crew_list
+
+
+def get_crew_email_from_erp(crew_id):
+    """
+    Fetch crew email from ERP (MSSQL) using crew_id.
+    
+    Args:
+        crew_id (str): Last 4 digits of crew ID (e.g., "3537")
+    
+    Returns:
+        dict: {
+            'email': str or None,
+            'bank_name': str,
+            'bank_account_no': str
+        }
+    """
+    try:
+        # Format crew_id as WB + 4 digits with leading zeros
+        wb_formatted = f"WB{int(crew_id):04d}"
+        
+        logger.debug(f"Querying ERP for crew: {crew_id} → {wb_formatted}")
+        
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute("""
+                SELECT [Company E-Mail], [Bank Name], [Bank Account No]
+                FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [No_] = %s
+            """, [wb_formatted])
+            
+            row = cursor.fetchone()
+            
+            if row:
+                crew_email = row[0].strip() if row[0] else None
+                bank_name = row[1].strip() if row[1] else '-'
+                bank_account_no = row[2].strip() if row[2] else '-'
+                
+                if crew_email:
+                    logger.debug(f"✓ Found email for {wb_formatted}: {crew_email}")
+                else:
+                    logger.debug(f"⚠ No email for {wb_formatted} in ERP")
+                
+                return {
+                    'email': crew_email,
+                    'bank_name': bank_name,
+                    'bank_account_no': bank_account_no
+                }
+            else:
+                logger.debug(f"✗ Crew {wb_formatted} not found in ERP")
+                return {
+                    'email': None,
+                    'bank_name': '-',
+                    'bank_account_no': '-'
+                }
+                
+    except Exception as e:
+        logger.warning(f"Error fetching email from ERP for crew {crew_id}: {e}")
+        return {
+            'email': None,
+            'bank_name': '-',
+            'bank_account_no': '-'
+        }
+
+
+def save_jeppessen_data(parsed_data, raw_line):
+    """
+    Save parsed Jeppessen data to database with ERP email lookup.
+    
+    Args:
+        parsed_data (dict): Parsed flight and crew data
+        raw_line (str): Original line from file
+    
+    Returns:
+        tuple: (JeppessenFlight object or None, crew_count, email_stats dict)
+    """
+    from .models import JeppessenFlight, JeppessenCrew, AirportData
+    
+    try:
+        flight_no = parsed_data['flight_no']
+        flight_date = parsed_data['flight_date']
+        origin_iata = parsed_data['origin_iata']
+        destination_iata = parsed_data['destination_iata']
+        crew_list = parsed_data['crew_list']
+        
+        # Convert IATA to ICAO codes
+        origin_icao = get_icao_from_iata(origin_iata)
+        destination_icao = get_icao_from_iata(destination_iata)
+        
+        # Use ICAO if available, otherwise IATA
+        origin_code = origin_icao if origin_icao else origin_iata
+        destination_code = destination_icao if destination_icao else destination_iata
+        
+        # Track email statistics
+        emails_found = 0
+        emails_not_found = 0
+        
+        with transaction.atomic():
+            # Create or update flight record
+            flight, created = JeppessenFlight.objects.update_or_create(
+                flight_no=flight_no,
+                flight_date=flight_date,
+                origin_iata=origin_iata,
+                destination_iata=destination_iata,
+                defaults={
+                    'origin_icao': origin_icao,
+                    'destination_icao': destination_icao,
+                    'raw_line': raw_line
+                }
+            )
+            
+            if created:
+                logger.debug(f"Created new flight: {flight_no} on {flight_date}")
+            else:
+                logger.debug(f"Updated existing flight: {flight_no} on {flight_date}")
+            
+            # Delete existing crew for this flight
+            deleted_count = JeppessenCrew.objects.filter(
+                flight_no=flight_no,
+                flight_date=flight_date,
+                origin=origin_code,
+                destination=destination_code
+            ).delete()[0]
+            
+            if deleted_count > 0:
+                logger.debug(f"Deleted {deleted_count} existing crew records")
+            
+            # Insert new crew records with email lookup
+            crew_count = 0
+            for crew in crew_list:
+                # Fetch email from ERP
+                erp_data = get_crew_email_from_erp(crew['crew_id'])
+                
+                if erp_data['email']:
+                    emails_found += 1
+                else:
+                    emails_not_found += 1
+                
+                # Create crew record
+                JeppessenCrew.objects.create(
+                    flight=flight,
+                    flight_no=flight_no,
+                    flight_date=flight_date,
+                    origin=origin_code,
+                    destination=destination_code,
+                    crew_id=crew['crew_id'],           # Last 4 digits
+                    full_crew_id=crew['full_crew_id'], # Original format
+                    crew_name=crew['name'],
+                    position=crew['position'],
+                    email=erp_data['email'] if erp_data['email'] else ''  # Empty string if None
+                )
+                crew_count += 1
+            
+            logger.debug(f"Inserted {crew_count} crew records ({emails_found} with email)")
+            
+            email_stats = {
+                'found': emails_found,
+                'not_found': emails_not_found
+            }
+            
+            return flight, crew_count, email_stats
+            
+    except Exception as e:
+        logger.error(f"Error saving Jeppessen data: {e}", exc_info=True)
+        return None, 0, {'found': 0, 'not_found': 0}
+
+
+def get_icao_from_iata(iata_code):
+    """
+    Convert IATA code to ICAO code using AirportData model.
+    
+    Args:
+        iata_code (str): 3-letter IATA code (e.g., "EBB")
+    
+    Returns:
+        str: 4-letter ICAO code (e.g., "HKJK") or None if not found
+    """
+    from .models import AirportData
+    
+    try:
+        airport = AirportData.objects.filter(iata_code=iata_code).first()
+        if airport:
+            logger.debug(f"Converted {iata_code} → {airport.icao_code}")
+            return airport.icao_code
+        else:
+            logger.debug(f"ICAO code not found for IATA: {iata_code}")
+            return None
+    except Exception as e:
+        logger.warning(f"Could not convert IATA {iata_code} to ICAO: {e}")
+        return None
+
+
+# ============================================================================
+# Manual task to update emails for existing crew records
+# ============================================================================
+
+@shared_task
+def update_existing_crew_emails(days_back=7):
+    """
+    Optional task to update emails for existing JeppessenCrew records.
+    Useful for backfilling emails after initial data load.
+    
+    Args:
+        days_back (int): Number of days back to process
+    
+    Returns:
+        dict: Statistics of the update
+    """
+    from .models import JeppessenCrew
+    from datetime import timedelta
+    
+    try:
+        logger.info("=" * 80)
+        logger.info(f"Starting email update for crew records from last {days_back} days...")
+        logger.info("=" * 80)
+        
+        # Get crew records without emails from last N days
+        cutoff_date = date.today() - timedelta(days=days_back)
+        
+        crew_to_update = JeppessenCrew.objects.filter(
+            flight_date__gte=cutoff_date,
+            email__isnull=True
+        ) | JeppessenCrew.objects.filter(
+            flight_date__gte=cutoff_date,
+            email=''
+        )
+        
+        total_crew = crew_to_update.count()
+        logger.info(f"Found {total_crew} crew records without email")
+        
+        updated_count = 0
+        failed_count = 0
+        
+        for crew in crew_to_update:
+            try:
+                # Fetch email from ERP
+                erp_data = get_crew_email_from_erp(crew.crew_id)
+                
+                if erp_data['email']:
+                    crew.email = erp_data['email']
+                    crew.save(update_fields=['email', 'updated_at'])
+                    updated_count += 1
+                    logger.debug(f"✓ Updated email for crew {crew.crew_id}: {erp_data['email']}")
+                else:
+                    failed_count += 1
+                    logger.debug(f"✗ No email found for crew {crew.crew_id}")
+                    
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"Error updating crew {crew.crew_id}: {e}")
+        
+        logger.info("=" * 80)
+        logger.info(f"Email update completed")
+        logger.info(f"Total crew: {total_crew}")
+        logger.info(f"Updated: {updated_count}")
+        logger.info(f"Failed: {failed_count}")
+        logger.info(f"Success rate: {(updated_count/total_crew*100):.1f}%" if total_crew > 0 else "N/A")
+        logger.info("=" * 80)
+        
+        return {
+            'total': total_crew,
+            'updated': updated_count,
+            'failed': failed_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Fatal error updating crew emails: {e}", exc_info=True)
+        return {
+            'total': 0,
+            'updated': 0,
+            'failed': 0
+        }

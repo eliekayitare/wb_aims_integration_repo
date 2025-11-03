@@ -4015,3 +4015,152 @@ def qatar_apis_details(request, record_id):
     except Exception as e:
         logger.error(f"Error in qatar_apis_details: {e}")
         return JsonResponse({'error': 'Internal server error'}, status=500)
+    
+
+
+
+
+
+# ================================================================
+# jeppessen
+
+# ===============================================================
+
+# aimsintegration/views.py
+
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.db.models import Count, Q
+from django.utils import timezone
+from datetime import date, timedelta
+from .models import JeppessenFlight, JeppessenCrew, JeppessenProcessingLog
+
+
+def jeppessen_dashboard(request):
+    """
+    Main Jeppessen dashboard view with statistics and flight list.
+    """
+    # Get date range for filtering (default: last 30 days)
+    days_back = int(request.GET.get('days', 30))
+    start_date = date.today() - timedelta(days=days_back)
+    
+    # Get all flights in date range
+    flights = JeppessenFlight.objects.filter(
+        flight_date__gte=start_date
+    ).select_related().order_by('-flight_date', 'flight_no')
+    
+    # Today's statistics
+    today = date.today()
+    today_flights = JeppessenFlight.objects.filter(flight_date=today)
+    today_crew = JeppessenCrew.objects.filter(flight_date=today)
+    
+    # Overall statistics
+    total_flights = flights.count()
+    total_crew = JeppessenCrew.objects.filter(
+        flight_date__gte=start_date
+    ).count()
+    
+    # Crew by position (today)
+    position_counts = today_crew.values('position').annotate(
+        count=Count('id')
+    ).order_by('-count')
+    
+    # Crew with/without email (today)
+    today_crew_with_email = today_crew.exclude(email='').exclude(email__isnull=True).count()
+    today_crew_without_email = today_crew.filter(Q(email='') | Q(email__isnull=True)).count()
+    
+    # Calculate email success rate
+    email_success_rate = 0
+    if today_crew.count() > 0:
+        email_success_rate = (today_crew_with_email / today_crew.count()) * 100
+    
+    # Recent processing logs
+    recent_logs = JeppessenProcessingLog.objects.all()[:5]
+    
+    # Prepare flight data with crew counts
+    flight_data = []
+    for flight in flights:
+        crew_count = JeppessenCrew.objects.filter(
+            flight_no=flight.flight_no,
+            flight_date=flight.flight_date,
+            origin=flight.origin_icao or flight.origin_iata,
+            destination=flight.destination_icao or flight.destination_iata
+        ).count()
+        
+        flight_data.append({
+            'id': flight.id,
+            'flight_no': flight.flight_no,
+            'flight_date': flight.flight_date,
+            'origin_iata': flight.origin_iata,
+            'origin_icao': flight.origin_icao,
+            'destination_iata': flight.destination_iata,
+            'destination_icao': flight.destination_icao,
+            'crew_count': crew_count,
+            'processed_at': flight.processed_at,
+        })
+    
+    context = {
+        'flights': flight_data,
+        'total_flights': total_flights,
+        'total_crew': total_crew,
+        'today_flights': today_flights.count(),
+        'today_crew': today_crew.count(),
+        'today_crew_with_email': today_crew_with_email,
+        'today_crew_without_email': today_crew_without_email,
+        'email_success_rate': email_success_rate,
+        'position_counts': position_counts,
+        'recent_logs': recent_logs,
+        'days_back': days_back,
+        'start_date': start_date,
+    }
+    
+    return render(request, 'aimsintegration/jeppessen_dashboard.html', context)
+
+
+def jeppessen_flight_details(request, flight_id):
+    """
+    API endpoint to get flight and crew details for modal display.
+    """
+    try:
+        flight = JeppessenFlight.objects.get(id=flight_id)
+        
+        # Get crew for this flight
+        crew_members = JeppessenCrew.objects.filter(
+            flight_no=flight.flight_no,
+            flight_date=flight.flight_date
+        ).order_by('position', 'crew_name')
+        
+        # Prepare crew data
+        crew_data = []
+        for crew in crew_members:
+            crew_data.append({
+                'crew_id': crew.crew_id,
+                'full_crew_id': crew.full_crew_id,
+                'crew_name': crew.crew_name,
+                'position': crew.position,
+                'position_display': crew.get_position_display(),
+                'email': crew.email or '--',
+                'origin': crew.origin,
+                'destination': crew.destination,
+            })
+        
+        # Prepare response
+        data = {
+            'flight_no': flight.flight_no,
+            'flight_date': flight.flight_date.strftime('%Y-%m-%d'),
+            'origin_iata': flight.origin_iata,
+            'origin_icao': flight.origin_icao or '--',
+            'destination_iata': flight.destination_iata,
+            'destination_icao': flight.destination_icao or '--',
+            'route': f"{flight.origin_iata} → {flight.destination_iata}",
+            'processed_at': flight.processed_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'crew_members': crew_data,
+            'crew_count': len(crew_data),
+        }
+        
+        return JsonResponse(data)
+        
+    except JeppessenFlight.DoesNotExist:
+        return JsonResponse({'error': 'Flight not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
