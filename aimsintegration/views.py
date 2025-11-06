@@ -4077,14 +4077,19 @@ def jeppessen_dashboard(request):
     # Recent processing logs
     recent_logs = JeppessenProcessingLog.objects.all()[:5]
     
-    # Prepare flight data with crew counts
+    # Prepare flight data with crew counts (FIXED - includes origin/destination)
     flight_data = []
     for flight in flights:
+        # Determine which code to use
+        origin_code = flight.origin_icao if flight.origin_icao else flight.origin_iata
+        destination_code = flight.destination_icao if flight.destination_icao else flight.destination_iata
+        
+        # Get crew count for this specific route
         crew_count = JeppessenCrew.objects.filter(
             flight_no=flight.flight_no,
             flight_date=flight.flight_date,
-            origin=flight.origin_icao or flight.origin_iata,
-            destination=flight.destination_icao or flight.destination_iata
+            origin=origin_code,           # ← ADDED
+            destination=destination_code  # ← ADDED
         ).count()
         
         flight_data.append({
@@ -4120,14 +4125,21 @@ def jeppessen_dashboard(request):
 def jeppessen_flight_details(request, flight_id):
     """
     API endpoint to get flight and crew details for modal display.
+    FIXED: Now filters by origin and destination to avoid duplicates.
     """
     try:
         flight = JeppessenFlight.objects.get(id=flight_id)
         
-        # Get crew for this flight
+        # Determine which code to use (ICAO preferred, IATA fallback)
+        origin_code = flight.origin_icao if flight.origin_icao else flight.origin_iata
+        destination_code = flight.destination_icao if flight.destination_icao else flight.destination_iata
+        
+        # Get crew for this specific flight route (FIXED)
         crew_members = JeppessenCrew.objects.filter(
             flight_no=flight.flight_no,
-            flight_date=flight.flight_date
+            flight_date=flight.flight_date,
+            origin=origin_code,
+            destination=destination_code
         ).order_by('position', 'crew_name')
         
         # Prepare crew data
