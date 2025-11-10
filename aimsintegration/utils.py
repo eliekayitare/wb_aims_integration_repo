@@ -643,6 +643,171 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# # Tail number to aircraft type mapping for ACARS enabled aircraft
+# TAIL_TO_AIRCRAFT_TYPE = {
+#     "9XR-WJ": "73G",
+#     "9XR-WK": "73G",
+#     "9XR-WF": "738",
+#     "9XR-WG": "738",
+#     "9XR-WQ": "738",
+#     "9XR-WR": "738",
+#     "9XR-WW": "738",
+#     "9XR-WY": "738",
+#     "9XR-WN": "332",
+#     "9XR-WX": "332",
+#     "9XR-WP": "333",
+#     "9XR-WH": "CRJ",
+#     "9XR-WI": "CRJ",
+#     "9XR-WL": "DH8",
+#     "9XR-WM": "DH8",
+#     "9XR-WT": "738",
+#     "9XR-WU": "738",
+# }
+
+
+# def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
+#     """
+#     Format flight data into JOB1 fixed-width format.
+#     Total length: 178 characters (exactly)
+    
+#     This function ensures all fields are properly padded to their exact lengths
+#     to maintain correct column alignment for AIMS upload.
+#     """
+    
+#     # Position 1-3: Carrier code (3 chars)
+#     carrier_code = " WB"
+    
+#     # Position 4-7: Flight number (4 chars, right-aligned)
+#     flight_no = f"{flight_data.flight_no:>4}" if hasattr(flight_data, 'flight_no') else "    "
+    
+#     # Position 8: Leg code (1 char)
+#     leg_code = " "
+    
+#     # Position 9-10: Service type (2 chars)
+#     service_type = "  "
+    
+#     # Position 11-13: Departure airport code (3 chars)
+#     dep_code = (flight_data.dep_code_iata if hasattr(flight_data, 'dep_code_iata') 
+#                 and flight_data.dep_code_iata else "   ")[:3].ljust(3)
+    
+#     # Position 14-16: Aircraft type (3 chars)
+#     aircraft_type = "   "  # Default to 3 spaces
+#     if hasattr(flight_data, 'aircraft_type') and flight_data.aircraft_type:
+#         aircraft_type = str(flight_data.aircraft_type).strip()[:3].ljust(3)
+    
+#     # Position 17-28: Tail number (12 chars, left-aligned)
+#     tail_number = " " * 12
+#     if hasattr(flight_data, 'tail_no') and flight_data.tail_no:
+#         tail_number = str(flight_data.tail_no).strip()[:12].ljust(12)
+    
+#     # Position 29-31: Arrival airport code (3 chars)
+#     arr_code = (flight_data.arr_code_iata if hasattr(flight_data, 'arr_code_iata') 
+#                 and flight_data.arr_code_iata else "   ")[:3].ljust(3)
+    
+#     # Position 32-39: Scheduled departure day (8 chars, YYYYMMDD)
+#     sched_dep_day = " " * 8
+#     if hasattr(flight_data, 'sd_date_utc') and flight_data.sd_date_utc:
+#         sched_dep_day = flight_data.sd_date_utc.strftime("%Y%m%d")
+    
+#     # Position 40-43: Scheduled departure time (4 chars, HHMM)
+#     sched_dep_time = " " * 4
+#     if hasattr(flight_data, 'std_utc') and flight_data.std_utc:
+#         sched_dep_time = flight_data.std_utc.strftime("%H%M")
+    
+#     # Position 44-51: Scheduled arrival day (8 chars, YYYYMMDD)
+#     sched_arr_day = " " * 8
+#     if hasattr(flight_data, 'sa_date_utc') and flight_data.sa_date_utc:
+#         sched_arr_day = flight_data.sa_date_utc.strftime("%Y%m%d")
+    
+#     # Position 52-55: Scheduled arrival time (4 chars, HHMM)
+#     sched_arr_time = " " * 4
+#     if hasattr(flight_data, 'sta_utc') and flight_data.sta_utc:
+#         sched_arr_time = flight_data.sta_utc.strftime("%H%M")
+    
+#     # Positions 56-79: Estimated times (all empty for ACARS events)
+#     est_dep_day = " " * 8
+#     est_dep_time = " " * 4
+#     est_arr_day = " " * 8
+#     est_arr_time = " " * 4
+    
+#     # Positions 80-127: Actual event times (initialize all as empty)
+#     blocks_off_day = " " * 8
+#     blocks_off_time = " " * 4
+#     blocks_on_day = " " * 8
+#     blocks_on_time = " " * 4
+#     airborne_day = " " * 8
+#     airborne_time = " " * 4
+#     touchdown_day = " " * 8
+#     touchdown_time = " " * 4
+    
+#     # Populate ONLY the specific event field based on acars_event
+#     event_day = email_arrival_time.strftime("%Y%m%d")
+#     event_hhmm = event_time.strftime("%H%M")
+    
+#     if acars_event == "OT":  # Off blocks (pushback)
+#         blocks_off_day = event_day
+#         blocks_off_time = event_hhmm
+#     elif acars_event == "OF":  # Wheels off (airborne/takeoff)
+#         airborne_day = event_day
+#         airborne_time = event_hhmm
+#     elif acars_event == "ON":  # Wheels on (touchdown/landing)
+#         touchdown_day = event_day
+#         touchdown_time = event_hhmm
+#     elif acars_event == "IN":  # On blocks (arrived at gate)
+#         blocks_on_day = event_day
+#         blocks_on_time = event_hhmm
+    
+#     # Positions 128-178: Fixed fields
+#     flight_status = "  "        # Position 128-129 (2 chars)
+#     remarks = " " * 24          # Position 130-153 (24 chars)
+#     operation_code = "U"        # Position 154 (1 char)
+#     crew_id_takeoff = " " * 8   # Position 155-162 (8 chars)
+#     crew_id_landing = " " * 8   # Position 163-170 (8 chars)
+#     rule_set = " "              # Position 171 (1 char)
+#     log_page = " " * 7          # Position 172-178 (7 chars)
+    
+#     # Construct the complete row
+#     row = (
+#         carrier_code +          # 1-3
+#         flight_no +             # 4-7
+#         leg_code +              # 8
+#         service_type +          # 9-10
+#         dep_code +              # 11-13
+#         aircraft_type +         # 14-16
+#         tail_number +           # 17-28
+#         arr_code +              # 29-31
+#         sched_dep_day +         # 32-39
+#         sched_dep_time +        # 40-43
+#         sched_arr_day +         # 44-51
+#         sched_arr_time +        # 52-55
+#         est_dep_day +           # 56-63
+#         est_dep_time +          # 64-67
+#         est_arr_day +           # 68-75
+#         est_arr_time +          # 76-79
+#         blocks_off_day +        # 80-87
+#         blocks_off_time +       # 88-91
+#         blocks_on_day +         # 92-99
+#         blocks_on_time +        # 100-103
+#         airborne_day +          # 104-111
+#         airborne_time +         # 112-115
+#         touchdown_day +         # 116-123
+#         touchdown_time +        # 124-127
+#         flight_status +         # 128-129
+#         remarks +               # 130-153
+#         operation_code +        # 154
+#         crew_id_takeoff +       # 155-162
+#         crew_id_landing +       # 163-170
+#         rule_set +              # 171
+#         log_page                # 172-178
+#     )
+    
+#     # Verify the row is exactly 178 characters
+#     assert len(row) == 178, f"Row length is {len(row)}, expected 178"
+    
+#     return row
+
+
+
 # Tail number to aircraft type mapping for ACARS enabled aircraft
 TAIL_TO_AIRCRAFT_TYPE = {
     "9XR-WJ": "73G",
@@ -664,175 +829,6 @@ TAIL_TO_AIRCRAFT_TYPE = {
     "9XR-WU": "738",
 }
 
-# def get_aircraft_type(tail_number):
-#     return TAIL_TO_AIRCRAFT_TYPE.get(tail_number, "   ")  # Default to 3 spaces if not found
-
-# # Function to format a single row based on the event type and highlighted fields
-# def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
-#     """
-#     Format flight data into JOB1 fixed-width format.
-    
-#     Total length: 178 characters (exactly)
-    
-#     Field positions (1-indexed as per specification):
-#     1-3:     Carrier code (3 chars, alphabetic)
-#     4-7:     Flight number (4 chars, numeric)
-#     8:       Leg code (1 char, alphabetic - single letter leg code)
-#     9-10:    Service type IATA code (2 chars, alphanumeric)
-#     11-13:   Departure airport code (3 chars, alphabetic)
-#     14-16:   Aircraft type (3 chars, alphanumeric)
-#     17-28:   Tail number (12 chars, text)
-#     29-31:   Arrival airport code (3 chars, alphabetic)
-#     32-39:   Scheduled day of departure (8 chars, YYYYMMDD)
-#     40-43:   Scheduled time of departure (STD) (4 chars, HHMM)
-#     44-51:   Scheduled day of arrival (8 chars, YYYYMMDD)
-#     52-55:   Scheduled time of arrival (STA) (4 chars, HHMM)
-#     56-63:   Estimated day of departure (8 chars, YYYYMMDD)
-#     64-67:   Estimated time of departure (ETD) (4 chars, HHMM)
-#     68-75:   Estimated day of arrival (8 chars, YYYYMMDD)
-#     76-79:   Estimated time of arrival (ETA) (4 chars, HHMM)
-#     80-87:   Blocks off day (8 chars, YYYYMMDD)
-#     88-91:   Blocks off time (ATD) (4 chars, HHMM)
-#     92-99:   Blocks on day (8 chars, YYYYMMDD)
-#     100-103: Blocks on time (ATA) (4 chars, HHMM)
-#     104-111: Airborne day (8 chars, YYYYMMDD)
-#     112-115: Airborne time (4 chars, HHMM)
-#     116-123: Touch down day (8 chars, YYYYMMDD)
-#     124-127: Touch down time (4 chars, HHMM)
-#     128-129: Flight status code (2 chars, alphabetic, optional)
-#     130-153: General remarks (24 chars, free text)
-#     154:     Operation code (1 char: "N"=new, "U"=update, "D"=delete)
-#     155-162: Crewmember ID - Take-off (8 chars, numeric)
-#     163-170: Crewmember ID - Landing (8 chars, numeric)
-#     171:     Rule set (1 char, numeric)
-#     172-178: Log Page Number (7 chars, numeric)
-#     """
-    
-#     # Fixed base fields
-#     carrier_code = " WB"  # 3 chars - space-padded on left
-    
-#     # Flight number - right-aligned, space-padded to 4 chars
-#     flight_no = f"{flight_data.flight_no:>4}" if hasattr(flight_data, 'flight_no') else "    "
-    
-#     # Single character fields
-#     leg_code = " "  # 1 char - typically empty
-    
-#     # Service type - 2 chars
-#     service_type = "  "
-    
-#     # Airport codes - exactly 3 chars each
-#     dep_code = (flight_data.dep_code_iata if hasattr(flight_data, 'dep_code_iata') 
-#                 and flight_data.dep_code_iata else "   ")[:3].ljust(3)
-#     arr_code = (flight_data.arr_code_iata if hasattr(flight_data, 'arr_code_iata') 
-#                 and flight_data.arr_code_iata else "   ")[:3].ljust(3)
-    
-#     # Aircraft type - 3 chars
-#     aircraft_type = "   "  # Default to spaces if not available
-#     if hasattr(flight_data, 'aircraft_type') and flight_data.aircraft_type:
-#         aircraft_type = flight_data.aircraft_type[:3].ljust(3)
-    
-#     # Tail number - left-aligned, space-padded to 12 chars
-#     tail_number = ""
-#     if hasattr(flight_data, 'tail_no') and flight_data.tail_no:
-#         tail_number = str(flight_data.tail_no)[:12].ljust(12)
-#     else:
-#         tail_number = " " * 12
-    
-#     # Scheduled times - 8 chars for date (YYYYMMDD), 4 chars for time (HHMM)
-#     sched_dep_day = " " * 8
-#     sched_dep_time = " " * 4
-#     if hasattr(flight_data, 'sd_date_utc') and flight_data.sd_date_utc:
-#         sched_dep_day = flight_data.sd_date_utc.strftime("%Y%m%d")
-#     if hasattr(flight_data, 'std_utc') and flight_data.std_utc:
-#         sched_dep_time = flight_data.std_utc.strftime("%H%M")
-    
-#     sched_arr_day = " " * 8
-#     sched_arr_time = " " * 4
-#     if hasattr(flight_data, 'sa_date_utc') and flight_data.sa_date_utc:
-#         sched_arr_day = flight_data.sa_date_utc.strftime("%Y%m%d")
-#     if hasattr(flight_data, 'sta_utc') and flight_data.sta_utc:
-#         sched_arr_time = flight_data.sta_utc.strftime("%H%M")
-    
-#     # Initialize all actual event fields as empty (spaces)
-#     est_dep_day = " " * 8
-#     est_dep_time = " " * 4
-#     est_arr_day = " " * 8
-#     est_arr_time = " " * 4
-#     blocks_off_day = " " * 8
-#     blocks_off_time = " " * 4
-#     blocks_on_day = " " * 8
-#     blocks_on_time = " " * 4
-#     airborne_day = " " * 8
-#     airborne_time = " " * 4
-#     touchdown_day = " " * 8
-#     touchdown_time = " " * 4
-    
-#     # Populate actual times based on ACARS event type
-#     event_day = email_arrival_time.strftime("%Y%m%d")
-#     event_hhmm = event_time.strftime("%H%M")
-    
-#     if acars_event == "OT":  # Off blocks (pushback)
-#         blocks_off_day = event_day
-#         blocks_off_time = event_hhmm
-#     elif acars_event == "IN":  # On blocks (arrived at gate)
-#         blocks_on_day = event_day
-#         blocks_on_time = event_hhmm
-#     elif acars_event == "OF":  # Wheels off (airborne)
-#         airborne_day = event_day
-#         airborne_time = event_hhmm
-#     elif acars_event == "ON":  # Wheels on (touchdown)
-#         touchdown_day = event_day
-#         touchdown_time = event_hhmm
-    
-#     # Optional and fixed fields
-#     flight_status = "  "  # 2 chars, optional
-#     remarks = " " * 24    # 24 chars, general remarks
-#     operation_code = "U"  # 1 char (U for update)
-#     crew_id_takeoff = " " * 8   # 8 chars
-#     crew_id_landing = " " * 8   # 8 chars
-#     rule_set = " "        # 1 char
-#     log_page = " " * 7    # 7 chars (positions 172-178)
-    
-#     # Construct the complete row
-#     row = (
-#         f"{carrier_code}"        # Positions 1-3
-#         f"{flight_no}"           # Positions 4-7
-#         f"{leg_code}"            # Position 8
-#         f"{service_type}"        # Positions 9-10
-#         f"{dep_code}"            # Positions 11-13
-#         f"{aircraft_type}"       # Positions 14-16
-#         f"{tail_number}"         # Positions 17-28
-#         f"{arr_code}"            # Positions 29-31
-#         f"{sched_dep_day}"       # Positions 32-39
-#         f"{sched_dep_time}"      # Positions 40-43
-#         f"{sched_arr_day}"       # Positions 44-51
-#         f"{sched_arr_time}"      # Positions 52-55
-#         f"{est_dep_day}"         # Positions 56-63
-#         f"{est_dep_time}"        # Positions 64-67
-#         f"{est_arr_day}"         # Positions 68-75
-#         f"{est_arr_time}"        # Positions 76-79
-#         f"{blocks_off_day}"      # Positions 80-87
-#         f"{blocks_off_time}"     # Positions 88-91
-#         f"{blocks_on_day}"       # Positions 92-99
-#         f"{blocks_on_time}"      # Positions 100-103
-#         f"{airborne_day}"        # Positions 104-111
-#         f"{airborne_time}"       # Positions 112-115
-#         f"{touchdown_day}"       # Positions 116-123
-#         f"{touchdown_time}"      # Positions 124-127
-#         f"{flight_status}"       # Positions 128-129
-#         f"{remarks}"             # Positions 130-153
-#         f"{operation_code}"      # Position 154
-#         f"{crew_id_takeoff}"     # Positions 155-162
-#         f"{crew_id_landing}"     # Positions 163-170
-#         f"{rule_set}"            # Position 171
-#         f"{log_page}"            # Positions 172-178
-#     )
-    
-#     # Verify the row is exactly 178 characters
-#     assert len(row) == 178, f"Row length is {len(row)}, expected 178"
-    
-    # return row
-
 
 def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
     """
@@ -841,6 +837,9 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     
     This function ensures all fields are properly padded to their exact lengths
     to maintain correct column alignment for AIMS upload.
+    
+    The aircraft type is automatically determined from the tail number using
+    the TAIL_TO_AIRCRAFT_TYPE mapping.
     """
     
     # Position 1-3: Carrier code (3 chars)
@@ -860,9 +859,17 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
                 and flight_data.dep_code_iata else "   ")[:3].ljust(3)
     
     # Position 14-16: Aircraft type (3 chars)
+    # CRITICAL: Look up aircraft type from tail number mapping
     aircraft_type = "   "  # Default to 3 spaces
+    
+    # First, try to get from flight_data.aircraft_type if available
     if hasattr(flight_data, 'aircraft_type') and flight_data.aircraft_type:
         aircraft_type = str(flight_data.aircraft_type).strip()[:3].ljust(3)
+    # If not available, look up from tail number
+    elif hasattr(flight_data, 'tail_no') and flight_data.tail_no:
+        tail_no = str(flight_data.tail_no).strip()
+        if tail_no in TAIL_TO_AIRCRAFT_TYPE:
+            aircraft_type = TAIL_TO_AIRCRAFT_TYPE[tail_no][:3].ljust(3)
     
     # Position 17-28: Tail number (12 chars, left-aligned)
     tail_number = " " * 12
