@@ -667,96 +667,238 @@ def get_aircraft_type(tail_number):
     return TAIL_TO_AIRCRAFT_TYPE.get(tail_number, "   ")  # Default to 3 spaces if not found
 
 # # Function to format a single row based on the event type and highlighted fields
+# def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
+#     """
+#     Format flight data into JOB1 fixed-width format.
+    
+#     Total length: 178 characters (exactly)
+    
+#     Field positions (1-indexed as per specification):
+#     1-3:     Carrier code (3 chars, alphabetic)
+#     4-7:     Flight number (4 chars, numeric)
+#     8:       Leg code (1 char, alphabetic - single letter leg code)
+#     9-10:    Service type IATA code (2 chars, alphanumeric)
+#     11-13:   Departure airport code (3 chars, alphabetic)
+#     14-16:   Aircraft type (3 chars, alphanumeric)
+#     17-28:   Tail number (12 chars, text)
+#     29-31:   Arrival airport code (3 chars, alphabetic)
+#     32-39:   Scheduled day of departure (8 chars, YYYYMMDD)
+#     40-43:   Scheduled time of departure (STD) (4 chars, HHMM)
+#     44-51:   Scheduled day of arrival (8 chars, YYYYMMDD)
+#     52-55:   Scheduled time of arrival (STA) (4 chars, HHMM)
+#     56-63:   Estimated day of departure (8 chars, YYYYMMDD)
+#     64-67:   Estimated time of departure (ETD) (4 chars, HHMM)
+#     68-75:   Estimated day of arrival (8 chars, YYYYMMDD)
+#     76-79:   Estimated time of arrival (ETA) (4 chars, HHMM)
+#     80-87:   Blocks off day (8 chars, YYYYMMDD)
+#     88-91:   Blocks off time (ATD) (4 chars, HHMM)
+#     92-99:   Blocks on day (8 chars, YYYYMMDD)
+#     100-103: Blocks on time (ATA) (4 chars, HHMM)
+#     104-111: Airborne day (8 chars, YYYYMMDD)
+#     112-115: Airborne time (4 chars, HHMM)
+#     116-123: Touch down day (8 chars, YYYYMMDD)
+#     124-127: Touch down time (4 chars, HHMM)
+#     128-129: Flight status code (2 chars, alphabetic, optional)
+#     130-153: General remarks (24 chars, free text)
+#     154:     Operation code (1 char: "N"=new, "U"=update, "D"=delete)
+#     155-162: Crewmember ID - Take-off (8 chars, numeric)
+#     163-170: Crewmember ID - Landing (8 chars, numeric)
+#     171:     Rule set (1 char, numeric)
+#     172-178: Log Page Number (7 chars, numeric)
+#     """
+    
+#     # Fixed base fields
+#     carrier_code = " WB"  # 3 chars - space-padded on left
+    
+#     # Flight number - right-aligned, space-padded to 4 chars
+#     flight_no = f"{flight_data.flight_no:>4}" if hasattr(flight_data, 'flight_no') else "    "
+    
+#     # Single character fields
+#     leg_code = " "  # 1 char - typically empty
+    
+#     # Service type - 2 chars
+#     service_type = "  "
+    
+#     # Airport codes - exactly 3 chars each
+#     dep_code = (flight_data.dep_code_iata if hasattr(flight_data, 'dep_code_iata') 
+#                 and flight_data.dep_code_iata else "   ")[:3].ljust(3)
+#     arr_code = (flight_data.arr_code_iata if hasattr(flight_data, 'arr_code_iata') 
+#                 and flight_data.arr_code_iata else "   ")[:3].ljust(3)
+    
+#     # Aircraft type - 3 chars
+#     aircraft_type = "   "  # Default to spaces if not available
+#     if hasattr(flight_data, 'aircraft_type') and flight_data.aircraft_type:
+#         aircraft_type = flight_data.aircraft_type[:3].ljust(3)
+    
+#     # Tail number - left-aligned, space-padded to 12 chars
+#     tail_number = ""
+#     if hasattr(flight_data, 'tail_no') and flight_data.tail_no:
+#         tail_number = str(flight_data.tail_no)[:12].ljust(12)
+#     else:
+#         tail_number = " " * 12
+    
+#     # Scheduled times - 8 chars for date (YYYYMMDD), 4 chars for time (HHMM)
+#     sched_dep_day = " " * 8
+#     sched_dep_time = " " * 4
+#     if hasattr(flight_data, 'sd_date_utc') and flight_data.sd_date_utc:
+#         sched_dep_day = flight_data.sd_date_utc.strftime("%Y%m%d")
+#     if hasattr(flight_data, 'std_utc') and flight_data.std_utc:
+#         sched_dep_time = flight_data.std_utc.strftime("%H%M")
+    
+#     sched_arr_day = " " * 8
+#     sched_arr_time = " " * 4
+#     if hasattr(flight_data, 'sa_date_utc') and flight_data.sa_date_utc:
+#         sched_arr_day = flight_data.sa_date_utc.strftime("%Y%m%d")
+#     if hasattr(flight_data, 'sta_utc') and flight_data.sta_utc:
+#         sched_arr_time = flight_data.sta_utc.strftime("%H%M")
+    
+#     # Initialize all actual event fields as empty (spaces)
+#     est_dep_day = " " * 8
+#     est_dep_time = " " * 4
+#     est_arr_day = " " * 8
+#     est_arr_time = " " * 4
+#     blocks_off_day = " " * 8
+#     blocks_off_time = " " * 4
+#     blocks_on_day = " " * 8
+#     blocks_on_time = " " * 4
+#     airborne_day = " " * 8
+#     airborne_time = " " * 4
+#     touchdown_day = " " * 8
+#     touchdown_time = " " * 4
+    
+#     # Populate actual times based on ACARS event type
+#     event_day = email_arrival_time.strftime("%Y%m%d")
+#     event_hhmm = event_time.strftime("%H%M")
+    
+#     if acars_event == "OT":  # Off blocks (pushback)
+#         blocks_off_day = event_day
+#         blocks_off_time = event_hhmm
+#     elif acars_event == "IN":  # On blocks (arrived at gate)
+#         blocks_on_day = event_day
+#         blocks_on_time = event_hhmm
+#     elif acars_event == "OF":  # Wheels off (airborne)
+#         airborne_day = event_day
+#         airborne_time = event_hhmm
+#     elif acars_event == "ON":  # Wheels on (touchdown)
+#         touchdown_day = event_day
+#         touchdown_time = event_hhmm
+    
+#     # Optional and fixed fields
+#     flight_status = "  "  # 2 chars, optional
+#     remarks = " " * 24    # 24 chars, general remarks
+#     operation_code = "U"  # 1 char (U for update)
+#     crew_id_takeoff = " " * 8   # 8 chars
+#     crew_id_landing = " " * 8   # 8 chars
+#     rule_set = " "        # 1 char
+#     log_page = " " * 7    # 7 chars (positions 172-178)
+    
+#     # Construct the complete row
+#     row = (
+#         f"{carrier_code}"        # Positions 1-3
+#         f"{flight_no}"           # Positions 4-7
+#         f"{leg_code}"            # Position 8
+#         f"{service_type}"        # Positions 9-10
+#         f"{dep_code}"            # Positions 11-13
+#         f"{aircraft_type}"       # Positions 14-16
+#         f"{tail_number}"         # Positions 17-28
+#         f"{arr_code}"            # Positions 29-31
+#         f"{sched_dep_day}"       # Positions 32-39
+#         f"{sched_dep_time}"      # Positions 40-43
+#         f"{sched_arr_day}"       # Positions 44-51
+#         f"{sched_arr_time}"      # Positions 52-55
+#         f"{est_dep_day}"         # Positions 56-63
+#         f"{est_dep_time}"        # Positions 64-67
+#         f"{est_arr_day}"         # Positions 68-75
+#         f"{est_arr_time}"        # Positions 76-79
+#         f"{blocks_off_day}"      # Positions 80-87
+#         f"{blocks_off_time}"     # Positions 88-91
+#         f"{blocks_on_day}"       # Positions 92-99
+#         f"{blocks_on_time}"      # Positions 100-103
+#         f"{airborne_day}"        # Positions 104-111
+#         f"{airborne_time}"       # Positions 112-115
+#         f"{touchdown_day}"       # Positions 116-123
+#         f"{touchdown_time}"      # Positions 124-127
+#         f"{flight_status}"       # Positions 128-129
+#         f"{remarks}"             # Positions 130-153
+#         f"{operation_code}"      # Position 154
+#         f"{crew_id_takeoff}"     # Positions 155-162
+#         f"{crew_id_landing}"     # Positions 163-170
+#         f"{rule_set}"            # Position 171
+#         f"{log_page}"            # Positions 172-178
+#     )
+    
+#     # Verify the row is exactly 178 characters
+#     assert len(row) == 178, f"Row length is {len(row)}, expected 178"
+    
+    # return row
+
+
 def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
     """
     Format flight data into JOB1 fixed-width format.
-    
     Total length: 178 characters (exactly)
     
-    Field positions (1-indexed as per specification):
-    1-3:     Carrier code (3 chars, alphabetic)
-    4-7:     Flight number (4 chars, numeric)
-    8:       Leg code (1 char, alphabetic - single letter leg code)
-    9-10:    Service type IATA code (2 chars, alphanumeric)
-    11-13:   Departure airport code (3 chars, alphabetic)
-    14-16:   Aircraft type (3 chars, alphanumeric)
-    17-28:   Tail number (12 chars, text)
-    29-31:   Arrival airport code (3 chars, alphabetic)
-    32-39:   Scheduled day of departure (8 chars, YYYYMMDD)
-    40-43:   Scheduled time of departure (STD) (4 chars, HHMM)
-    44-51:   Scheduled day of arrival (8 chars, YYYYMMDD)
-    52-55:   Scheduled time of arrival (STA) (4 chars, HHMM)
-    56-63:   Estimated day of departure (8 chars, YYYYMMDD)
-    64-67:   Estimated time of departure (ETD) (4 chars, HHMM)
-    68-75:   Estimated day of arrival (8 chars, YYYYMMDD)
-    76-79:   Estimated time of arrival (ETA) (4 chars, HHMM)
-    80-87:   Blocks off day (8 chars, YYYYMMDD)
-    88-91:   Blocks off time (ATD) (4 chars, HHMM)
-    92-99:   Blocks on day (8 chars, YYYYMMDD)
-    100-103: Blocks on time (ATA) (4 chars, HHMM)
-    104-111: Airborne day (8 chars, YYYYMMDD)
-    112-115: Airborne time (4 chars, HHMM)
-    116-123: Touch down day (8 chars, YYYYMMDD)
-    124-127: Touch down time (4 chars, HHMM)
-    128-129: Flight status code (2 chars, alphabetic, optional)
-    130-153: General remarks (24 chars, free text)
-    154:     Operation code (1 char: "N"=new, "U"=update, "D"=delete)
-    155-162: Crewmember ID - Take-off (8 chars, numeric)
-    163-170: Crewmember ID - Landing (8 chars, numeric)
-    171:     Rule set (1 char, numeric)
-    172-178: Log Page Number (7 chars, numeric)
+    This function ensures all fields are properly padded to their exact lengths
+    to maintain correct column alignment for AIMS upload.
     """
     
-    # Fixed base fields
-    carrier_code = " WB"  # 3 chars - space-padded on left
+    # Position 1-3: Carrier code (3 chars)
+    carrier_code = " WB"
     
-    # Flight number - right-aligned, space-padded to 4 chars
+    # Position 4-7: Flight number (4 chars, right-aligned)
     flight_no = f"{flight_data.flight_no:>4}" if hasattr(flight_data, 'flight_no') else "    "
     
-    # Single character fields
-    leg_code = " "  # 1 char - typically empty
+    # Position 8: Leg code (1 char)
+    leg_code = " "
     
-    # Service type - 2 chars
+    # Position 9-10: Service type (2 chars)
     service_type = "  "
     
-    # Airport codes - exactly 3 chars each
+    # Position 11-13: Departure airport code (3 chars)
     dep_code = (flight_data.dep_code_iata if hasattr(flight_data, 'dep_code_iata') 
                 and flight_data.dep_code_iata else "   ")[:3].ljust(3)
+    
+    # Position 14-16: Aircraft type (3 chars)
+    aircraft_type = "   "  # Default to 3 spaces
+    if hasattr(flight_data, 'aircraft_type') and flight_data.aircraft_type:
+        aircraft_type = str(flight_data.aircraft_type).strip()[:3].ljust(3)
+    
+    # Position 17-28: Tail number (12 chars, left-aligned)
+    tail_number = " " * 12
+    if hasattr(flight_data, 'tail_no') and flight_data.tail_no:
+        tail_number = str(flight_data.tail_no).strip()[:12].ljust(12)
+    
+    # Position 29-31: Arrival airport code (3 chars)
     arr_code = (flight_data.arr_code_iata if hasattr(flight_data, 'arr_code_iata') 
                 and flight_data.arr_code_iata else "   ")[:3].ljust(3)
     
-    # Aircraft type - 3 chars
-    aircraft_type = "   "  # Default to spaces if not available
-    if hasattr(flight_data, 'aircraft_type') and flight_data.aircraft_type:
-        aircraft_type = flight_data.aircraft_type[:3].ljust(3)
-    
-    # Tail number - left-aligned, space-padded to 12 chars
-    tail_number = ""
-    if hasattr(flight_data, 'tail_no') and flight_data.tail_no:
-        tail_number = str(flight_data.tail_no)[:12].ljust(12)
-    else:
-        tail_number = " " * 12
-    
-    # Scheduled times - 8 chars for date (YYYYMMDD), 4 chars for time (HHMM)
+    # Position 32-39: Scheduled departure day (8 chars, YYYYMMDD)
     sched_dep_day = " " * 8
-    sched_dep_time = " " * 4
     if hasattr(flight_data, 'sd_date_utc') and flight_data.sd_date_utc:
         sched_dep_day = flight_data.sd_date_utc.strftime("%Y%m%d")
+    
+    # Position 40-43: Scheduled departure time (4 chars, HHMM)
+    sched_dep_time = " " * 4
     if hasattr(flight_data, 'std_utc') and flight_data.std_utc:
         sched_dep_time = flight_data.std_utc.strftime("%H%M")
     
+    # Position 44-51: Scheduled arrival day (8 chars, YYYYMMDD)
     sched_arr_day = " " * 8
-    sched_arr_time = " " * 4
     if hasattr(flight_data, 'sa_date_utc') and flight_data.sa_date_utc:
         sched_arr_day = flight_data.sa_date_utc.strftime("%Y%m%d")
+    
+    # Position 52-55: Scheduled arrival time (4 chars, HHMM)
+    sched_arr_time = " " * 4
     if hasattr(flight_data, 'sta_utc') and flight_data.sta_utc:
         sched_arr_time = flight_data.sta_utc.strftime("%H%M")
     
-    # Initialize all actual event fields as empty (spaces)
+    # Positions 56-79: Estimated times (all empty for ACARS events)
     est_dep_day = " " * 8
     est_dep_time = " " * 4
     est_arr_day = " " * 8
     est_arr_time = " " * 4
+    
+    # Positions 80-127: Actual event times (initialize all as empty)
     blocks_off_day = " " * 8
     blocks_off_time = " " * 4
     blocks_on_day = " " * 8
@@ -766,65 +908,65 @@ def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arr
     touchdown_day = " " * 8
     touchdown_time = " " * 4
     
-    # Populate actual times based on ACARS event type
+    # Populate ONLY the specific event field based on acars_event
     event_day = email_arrival_time.strftime("%Y%m%d")
     event_hhmm = event_time.strftime("%H%M")
     
     if acars_event == "OT":  # Off blocks (pushback)
         blocks_off_day = event_day
         blocks_off_time = event_hhmm
+    elif acars_event == "OF":  # Wheels off (airborne/takeoff)
+        airborne_day = event_day
+        airborne_time = event_hhmm
+    elif acars_event == "ON":  # Wheels on (touchdown/landing)
+        touchdown_day = event_day
+        touchdown_time = event_hhmm
     elif acars_event == "IN":  # On blocks (arrived at gate)
         blocks_on_day = event_day
         blocks_on_time = event_hhmm
-    elif acars_event == "OF":  # Wheels off (airborne)
-        airborne_day = event_day
-        airborne_time = event_hhmm
-    elif acars_event == "ON":  # Wheels on (touchdown)
-        touchdown_day = event_day
-        touchdown_time = event_hhmm
     
-    # Optional and fixed fields
-    flight_status = "  "  # 2 chars, optional
-    remarks = " " * 24    # 24 chars, general remarks
-    operation_code = "U"  # 1 char (U for update)
-    crew_id_takeoff = " " * 8   # 8 chars
-    crew_id_landing = " " * 8   # 8 chars
-    rule_set = " "        # 1 char
-    log_page = " " * 7    # 7 chars (positions 172-178)
+    # Positions 128-178: Fixed fields
+    flight_status = "  "        # Position 128-129 (2 chars)
+    remarks = " " * 24          # Position 130-153 (24 chars)
+    operation_code = "U"        # Position 154 (1 char)
+    crew_id_takeoff = " " * 8   # Position 155-162 (8 chars)
+    crew_id_landing = " " * 8   # Position 163-170 (8 chars)
+    rule_set = " "              # Position 171 (1 char)
+    log_page = " " * 7          # Position 172-178 (7 chars)
     
     # Construct the complete row
     row = (
-        f"{carrier_code}"        # Positions 1-3
-        f"{flight_no}"           # Positions 4-7
-        f"{leg_code}"            # Position 8
-        f"{service_type}"        # Positions 9-10
-        f"{dep_code}"            # Positions 11-13
-        f"{aircraft_type}"       # Positions 14-16
-        f"{tail_number}"         # Positions 17-28
-        f"{arr_code}"            # Positions 29-31
-        f"{sched_dep_day}"       # Positions 32-39
-        f"{sched_dep_time}"      # Positions 40-43
-        f"{sched_arr_day}"       # Positions 44-51
-        f"{sched_arr_time}"      # Positions 52-55
-        f"{est_dep_day}"         # Positions 56-63
-        f"{est_dep_time}"        # Positions 64-67
-        f"{est_arr_day}"         # Positions 68-75
-        f"{est_arr_time}"        # Positions 76-79
-        f"{blocks_off_day}"      # Positions 80-87
-        f"{blocks_off_time}"     # Positions 88-91
-        f"{blocks_on_day}"       # Positions 92-99
-        f"{blocks_on_time}"      # Positions 100-103
-        f"{airborne_day}"        # Positions 104-111
-        f"{airborne_time}"       # Positions 112-115
-        f"{touchdown_day}"       # Positions 116-123
-        f"{touchdown_time}"      # Positions 124-127
-        f"{flight_status}"       # Positions 128-129
-        f"{remarks}"             # Positions 130-153
-        f"{operation_code}"      # Position 154
-        f"{crew_id_takeoff}"     # Positions 155-162
-        f"{crew_id_landing}"     # Positions 163-170
-        f"{rule_set}"            # Position 171
-        f"{log_page}"            # Positions 172-178
+        carrier_code +          # 1-3
+        flight_no +             # 4-7
+        leg_code +              # 8
+        service_type +          # 9-10
+        dep_code +              # 11-13
+        aircraft_type +         # 14-16
+        tail_number +           # 17-28
+        arr_code +              # 29-31
+        sched_dep_day +         # 32-39
+        sched_dep_time +        # 40-43
+        sched_arr_day +         # 44-51
+        sched_arr_time +        # 52-55
+        est_dep_day +           # 56-63
+        est_dep_time +          # 64-67
+        est_arr_day +           # 68-75
+        est_arr_time +          # 76-79
+        blocks_off_day +        # 80-87
+        blocks_off_time +       # 88-91
+        blocks_on_day +         # 92-99
+        blocks_on_time +        # 100-103
+        airborne_day +          # 104-111
+        airborne_time +         # 112-115
+        touchdown_day +         # 116-123
+        touchdown_time +        # 124-127
+        flight_status +         # 128-129
+        remarks +               # 130-153
+        operation_code +        # 154
+        crew_id_takeoff +       # 155-162
+        crew_id_landing +       # 163-170
+        rule_set +              # 171
+        log_page                # 172-178
     )
     
     # Verify the row is exactly 178 characters
@@ -2293,307 +2435,6 @@ def process_job1008_file(attachment):
 
 
 
-# def process_job97_file(attachment):
-#     """
-#     Parse Job #97 RTF for crew assignments and update QatarCrewDetail records.
-#     Also create QatarFlightCrewAssignment records for the flight.
-#     Uses Job 97 data for crew/tail/date and FlightData for operational details.
-#     """
-#     raw = attachment.content.decode('utf-8', errors='ignore')
-#     logger.debug(f"RTF raw size: {len(raw)} characters")
-#     text = rtf_to_text(raw)
-#     lines = [ln for ln in text.splitlines() if ln.strip()]
-#     logger.debug(f"Extracted {len(lines)} non-empty lines")
-
-#     logger.info(f"Total lines in RTF: {len(lines)}")
-
-#     # Extract flight information from RTF header
-#     flight_number = None
-#     flight_date = None
-#     tail_number = None
-    
-#     # Parse flight details from header
-#     for i, line in enumerate(lines[:25]):  # Check first 25 lines for flight info
-#         line = line.strip()
-        
-#         # Look for flight number (e.g., "WB301")
-#         if re.match(r'^WB\d+$', line):
-#             flight_number = line
-#             logger.info(f"Found flight number: {flight_number}")
-        
-#         # Look for date (e.g., "03/08/2025" or "24/07/2025")
-#         elif re.match(r'^\d{2}/\d{2}/\d{4}$', line):
-#             try:
-#                 flight_date = datetime.strptime(line, '%d/%m/%Y').date()
-#                 logger.info(f"Found flight date: {flight_date}")
-#             except ValueError:
-#                 pass
-        
-#         # Look for tail number (e.g., "9XR-WQ")
-#         elif re.match(r'^\d[A-Z]{2}-[A-Z]{2}$', line):
-#             tail_number = line
-#             logger.info(f"Found tail number: {tail_number}")
-
-#     logger.info(f"Job 97 flight info - Number: {flight_number}, Date: {flight_date}, Tail: {tail_number}")
-
-#     crew_entries = []
-    
-#     # Look for the start of crew data - after "EXPIRY" header
-#     crew_data_started = False
-#     i = 0
-    
-#     while i < len(lines):
-#         line = lines[i].strip()
-        
-#         # Skip until we find the crew data section
-#         if not crew_data_started:
-#             if "EXPIRY" in line:
-#                 crew_data_started = True
-#                 logger.info(f"Crew data section starts after line {i}: {line}")
-#             i += 1
-#             continue
-        
-#         # Skip location markers, empty lines, and section dividers
-#         if (line in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 'Embarking:', 
-#                     'Disembarking:', 'Through on same flight', 'ON THIS STAGE'] or 
-#             line.startswith('...') or 
-#             not line or
-#             'DECLARATION OF HEALTH' in line or
-#             'FOR OFFICIAL USE' in line):
-#             i += 1
-#             continue
-        
-#         # Check if this line is a crew ID (3-4 digits)
-#         if line.isdigit() and len(line) >= 3 and len(line) <= 4:
-#             crew_id = line
-#             logger.info(f"Found crew ID: {crew_id} at line {i}")
-            
-#             # Initialize crew data variables
-#             name = None
-#             role = None
-#             passport = None
-#             birth_date = None
-#             gender = None
-#             nationality = None
-#             expiry = None
-            
-#             # Parse the next lines for this crew member's data
-#             j = i + 1
-            
-#             # Look for name line (next non-empty line that's not a section marker)
-#             while j < len(lines):
-#                 next_line = lines[j].strip()
-#                 if next_line and not next_line.startswith('...') and \
-#                    next_line not in ['DOH', 'KGL', 'Departure Place:', 'Arrival Place:', 
-#                                    'Embarking:', 'Disembarking:', 'Through on same flight']:
-#                     # This should be the name line
-#                     # Check if it contains an embedded role (uppercase 2-3 letter word at the end)
-#                     name_parts = next_line.split()
-#                     if len(name_parts) > 1 and len(name_parts[-1]) <= 3 and name_parts[-1].isupper():
-#                         # Likely has embedded role
-#                         embedded_role = name_parts[-1]
-#                         name = ' '.join(name_parts[:-1]).strip()
-#                         logger.info(f"  Found name with embedded role: {name} ({embedded_role})")
-#                     else:
-#                         name = next_line.strip()
-#                         logger.info(f"  Found name: {name}")
-#                     j += 1
-#                     break
-#                 j += 1
-            
-#             # Look for role line (if not embedded in name)
-#             if j < len(lines):
-#                 next_line = lines[j].strip()
-#                 # Check if it's a short uppercase string (likely a role)
-#                 if len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
-#                     role = next_line
-#                     logger.info(f"  Found role: {role}")
-#                     j += 1
-#                 elif 'embedded_role' in locals():
-#                     role = embedded_role
-#                     logger.info(f"  Using embedded role: {role}")
-            
-#             # Look for passport line (alphanumeric string, often starting with letters)
-#             if j < len(lines):
-#                 next_line = lines[j].strip()
-#                 # Passport: alphanumeric, usually 6+ chars, may start with letters
-#                 if len(next_line) >= 6 and next_line.isalnum():
-#                     passport = next_line
-#                     logger.info(f"  Found passport: {passport}")
-#                     j += 1
-            
-#             # Look for birth date line (dd/mm/yy format)
-#             if j < len(lines):
-#                 next_line = lines[j].strip()
-#                 if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
-#                     birth_date = next_line
-#                     logger.info(f"  Found birth date: {birth_date}")
-#                     j += 1
-            
-#             # Look for gender line (single character M or F)
-#             if j < len(lines):
-#                 next_line = lines[j].strip()
-#                 if len(next_line) == 1 and next_line.upper() in ['M', 'F']:
-#                     gender = next_line.upper()
-#                     logger.info(f"  Found gender: {gender}")
-#                     j += 1
-            
-#             # Look for nationality line (2-3 letter code or full country name)
-#             if j < len(lines):
-#                 next_line = lines[j].strip()
-#                 # Nationality: 2-3 letter code OR longer country name (all uppercase/title case)
-#                 if (len(next_line) >= 2 and next_line.isalpha() and 
-#                     (next_line.isupper() or next_line.istitle())):
-#                     nationality = next_line
-#                     logger.info(f"  Found nationality: {nationality}")
-#                     j += 1
-            
-#             # Look for expiry date line (dd/mm/yy format)
-#             if j < len(lines):
-#                 next_line = lines[j].strip()
-#                 if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
-#                     expiry = next_line
-#                     logger.info(f"  Found expiry: {expiry}")
-#                     j += 1
-            
-#             # Create crew entry if we have minimum required data
-#             if crew_id and name:
-#                 crew_entry = {
-#                     'crew_id': crew_id,
-#                     'name': name,
-#                     'role': role,
-#                     'passport': passport,
-#                     'birth_date': birth_date,
-#                     'gender': gender,
-#                     'nationality': nationality,
-#                     'expiry': expiry
-#                 }
-#                 crew_entries.append(crew_entry)
-#                 logger.info(f"Successfully parsed crew entry: {crew_entry}")
-            
-#             # Move to the next position
-#             i = j
-#         else:
-#             i += 1
-
-#     logger.info(f"Found {len(crew_entries)} crew entries in Job 97")
-
-#     # Find the flight record using Job 97 data (tail, flight number, date)
-#     flight_record = None
-#     if flight_number and flight_date and tail_number:
-#         try:
-#             # Extract numeric flight number (remove WB prefix if present)
-#             numeric_flight_no = flight_number[2:] if flight_number.startswith('WB') else flight_number
-#             logger.info(f"Searching for flight using Job 97 data - Flight: {numeric_flight_no}, Date: {flight_date}, Tail: {tail_number}")
-            
-#             # Primary search: Match flight number, date, and tail number
-#             flight_record = FlightData.objects.filter(
-#                 flight_no=numeric_flight_no,
-#                 sd_date_utc=flight_date,
-#                 tail_no=tail_number
-#             ).first()
-            
-#             if not flight_record:
-#                 # Fallback: Try without tail number (in case tail numbers don't match exactly)
-#                 flight_record = FlightData.objects.filter(
-#                     flight_no=numeric_flight_no,
-#                     sd_date_utc=flight_date
-#                 ).first()
-                
-#                 if flight_record:
-#                     logger.info(f"Found flight record without tail match: {flight_record}")
-#                 else:
-#                     logger.warning(f"Flight record not found for {numeric_flight_no} on {flight_date}")
-#             else:
-#                 logger.info(f"Found exact flight record match: {flight_record}")
-                
-#         except Exception as e:
-#             logger.error(f"Error finding flight record: {e}")
-
-#     # Update crew details and create flight assignments
-#     updated_count = 0
-#     assignment_count = 0
-    
-#     for entry in crew_entries:
-#         try:
-#             # Parse dates
-#             birth = None
-#             expiry = None
-            
-#             if entry['birth_date']:
-#                 try:
-#                     birth = datetime.strptime(entry['birth_date'], '%d/%m/%y').date()
-#                 except Exception as e:
-#                     logger.warning(f"Could not parse birth date '{entry['birth_date']}': {e}")
-            
-#             if entry['expiry']:
-#                 try:
-#                     expiry = datetime.strptime(entry['expiry'], '%d/%m/%y').date()
-#                 except Exception as e:
-#                     logger.warning(f"Could not parse expiry date '{entry['expiry']}': {e}")
-
-#             # Update the existing crew detail record with Job 97 data
-#             crew_detail = QatarCrewDetail.objects.filter(crew_id=entry['crew_id']).first()
-#             if crew_detail:
-#                 updated = False
-#                 if birth and not crew_detail.birth_date:
-#                     crew_detail.birth_date = birth
-#                     updated = True
-#                 if entry['gender'] and not crew_detail.sex:
-#                     crew_detail.sex = entry['gender']
-#                     updated = True
-#                 if expiry and not crew_detail.passport_expiry:
-#                     crew_detail.passport_expiry = expiry
-#                     updated = True
-#                 # Update nationality_code from Job 97 (3-letter code like RWA, UKR)
-#                 if entry['nationality'] and (not crew_detail.nationality_code or crew_detail.nationality_code != entry['nationality']):
-#                     crew_detail.nationality_code = entry['nationality']
-#                     updated = True
-                
-#                 if updated:
-#                     crew_detail.save()
-#                     updated_count += 1
-#                     logger.info(f"Updated crew detail for {entry['crew_id']} - {entry['name']} ({entry['role']}) - Nationality Code: {entry['nationality']}")
-#                 else:
-#                     logger.info(f"No updates needed for crew detail {entry['crew_id']} - {entry['name']} ({entry['role']})")
-#             else:
-#                 logger.warning(f"No crew detail found for {entry['crew_id']} from Job 97")
-
-#             # Create flight crew assignment if we have a flight record
-#             if flight_record:
-#                 try:
-#                     # Use Job 97 data for crew assignment and FlightData for operational details
-#                     assignment, created = QatarFlightDetails.objects.update_or_create(
-#                         crew_id=entry['crew_id'],
-#                         flight=flight_record,
-#                         defaults={
-#                             # From Job 97 (RTF)
-#                             'tail_no': tail_number,  # From Job 97
-#                             'dep_date_utc': flight_date,  # From Job 97
-#                             'arr_date_utc': flight_date,  # Assume same day
-#                             # From FlightData (operational details)
-#                             'std_utc': flight_record.std_utc,  # From FlightData
-#                             'sta_utc': flight_record.sta_utc,  # From FlightData
-#                         }
-#                     )
-#                     if created:
-#                         assignment_count += 1
-#                         logger.info(f"Created flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
-#                     else:
-#                         assignment_count += 1  # Count updates too
-#                         logger.info(f"Updated flight assignment for {entry['crew_id']} - Job97: {tail_number}/{flight_date}, FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} {flight_record.std_utc}-{flight_record.sta_utc}")
-#                 except Exception as e:
-#                     logger.error(f"Failed to create flight assignment for {entry['crew_id']}: {e}")
-                
-#         except Exception as e:
-#             logger.error(f"Failed to process crew member {entry['crew_id']}: {e}")
-
-#     logger.info(f"Job 97 processing complete: Updated {updated_count} crew records, processed {assignment_count} flight assignments")
-    
-#     if flight_record:
-#         logger.info(f"Final flight details - Job97: {flight_number}({tail_number}) on {flight_date} | FlightData: {flight_record.dep_code_iata}->{flight_record.arr_code_iata} STD:{flight_record.std_utc} STA:{flight_record.sta_utc}")
-
-#     return flight_date
 
 
 def process_job97_file(attachment):
@@ -2926,634 +2767,6 @@ def process_job97_file(attachment):
 
     return flight_date, crew_entries
 
-
-# -----------------------------------------------------------------------------------
-
-# V1
-
-# -----------------------------------------------------------------------------------
-
-# def build_qatar_apis_edifact(direction, date):
-#     """
-#     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
-#     Updated to include all required crew fields and proper EDIFACT formatting.
-    
-#     UPDATES:
-#     - Sender/receiver addresses from settings (.env)
-#     - Success email notification when file is generated
-    
-#     Fixes applied based on Qatar Airways feedback:
-#     - Added COM segment for reporting party contact info (CRITICAL FIX)
-#     - Use 'F' for complete crew lists in UNH segment
-#     - Remove extra separators in NAD segment when no address info
-#     - Ensure all uppercase characters
-#     - Enhanced validation and error handling
-#     """
-#     from django.core.mail import send_mail
-#     from django.conf import settings
-#     import logging
-    
-#     logger = logging.getLogger(__name__)
-    
-#     lines = ["UNA:+.?*'"]
-#     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
-#     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
-    
-#     # Get sender and receiver from settings
-#     sender = settings.QATAR_APIS_SENDER  # KGLCAWB or RWANDAIR
-#     receiver = settings.QATAR_APIS_RECEIVER  # DOHQAXS or QATAPIS
-    
-#     logger.info(f"📤 Building EDIFACT - Sender: {sender}, Receiver: {receiver}, Direction: {direction}, Date: {date}")
-    
-#     lines.append(f"UNB+UNOA:4+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}'")
-#     lines.append(f"UNG+PAXLST+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
-    
-#     msg_count = 0
-#     validation_errors = []
-    
-#     # Get crew assignments for the specified direction and date
-#     if direction == 'O':  # Outbound (KGL to DOH)
-#         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
-#         arr_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
-#     else:  # Inbound (DOH to KGL)
-#         dep_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
-#         arr_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
-    
-#     assignments = QatarFlightDetails.objects.filter(
-#         dep_date_utc=date,
-#         flight__dep_code_iata__in=dep_codes,
-#         flight__arr_code_iata__in=arr_codes
-#     ).select_related('flight')
-    
-#     # If no assignments found with IATA codes, try with ICAO codes
-#     if not assignments.exists():
-#         assignments = QatarFlightDetails.objects.filter(
-#             dep_date_utc=date,
-#             flight__dep_code_icao__in=dep_codes,
-#             flight__arr_code_icao__in=arr_codes
-#         ).select_related('flight')
-    
-#     # Final fallback - just use the date and let's see what flights we have
-#     if not assignments.exists():
-#         logger.warning(f"No crew assignments found with airport codes. Checking all flights on {date}")
-#         all_assignments = QatarFlightDetails.objects.filter(
-#             dep_date_utc=date
-#         ).select_related('flight')
-        
-#         for asg in all_assignments:
-#             logger.info(f"Available flight: {asg.flight.flight_no} - {asg.flight.dep_code_iata}/{asg.flight.dep_code_icao} -> {asg.flight.arr_code_iata}/{asg.flight.arr_code_icao}")
-        
-#         # Use all assignments if direction matching fails
-#         assignments = all_assignments
-    
-#     if not assignments.exists():
-#         validation_errors.append(f"No crew assignments found for direction {direction} on {date}")
-#         send_validation_error_email(validation_errors, direction, date)
-#         return None
-    
-#     # Group assignments by flight to create one message per flight
-#     flights_processed = set()
-#     total_crew_count = 0
-    
-#     for asg in assignments:
-#         # Create one message per unique flight (avoid duplicates)
-#         flight_key = f"{asg.flight.flight_no}_{asg.flight.sd_date_utc}_{asg.std_utc}"
-#         if flight_key in flights_processed:
-#             continue
-#         flights_processed.add(flight_key)
-        
-#         msg_count += 1
-#         msg_ref = f"{ctrl_ref}{msg_count:02d}"
-#         segments = []
-        
-#         # Message header with flight info - Use 'F' for complete crew list
-#         segments.append(
-#             f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+WB{asg.flight.flight_no}"
-#             f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:F'"
-#         )
-        
-#         # Beginning of message - crew list
-#         segments.append("BGM+250'")
-        
-#         # Sender information
-#         segments.append(f"NAD+MS+++{sender}:CREW APIS TEAM'")
-        
-#         # Contact information - CRITICAL FIX
-#         segments.append("COM+AIMS@RWANDAIR.COM:EM+250781442755:TE'")
-        
-#         # Transport information
-#         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
-        
-#         # Departure location and time (convert to IATA codes for EDIFACT)
-#         if 'OTHH' in str(asg.flight.dep_code_icao) or 'OTHH' in str(asg.flight.dep_code_iata):
-#             dep_iata = 'DOH'
-#         elif 'HRYR' in str(asg.flight.dep_code_icao) or 'HRYR' in str(asg.flight.dep_code_iata):
-#             dep_iata = 'KGL'
-#         else:
-#             dep_iata = asg.flight.dep_code_iata or 'DOH'
-#         segments.append(f"LOC+125+{dep_iata}'")
-#         segments.append(f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'")
-        
-#         # Arrival location and time (convert to IATA codes for EDIFACT)
-#         if 'OTHH' in str(asg.flight.arr_code_icao) or 'OTHH' in str(asg.flight.arr_code_iata):
-#             arr_iata = 'DOH'
-#         elif 'HRYR' in str(asg.flight.arr_code_icao) or 'HRYR' in str(asg.flight.arr_code_iata):
-#             arr_iata = 'KGL'
-#         else:
-#             arr_iata = asg.flight.arr_code_iata or 'KGL'
-#         segments.append(f"LOC+87+{arr_iata}'")
-#         segments.append(f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'")
-        
-#         # Get all crew members for this specific flight
-#         flight_crew = QatarFlightDetails.objects.filter(
-#             flight=asg.flight,
-#             dep_date_utc=date
-#         ).select_related('flight')
-        
-#         crew_count = 0
-#         flight_validation_errors = []
-        
-#         # Process each crew member with enhanced validation
-#         for crew_asg in flight_crew:
-#             crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_asg.crew_id).first()
-            
-#             if not crew_detail:
-#                 flight_validation_errors.append(f"No crew detail found for crew_id: {crew_asg.crew_id}")
-#                 continue
-            
-#             # Mandatory field validation
-#             surname = (crew_detail.surname or '').upper().strip()
-#             firstname = (crew_detail.firstname or '').upper().strip() 
-#             middlename = (crew_detail.middlename or '').upper().strip()
-#             passport_number = (crew_detail.passport_number or '').upper()
-            
-#             # Skip crew members with insufficient mandatory data
-#             if not surname:
-#                 flight_validation_errors.append(f"Missing mandatory surname for crew {crew_asg.crew_id}")
-#                 continue
-                
-#             # Check if we have at least one given name (firstname OR middlename)
-#             if not firstname and not middlename:
-#                 flight_validation_errors.append(f"Missing mandatory given name for crew {crew_asg.crew_id} (both firstname and middlename are empty)")
-#                 continue
-                
-#             if not passport_number:
-#                 flight_validation_errors.append(f"Missing mandatory passport number for crew {crew_asg.crew_id}")
-#                 continue
-            
-#             # Combine first and middle names, or use whichever is available
-#             if firstname and middlename:
-#                 full_given_name = f"{firstname} {middlename}".strip()
-#             elif firstname:
-#                 full_given_name = firstname
-#             else:
-#                 full_given_name = middlename  # Use middlename if firstname is empty
-            
-#             # Format NAD segment without extra separators - only add what's needed
-#             if full_given_name:
-#                 segments.append(f"NAD+FM+++{surname}:{full_given_name}'")
-#             else:
-#                 segments.append(f"NAD+FM+++{surname}'")
-            
-#             crew_count += 1
-            
-#             # Gender/Sex (mandatory)
-#             sex = (crew_detail.sex or 'M').upper()  # Default to M if not specified, ensure uppercase
-#             segments.append(f"ATT+2++{sex}'")
-            
-#             # Birth date (mandatory)
-#             if crew_detail.birth_date:
-#                 birth_date_str = crew_detail.birth_date.strftime('%y%m%d')
-#                 segments.append(f"DTM+329:{birth_date_str}'")
-#             else:
-#                 flight_validation_errors.append(f"Missing mandatory birth date for crew {crew_asg.crew_id}")
-#                 segments.append("DTM+329:'")  # Empty if no birth date
-            
-#             # Location information (departure and arrival ports for crew positioning)
-#             segments.append(f"LOC+22+{arr_iata}'")  # Destination
-#             segments.append(f"LOC+178+{dep_iata}'")  # Origin
-#             segments.append(f"LOC+179+{arr_iata}'")  # Final destination
-            
-#             # Nationality - use nationality_code from Job 97 (3-letter code, uppercase)
-#             nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
-#             segments.append(f"NAT+2+{nationality_code}'")
-            
-#             # Document (Passport) information
-#             segments.append(f"DOC+P:110:111+{passport_number}'")
-            
-#             # Passport expiry date (mandatory)
-#             if crew_detail.passport_expiry:
-#                 expiry_str = crew_detail.passport_expiry.strftime('%y%m%d')
-#                 segments.append(f"DTM+36:{expiry_str}'")
-#             else:
-#                 flight_validation_errors.append(f"Missing mandatory passport expiry for crew {crew_asg.crew_id}")
-#                 segments.append("DTM+36:'")
-            
-#             # Birth place (country code) - use nationality_code as fallback, uppercase
-#             birth_place = (crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA').upper()
-#             segments.append(f"LOC+91+{birth_place}'")
-        
-#         # Validate minimum crew count (5 for certification)
-#         if crew_count < 5:
-#             flight_validation_errors.append(f"Flight WB{asg.flight.flight_no} has only {crew_count} crew members, minimum 5 required for Qatar certification")
-        
-#         validation_errors.extend(flight_validation_errors)
-#         total_crew_count += crew_count
-        
-#         # Crew count
-#         segments.append(f"CNT+41:{crew_count:04d}'")
-        
-#         # Add all segments to main lines
-#         lines.extend(segments)
-        
-#         # Message trailer
-#         lines.append(f"UNT+{len(segments)+1:04d}+{msg_ref}'")
-    
-#     # Group trailer
-#     lines.append(f"UNE+{msg_count}+{ctrl_ref}'")
-    
-#     # Interchange trailer
-#     lines.append(f"UNZ+{msg_count}+{ctrl_ref}'")
-    
-#     # Final validation check
-#     if total_crew_count < 5:
-#         validation_errors.append(f"Total crew count ({total_crew_count}) is less than minimum requirement of 5")
-    
-#     # If validation errors exist, send email and don't generate file
-#     if validation_errors:
-#         send_validation_error_email(validation_errors, direction, date)
-#         return None
-    
-#     # Create output directory and file using settings.QATAR_APIS_OUTPUT_PATH
-#     try:
-#         out_dir = settings.QATAR_APIS_OUTPUT_PATH
-#         out_dir.mkdir(parents=True, exist_ok=True)
-#         filename = f"QATAPIS_{direction}_{date:%Y%m%d}.edi"
-#         out_path = out_dir / filename
-
-#         if out_path.exists():
-#             logger.info(f"⚠️ File already exists, skipping: {out_path}")
-#             return out_path
-        
-#         with open(out_path, 'w', encoding='utf-8') as f:
-#             f.write("\n".join(lines))
-        
-#         logger.info(f"✅ Generated EDIFACT file: {out_path}")
-#         logger.info(f"📊 File contains {msg_count} flight(s) with {total_crew_count} crew members")
-#         logger.info(f"📤 Sender: {sender}, Receiver: {receiver}")
-        
-#         # Send success email notification
-#         send_success_email(out_path, direction, date, msg_count, total_crew_count)
-        
-#         return out_path
-        
-#     except Exception as e:
-#         logger.error(f"Error writing EDIFACT file: {e}")
-#         validation_errors.append(f"File generation error: {str(e)}")
-#         send_validation_error_email(validation_errors, direction, date)
-#         return None
-    
-
-# --------------------------------------------------------------------------
-
-# V2
-
-# --------------------------------------------------------------------------
-
-
-# def build_qatar_apis_edifact(direction, date):
-#     """
-#     Constructs and writes the EDIFACT PAXLST file for the given direction and date.
-#     Updated to include all required crew fields and proper EDIFACT formatting.
-    
-#     UPDATES:
-#     - Sender/receiver addresses from settings (.env)
-#     - Success email notification when file is generated
-#     - Filename format: YYYYMMDD_FlightNo_Direction.snd
-#     - Updates crew assignment status to GENERATED with direction
-    
-#     Fixes applied based on Qatar Airways feedback:
-#     - Added COM segment for reporting party contact info (CRITICAL FIX)
-#     - Use 'F' for complete crew lists in UNH segment
-#     - Remove extra separators in NAD segment when no address info
-#     - Ensure all uppercase characters
-#     - Enhanced validation and error handling
-#     """
-#     from django.core.mail import send_mail
-#     from django.conf import settings
-#     from django.utils import timezone
-#     import logging
-    
-#     logger = logging.getLogger(__name__)
-    
-#     lines = ["UNA:+.?*'"]
-#     ts = datetime.utcnow().strftime("%y%m%d:%H%M")
-#     ctrl_ref = datetime.utcnow().strftime("%y%m%d%H%M")
-    
-#     # Get sender and receiver from settings
-#     sender = settings.QATAR_APIS_SENDER  # KGLCAWB or RWANDAIR
-#     receiver = settings.QATAR_APIS_RECEIVER  # DOHQAXS or QATAPIS
-    
-#     logger.info(f"📤 Building EDIFACT - Sender: {sender}, Receiver: {receiver}, Direction: {direction}, Date: {date}")
-    
-#     lines.append(f"UNB+UNOA:4+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}'")
-#     lines.append(f"UNG+PAXLST+{sender}:ZZ+{receiver}:ZZ+{ts}+{ctrl_ref}+UN+D:05B'")
-    
-#     msg_count = 0
-#     validation_errors = []
-    
-#     # Get crew assignments for the specified direction and date
-#     if direction == 'O':  # Outbound (KGL to DOH)
-#         dep_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
-#         arr_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
-#         direction_text = 'O'
-#     else:  # Inbound (DOH to KGL)
-#         dep_codes = ['DOH', 'OTHH']  # IATA and ICAO for Doha
-#         arr_codes = ['KGL', 'HRYR']  # IATA and ICAO for Kigali
-#         direction_text = 'I'
-    
-#     assignments = QatarFlightDetails.objects.filter(
-#         dep_date_utc=date,
-#         flight__dep_code_iata__in=dep_codes,
-#         flight__arr_code_iata__in=arr_codes
-#     ).select_related('flight')
-    
-#     # If no assignments found with IATA codes, try with ICAO codes
-#     if not assignments.exists():
-#         assignments = QatarFlightDetails.objects.filter(
-#             dep_date_utc=date,
-#             flight__dep_code_icao__in=dep_codes,
-#             flight__arr_code_icao__in=arr_codes
-#         ).select_related('flight')
-    
-#     # Final fallback - just use the date and let's see what flights we have
-#     if not assignments.exists():
-#         logger.warning(f"No crew assignments found with airport codes. Checking all flights on {date}")
-#         all_assignments = QatarFlightDetails.objects.filter(
-#             dep_date_utc=date
-#         ).select_related('flight')
-        
-#         for asg in all_assignments:
-#             logger.info(f"Available flight: {asg.flight.flight_no} - {asg.flight.dep_code_iata}/{asg.flight.dep_code_icao} -> {asg.flight.arr_code_iata}/{asg.flight.arr_code_icao}")
-        
-#         # Use all assignments if direction matching fails
-#         assignments = all_assignments
-    
-#     if not assignments.exists():
-#         validation_errors.append(f"No crew assignments found for direction {direction} on {date}")
-#         send_validation_error_email(validation_errors, direction, date)
-#         return None
-    
-#     # Group assignments by flight to create one message per flight
-#     flights_processed = set()
-#     total_crew_count = 0
-#     flight_numbers = []  # Collect flight numbers for filename
-    
-#     for asg in assignments:
-#         # Create one message per unique flight (avoid duplicates)
-#         flight_key = f"{asg.flight.flight_no}_{asg.flight.sd_date_utc}_{asg.std_utc}"
-#         if flight_key in flights_processed:
-#             continue
-#         flights_processed.add(flight_key)
-        
-#         # Collect flight number for filename
-#         flight_numbers.append(asg.flight.flight_no)
-        
-#         msg_count += 1
-#         msg_ref = f"{ctrl_ref}{msg_count:02d}"
-#         segments = []
-        
-#         # Message header with flight info - Use 'F' for complete crew list
-#         segments.append(
-#             f"UNH+{msg_ref}+PAXLST:D:05B:UN:IATA+WB{asg.flight.flight_no}"
-#             f"{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}+01:F'"
-#         )
-        
-#         # Beginning of message - crew list
-#         segments.append("BGM+250'")
-        
-#         # Sender information
-#         segments.append(f"NAD+MS+++{sender}:CREW APIS TEAM'")
-        
-#         # Contact information - CRITICAL FIX
-#         segments.append("COM+AIMS@RWANDAIR.COM:EM+250781442755:TE'")
-        
-#         # Transport information
-#         segments.append(f"TDT+20+WB{asg.flight.flight_no}'")
-        
-#         # Departure location and time (convert to IATA codes for EDIFACT)
-#         if 'OTHH' in str(asg.flight.dep_code_icao) or 'OTHH' in str(asg.flight.dep_code_iata):
-#             dep_iata = 'DOH'
-#         elif 'HRYR' in str(asg.flight.dep_code_icao) or 'HRYR' in str(asg.flight.dep_code_iata):
-#             dep_iata = 'KGL'
-#         else:
-#             dep_iata = asg.flight.dep_code_iata or 'DOH'
-#         segments.append(f"LOC+125+{dep_iata}'")
-#         segments.append(f"DTM+189:{date.strftime('%y%m%d')}{asg.std_utc.strftime('%H%M')}:201'")
-        
-#         # Arrival location and time (convert to IATA codes for EDIFACT)
-#         if 'OTHH' in str(asg.flight.arr_code_icao) or 'OTHH' in str(asg.flight.arr_code_iata):
-#             arr_iata = 'DOH'
-#         elif 'HRYR' in str(asg.flight.arr_code_icao) or 'HRYR' in str(asg.flight.arr_code_iata):
-#             arr_iata = 'KGL'
-#         else:
-#             arr_iata = asg.flight.arr_code_iata or 'KGL'
-#         segments.append(f"LOC+87+{arr_iata}'")
-#         segments.append(f"DTM+232:{date.strftime('%y%m%d')}{asg.sta_utc.strftime('%H%M')}:201'")
-        
-#         # Get all crew members for this specific flight
-#         flight_crew = QatarFlightDetails.objects.filter(
-#             flight=asg.flight,
-#             dep_date_utc=date
-#         ).select_related('flight')
-        
-#         crew_count = 0
-#         flight_validation_errors = []
-        
-#         # Process each crew member with enhanced validation
-#         for crew_asg in flight_crew:
-#             crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_asg.crew_id).first()
-            
-#             if not crew_detail:
-#                 flight_validation_errors.append(f"No crew detail found for crew_id: {crew_asg.crew_id}")
-#                 continue
-            
-#             # Mandatory field validation
-#             surname = (crew_detail.surname or '').upper().strip()
-#             firstname = (crew_detail.firstname or '').upper().strip() 
-#             middlename = (crew_detail.middlename or '').upper().strip()
-#             passport_number = (crew_detail.passport_number or '').upper()
-            
-#             # Skip crew members with insufficient mandatory data
-#             if not surname:
-#                 flight_validation_errors.append(f"Missing mandatory surname for crew {crew_asg.crew_id}")
-#                 continue
-                
-#             # Check if we have at least one given name (firstname OR middlename)
-#             if not firstname and not middlename:
-#                 flight_validation_errors.append(f"Missing mandatory given name for crew {crew_asg.crew_id} (both firstname and middlename are empty)")
-#                 continue
-                
-#             if not passport_number:
-#                 flight_validation_errors.append(f"Missing mandatory passport number for crew {crew_asg.crew_id}")
-#                 continue
-            
-#             # Combine first and middle names, or use whichever is available
-#             if firstname and middlename:
-#                 full_given_name = f"{firstname} {middlename}".strip()
-#             elif firstname:
-#                 full_given_name = firstname
-#             else:
-#                 full_given_name = middlename  # Use middlename if firstname is empty
-            
-#             # Format NAD segment without extra separators - only add what's needed
-#             if full_given_name:
-#                 segments.append(f"NAD+FM+++{surname}:{full_given_name}'")
-#             else:
-#                 segments.append(f"NAD+FM+++{surname}'")
-            
-#             crew_count += 1
-            
-#             # Gender/Sex (mandatory)
-#             sex = (crew_detail.sex or 'M').upper()  # Default to M if not specified, ensure uppercase
-#             segments.append(f"ATT+2++{sex}'")
-            
-#             # Birth date (mandatory)
-#             if crew_detail.birth_date:
-#                 birth_date_str = crew_detail.birth_date.strftime('%y%m%d')
-#                 segments.append(f"DTM+329:{birth_date_str}'")
-#             else:
-#                 flight_validation_errors.append(f"Missing mandatory birth date for crew {crew_asg.crew_id}")
-#                 segments.append("DTM+329:'")  # Empty if no birth date
-            
-#             # Location information (departure and arrival ports for crew positioning)
-#             segments.append(f"LOC+22+{arr_iata}'")  # Destination
-#             segments.append(f"LOC+178+{dep_iata}'")  # Origin
-#             segments.append(f"LOC+179+{arr_iata}'")  # Final destination
-            
-#             # Nationality - use nationality_code from Job 97 (3-letter code, uppercase)
-#             nationality_code = (crew_detail.nationality_code or 'RWA').upper()  # Default to RWA if not specified
-#             segments.append(f"NAT+2+{nationality_code}'")
-            
-#             # Document (Passport) information
-#             segments.append(f"DOC+P:110:111+{passport_number}'")
-            
-#             # Passport expiry date (mandatory)
-#             if crew_detail.passport_expiry:
-#                 expiry_str = crew_detail.passport_expiry.strftime('%y%m%d')
-#                 segments.append(f"DTM+36:{expiry_str}'")
-#             else:
-#                 flight_validation_errors.append(f"Missing mandatory passport expiry for crew {crew_asg.crew_id}")
-#                 segments.append("DTM+36:'")
-            
-#             # Birth place (country code) - use nationality_code as fallback, uppercase
-#             birth_place = (crew_detail.birth_place_cc or crew_detail.nationality_code or 'RWA').upper()
-#             segments.append(f"LOC+91+{birth_place}'")
-        
-#         # Validate minimum crew count (5 for certification)
-#         if crew_count < 5:
-#             flight_validation_errors.append(f"Flight WB{asg.flight.flight_no} has only {crew_count} crew members, minimum 5 required for Qatar certification")
-        
-#         validation_errors.extend(flight_validation_errors)
-#         total_crew_count += crew_count
-        
-#         # Crew count
-#         segments.append(f"CNT+41:{crew_count:04d}'")
-        
-#         # Add all segments to main lines
-#         lines.extend(segments)
-        
-#         # Message trailer
-#         lines.append(f"UNT+{len(segments)+1:04d}+{msg_ref}'")
-    
-#     # Group trailer
-#     lines.append(f"UNE+{msg_count}+{ctrl_ref}'")
-    
-#     # Interchange trailer
-#     lines.append(f"UNZ+{msg_count}+{ctrl_ref}'")
-    
-#     # Final validation check
-#     if total_crew_count < 5:
-#         validation_errors.append(f"Total crew count ({total_crew_count}) is less than minimum requirement of 5")
-    
-#     # If validation errors exist, send email and don't generate file
-#     if validation_errors:
-#         send_validation_error_email(validation_errors, direction, date)
-#         return None
-    
-#     # Create output directory and file using settings.QATAR_APIS_OUTPUT_PATH
-#     try:
-#         out_dir = settings.QATAR_APIS_OUTPUT_PATH
-#         out_dir.mkdir(parents=True, exist_ok=True)
-        
-#         # Build filename: YYYYMMDD_FlightNo_Direction.snd
-#         flight_no_str = '_'.join(flight_numbers) if flight_numbers else 'UNKNOWN'
-#         filename = f"{date.strftime('%Y%m%d')}_{flight_no_str}_{direction_text}.snd"
-#         out_path = out_dir / filename
-
-#         if out_path.exists():
-#             logger.info(f"⚠️ File already exists, skipping: {out_path}")
-#             return out_path
-        
-#         with open(out_path, 'w', encoding='utf-8') as f:
-#             f.write("\n".join(lines))
-        
-#         logger.info(f"✅ Generated EDIFACT file: {out_path}")
-#         logger.info(f"📊 File contains {msg_count} flight(s) with {total_crew_count} crew members")
-#         logger.info(f"📤 Sender: {sender}, Receiver: {receiver}")
-#         logger.info(f"✈️  Flight(s): {', '.join(flight_numbers)}")
-        
-#         # Update status for all crew assignments included in this file
-#         try:
-#             updated_count = 0
-            
-#             for asg in assignments:
-#                 flight_key = f"{asg.flight.flight_no}_{asg.flight.sd_date_utc}_{asg.std_utc}"
-#                 if flight_key not in flights_processed:
-#                     continue
-                
-#                 # Get all crew for this flight
-#                 flight_crew = QatarFlightDetails.objects.filter(
-#                     flight=asg.flight,
-#                     dep_date_utc=date
-#                 )
-                
-#                 # Update status and direction for all crew assignments in this flight
-#                 for crew_assignment in flight_crew:
-#                     crew_detail = QatarCrewDetail.objects.filter(crew_id=crew_assignment.crew_id).first()
-                    
-#                     # Only update status for crew that were actually included (had valid data)
-#                     if crew_detail:
-#                         surname = (crew_detail.surname or '').strip()
-#                         firstname = (crew_detail.firstname or '').strip()
-#                         middlename = (crew_detail.middlename or '').strip()
-#                         passport_number = (crew_detail.passport_number or '').strip()
-                        
-#                         # Only set status if they were included in the file
-#                         if (surname and (firstname or middlename) and passport_number and 
-#                             crew_detail.birth_date and crew_detail.passport_expiry):
-#                             crew_assignment.status = 'GENERATED'
-#                             crew_assignment.status_updated_at = timezone.now()
-#                             crew_assignment.apis_filename = filename
-#                             crew_assignment.direction = direction_text
-#                             crew_assignment.save(update_fields=['status', 'status_updated_at', 'apis_filename', 'direction', 'updated_at'])
-#                             updated_count += 1
-            
-#             logger.info(f"✅ Set status to GENERATED for {updated_count} crew assignments")
-            
-#         except Exception as e:
-#             logger.error(f"⚠️  Failed to update crew assignment status: {e}")
-        
-#         # Send success email notification
-#         send_success_email(out_path, direction, date, msg_count, total_crew_count)
-        
-#         return out_path
-        
-#     except Exception as e:
-#         logger.error(f"Error writing EDIFACT file: {e}")
-#         validation_errors.append(f"File generation error: {str(e)}")
-#         send_validation_error_email(validation_errors, direction, date)
-#         return None
 
 
 # -----------------------------------------------------------------------------------
