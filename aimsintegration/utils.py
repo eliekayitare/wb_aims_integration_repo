@@ -660,7 +660,7 @@ TAIL_TO_AIRCRAFT_TYPE = {
     "9XR-WI": "CRJ",
     "9XR-WL": "DH8",
     "9XR-WM": "DH8",
-    "9XR-WT": "DH8",
+    "9XR-WT": "738",
     "9XR-WU": "738",
 }
 
