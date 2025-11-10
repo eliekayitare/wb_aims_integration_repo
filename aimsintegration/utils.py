@@ -661,10 +661,11 @@ TAIL_TO_AIRCRAFT_TYPE = {
     "9XR-WL": "DH8",
     "9XR-WM": "DH8",
     "9XR-WT": "DH8",
+    "9XR-WU": "738",
 }
 
-def get_aircraft_type(tail_number):
-    return TAIL_TO_AIRCRAFT_TYPE.get(tail_number, "   ")  # Default to 3 spaces if not found
+# def get_aircraft_type(tail_number):
+#     return TAIL_TO_AIRCRAFT_TYPE.get(tail_number, "   ")  # Default to 3 spaces if not found
 
 # # Function to format a single row based on the event type and highlighted fields
 # def format_acars_data_to_job_one(flight_data, acars_event, event_time, email_arrival_time):
