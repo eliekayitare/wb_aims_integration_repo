@@ -379,7 +379,7 @@ CELERY_BEAT_SCHEDULE = {
     # Jeppessen GD - Runs every 3 minutes
     'fetch-jeppessen-gd-every-30-min': {
         'task': 'aimsintegration.tasks.fetch_jeppessen_gd',
-        'schedule': crontab(minute='*/3'),
+        'schedule': crontab(minute='*/2'),
     },
 
 
