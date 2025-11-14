@@ -2060,6 +2060,8 @@ def delete_emails_by_subject_list(self):
 # Does NOT mark DOH emails as read (Qatar APIS needs them)
 # ============================================================================
 
+import time as time_module
+
 @shared_task
 def fetch_jeppessen_gd():
     """
@@ -2068,7 +2070,7 @@ def fetch_jeppessen_gd():
     
     IMPORTANT: Does NOT mark DOH emails as read (Qatar APIS needs them)
     """
-    start_time = time.time()
+    start_time = time_module.time()
     
     try:
         logger.info("=" * 80)
@@ -2152,7 +2154,7 @@ def fetch_jeppessen_gd():
                 logger.error(f"Error processing GD email: {e}", exc_info=True)
                 continue
         
-        duration = time.time() - start_time
+        duration = time_module.time() - start_time
         
         logger.info("=" * 80)
         logger.info(f"Jeppessen GD fetch completed")
@@ -2163,7 +2165,7 @@ def fetch_jeppessen_gd():
         return processed_count
         
     except Exception as e:
-        duration = time.time() - start_time
+        duration = time_module.time() - start_time
         logger.error(f"Fatal error in Jeppessen GD fetch: {e}", exc_info=True)
         return 0
 
@@ -2176,7 +2178,7 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
     from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
     from .utils import rtf_to_text
     
-    start_time = time.time()
+    start_time = time_module.time()
     
     try:
         # Parse GD identifier: 212/BGF DLA/11112025
@@ -2340,7 +2342,7 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
                 update_jeppessen_crew_detail(entry, flight_date, crew_email)
         
         # Create log
-        duration = time.time() - start_time
+        duration = time_module.time() - start_time
         
         JEPPESSENGDProcessingLog.objects.create(
             email_subject=email_subject,
@@ -2374,12 +2376,12 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
             flight_found=False,
             status='FAILED',
             error_message=str(e)[:1000],
-            processing_duration=time.time() - start_time
+            processing_duration=time_module.time() - start_time
         )
         
         return False
 
-
+from django.db import connections, DatabaseError
 def get_jeppessen_crew_email_from_erp(crew_id):
     """
     Fetch crew email from ERP (MSSQL) using crew_id.
