@@ -2193,7 +2193,7 @@ def fetch_jeppessen_gd():
         # CRITICAL FIX: Limit to 500 most recent emails to prevent timeout
         recent_emails = list(account.inbox.filter(
             datetime_received__gte=cutoff_date
-        ).order_by('-datetime_received')[:1])  # ← LIMIT TO 500
+        ).order_by('-datetime_received')[:500])  # ← LIMIT TO 500
         
         logger.info(f"Retrieved {len(recent_emails)} recent emails to scan")
         
