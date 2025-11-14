@@ -4,7 +4,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
 <style>
-  /* Position badge styling */
+  /* Position badges */
   .position-badge {
     padding: 5px 10px;
     border-radius: 15px;
@@ -13,14 +13,16 @@
     text-transform: uppercase;
   }
   
-  .position-cp { background-color: #007bff; color: #fff; }
-  .position-fo { background-color: #28a745; color: #fff; }
+  .position-pic { background-color: #007bff; color: #fff; }
+  .position-sic { background-color: #28a745; color: #fff; }
+  .position-cp { background-color: #17a2b8; color: #fff; }
+  .position-fo { background-color: #6c757d; color: #fff; }
   .position-fp { background-color: #ffc107; color: #000; }
-  .position-sa { background-color: #17a2b8; color: #fff; }
+  .position-sa { background-color: #e83e8c; color: #fff; }
   .position-fa { background-color: #6c757d; color: #fff; }
-  .position-mx { background-color: #fd7e14; color: #fff; }
-  .position-ac { background-color: #e83e8c; color: #fff; }
   .position-fe { background-color: #20c997; color: #fff; }
+  .position-mx { background-color: #fd7e14; color: #fff; }
+  .position-ac { background-color: #6c757d; color: #fff; }
   
   /* Email badge */
   .email-badge {
@@ -33,7 +35,7 @@
   .email-yes { background-color: #28a745; color: #fff; }
   .email-no { background-color: #dc3545; color: #fff; }
   
-  /* Status badge */
+  /* Status badges */
   .status-badge {
     padding: 5px 10px;
     border-radius: 15px;
@@ -70,7 +72,7 @@
     padding: 0;
     border: 1px solid #888;
     width: 90%;
-    max-width: 1200px;
+    max-width: 1400px;
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     animation: slideDown 0.3s;
@@ -173,13 +175,13 @@
     padding: 12px;
     text-align: left;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
   }
   
   .crew-table td {
     padding: 12px;
     border-bottom: 1px solid #dee2e6;
-    font-size: 14px;
+    font-size: 13px;
   }
   
   .crew-table tr:hover {
@@ -249,7 +251,7 @@
     margin-top: 5px;
   }
   
-  /* Position breakdown mini-cards */
+  /* Position breakdown */
   .position-breakdown {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -278,6 +280,28 @@
     text-transform: uppercase;
     font-weight: 600;
   }
+  
+  /* PIC/SIC cell styling */
+  .pic-sic-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .crew-info {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .crew-id {
+    font-weight: bold;
+    color: #212529;
+  }
+  
+  .crew-name {
+    font-size: 11px;
+    color: #6c757d;
+  }
 </style>
 {% endblock %}
 
@@ -292,14 +316,14 @@
       <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
       <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
       <li><a href="{% url 'qatar_apis_dashboard' %}">Qatar APIS</a></li>
-      <li><a href="{% url 'jeppessen_dashboard' %}" class="active">Jeppessen Crew</a></li>
+      <li><a href="{% url 'jeppessen_dashboard' %}" class="active">General Declaration</a></li>
     </ul>
   </aside>
 
   <!-- Main Content -->
   <div class="main-content">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-      <h1 style="margin: 0; color: #212529;">Jeppessen Crew Dashboard</h1>
+      <h1 style="margin: 0; color: #212529;">General Declaration (GD) Dashboard</h1>
       <div style="color: #6c757d; font-size: 14px;">
         Showing data from: <strong>{{ start_date|date:"Y-m-d" }}</strong> to <strong>today</strong>
       </div>
@@ -308,7 +332,7 @@
     <!-- Summary Cards -->
     <div class="summary-cards">
       <div class="summary-card">
-        <p>Today's Flights(Legs)</p>
+        <p>Today's Flights</p>
         <h3>{{ today_flights }}</h3>
       </div>
       <div class="summary-card">
@@ -316,14 +340,12 @@
         <h3>{{ today_crew }}</h3>
       </div>
       <div class="summary-card">
-        <p>Total Flights</p>
-        <h3>{{ total_flights }}</h3>
-        <p class="subtitle">Last {{ days_back }} days</p>
+        <p>Today's PIC</p>
+        <h3>{{ today_pic }}</h3>
       </div>
       <div class="summary-card">
-        <p>Total Crew</p>
-        <h3>{{ total_crew }}</h3>
-        <p class="subtitle">Last {{ days_back }} days</p>
+        <p>Today's SIC</p>
+        <h3>{{ today_sic }}</h3>
       </div>
       <div class="summary-card">
         <p>Crew with Email</p>
@@ -334,6 +356,16 @@
         <p>Email Success Rate</p>
         <h3>{{ email_success_rate|floatformat:0 }}%</h3>
         <p class="subtitle">Today</p>
+      </div>
+      <div class="summary-card">
+        <p>Total Flights</p>
+        <h3>{{ total_flights }}</h3>
+        <p class="subtitle">Last {{ days_back }} days</p>
+      </div>
+      <div class="summary-card">
+        <p>Total Crew</p>
+        <h3>{{ total_crew }}</h3>
+        <p class="subtitle">Last {{ days_back }} days</p>
       </div>
     </div>
     
@@ -359,13 +391,11 @@
     <div class="search-filter-container">
       <input
         type="text"
-        placeholder="Search by flight number, origin, destination..."
+        placeholder="Search by flight number, route, PIC, SIC..."
         class="search-input"
         id="search-input"
       />
-
       <input type="date" id="date-filter" class="search-input" style="width: 200px;" />
-      
       <select class="filter-select" id="days-filter">
         <option value="7" {% if days_back == 7 %}selected{% endif %}>Last 7 days</option>
         <option value="30" {% if days_back == 30 %}selected{% endif %}>Last 30 days</option>
@@ -379,12 +409,15 @@
         <thead>
           <tr>
             <th>Date</th>
-            <th>Flight No.</th>
+            <th>Flight</th>
             <th>Route</th>
-            <th>Origin (ICAO)</th>
-            <th>Destination (ICAO)</th>
-            <th>Crew Count</th>
-            <th>Processed At</th>
+            <th>Tail</th>
+            <th>STD</th>
+            <th>STA</th>
+            <th>PIC</th>
+            <th>SIC</th>
+            <th>Crew</th>
+            <th>Processed</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -394,8 +427,29 @@
             <td>{{ flight.flight_date|date:"Y-m-d" }}</td>
             <td><strong>{{ flight.flight_no }}</strong></td>
             <td>{{ flight.origin_iata }} → {{ flight.destination_iata }}</td>
-            <td>{{ flight.origin_icao|default:"--" }}</td>
-            <td>{{ flight.destination_icao|default:"--" }}</td>
+            <td>{{ flight.tail_no|default:"--" }}</td>
+            <td>{{ flight.std_utc|date:"H:i"|default:"--" }}</td>
+            <td>{{ flight.sta_utc|date:"H:i"|default:"--" }}</td>
+            <td>
+              {% if flight.pic_id %}
+                <div class="crew-info">
+                  <span class="crew-id">{{ flight.pic_id }}</span>
+                  <span class="crew-name">{{ flight.pic_name|default:"" }}</span>
+                </div>
+              {% else %}
+                <span style="color: #dc3545;">No PIC</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if flight.sic_id %}
+                <div class="crew-info">
+                  <span class="crew-id">{{ flight.sic_id }}</span>
+                  <span class="crew-name">{{ flight.sic_name|default:"" }}</span>
+                </div>
+              {% else %}
+                <span style="color: #ffc107;">No SIC</span>
+              {% endif %}
+            </td>
             <td><strong>{{ flight.crew_count }}</strong></td>
             <td>{{ flight.processed_at|date:"Y-m-d H:i" }}</td>
             <td>
@@ -406,7 +460,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="8" style="text-align: center; padding: 20px; color: #6c757d;">
+            <td colspan="11" style="text-align: center; padding: 20px; color: #6c757d;">
               No flight records found
             </td>
           </tr>
@@ -422,13 +476,14 @@
         <thead>
           <tr>
             <th>Processed At</th>
-            <th>Attachment</th>
+            <th>GD Identifier</th>
             <th>Status</th>
-            <th>Total Lines</th>
-            <th>Successful</th>
-            <th>Failed</th>
-            <th>Flights</th>
-            <th>Crew</th>
+            <th>Total Crew</th>
+            <th>Emails Found</th>
+            <th>Emails Missing</th>
+            <th>PIC Found</th>
+            <th>SIC Found</th>
+            <th>Flight Linked</th>
             <th>Duration</th>
           </tr>
         </thead>
@@ -436,22 +491,41 @@
           {% for log in recent_logs %}
           <tr>
             <td>{{ log.processed_at|date:"Y-m-d H:i:s" }}</td>
-            <td>{{ log.attachment_name|default:"--" }}</td>
+            <td>{{ log.gd_identifier|default:"--" }}</td>
             <td>
               <span class="status-badge status-{{ log.status|lower }}">
                 {{ log.get_status_display }}
               </span>
             </td>
-            <td>{{ log.total_lines }}</td>
-            <td style="color: #28a745; font-weight: bold;">{{ log.successful_lines }}</td>
-            <td style="color: #dc3545; font-weight: bold;">{{ log.failed_lines }}</td>
-            <td>{{ log.total_flights }}</td>
-            <td>{{ log.total_crew }}</td>
+            <td><strong>{{ log.total_crew }}</strong></td>
+            <td style="color: #28a745; font-weight: bold;">{{ log.emails_found }}</td>
+            <td style="color: #dc3545; font-weight: bold;">{{ log.emails_not_found }}</td>
+            <td>
+              {% if log.pic_identified %}
+                <span style="color: #28a745;">✓</span>
+              {% else %}
+                <span style="color: #dc3545;">✗</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if log.sic_identified %}
+                <span style="color: #28a745;">✓</span>
+              {% else %}
+                <span style="color: #ffc107;">✗</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if log.flight_found %}
+                <span style="color: #28a745;">✓</span>
+              {% else %}
+                <span style="color: #dc3545;">✗</span>
+              {% endif %}
+            </td>
             <td>{{ log.processing_duration|floatformat:2 }}s</td>
           </tr>
           {% empty %}
           <tr>
-            <td colspan="9" style="text-align: center; padding: 20px; color: #6c757d;">
+            <td colspan="10" style="text-align: center; padding: 20px; color: #6c757d;">
               No processing logs yet
             </td>
           </tr>
@@ -530,20 +604,32 @@
           <span class="info-value">${data.route}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Origin (IATA/ICAO)</span>
+          <span class="info-label">Origin</span>
           <span class="info-value">${data.origin_iata} / ${data.origin_icao}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Destination (IATA/ICAO)</span>
+          <span class="info-label">Destination</span>
           <span class="info-value">${data.destination_iata} / ${data.destination_icao}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Processed At</span>
-          <span class="info-value">${data.processed_at}</span>
+          <span class="info-label">Tail Number</span>
+          <span class="info-value">${data.tail_no}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">STD (UTC)</span>
+          <span class="info-value">${data.std_utc}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">STA (UTC)</span>
+          <span class="info-value">${data.sta_utc}</span>
         </div>
         <div class="info-item">
           <span class="info-label">Total Crew</span>
           <span class="info-value"><strong>${data.crew_count}</strong></span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Processed At</span>
+          <span class="info-value">${data.processed_at}</span>
         </div>
       </div>
       
@@ -553,29 +639,38 @@
           <tr>
             <th>Position</th>
             <th>Crew ID</th>
-            <th>Full ID</th>
             <th>Name</th>
             <th>Email</th>
-            <th>Route</th>
+            <th>Passport</th>
+            <th>Birth Date</th>
+            <th>Gender</th>
+            <th>Nationality</th>
           </tr>
         </thead>
         <tbody>
     `;
     
     data.crew_members.forEach(crew => {
+      let positionClass = crew.position.toLowerCase();
+      let badge = `<span class="position-badge position-${positionClass}">${crew.position}</span>`;
+      if (crew.is_pic) badge += ' <span class="position-badge position-pic">PIC</span>';
+      if (crew.is_sic) badge += ' <span class="position-badge position-sic">SIC</span>';
+      
       html += `
         <tr>
-          <td><span class="position-badge position-${crew.position.toLowerCase()}">${crew.position}</span></td>
+          <td>${badge}</td>
           <td><strong>${crew.crew_id}</strong></td>
-          <td>${crew.full_crew_id || '--'}</td>
-          <td>${crew.crew_name}</td>
+          <td>${crew.name}</td>
           <td>
             ${crew.email !== '--' 
               ? `<span class="email-badge email-yes">${crew.email}</span>` 
               : `<span class="email-badge email-no">No Email</span>`
             }
           </td>
-          <td>${crew.origin} → ${crew.destination}</td>
+          <td>${crew.passport}</td>
+          <td>${crew.birth_date}</td>
+          <td>${crew.gender}</td>
+          <td>${crew.nationality}</td>
         </tr>
       `;
     });

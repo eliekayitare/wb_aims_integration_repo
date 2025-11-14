@@ -465,24 +465,6 @@ class QatarCrewDetail(models.Model):
         return f"{self.crew_id} {self.surname}, {self.firstname}"
 
 
-# class QatarFlightDetails(models.Model):
-#     crew_id = models.CharField(max_length=11)
-#     flight = models.ForeignKey(FlightData, on_delete=models.CASCADE, related_name='assignments')
-#     tail_no = models.CharField(max_length=10, null=True, blank=True)
-#     dep_date_utc = models.DateField()
-#     arr_date_utc = models.DateField(null=True, blank=True)
-#     std_utc = models.TimeField(null=True, blank=True)
-#     sta_utc = models.TimeField(null=True, blank=True)
-#     # Removed duplicate fields: birth_date, sex, passport_expiry (now only in QatarCrewDetail)
-
-#     class Meta:
-#         db_table = 'qatar_flight_details'
-#         unique_together = ('crew_id', 'flight')
-
-#     def __str__(self):
-#         return f"{self.crew_id} on {self.flight}"
-
-
 class QatarFlightDetails(models.Model):
     STATUS_CHOICES = [
         ('GENERATED', 'Generated'),
@@ -535,26 +517,209 @@ class QatarFlightDetails(models.Model):
 
 #  ===================================================================================
 
-class JeppessenFlight(models.Model):
-    """
-    Flight information from Jeppessen crew assignment files.
-    Separate from FdmFlightData to keep Jeppessen data isolated.
-    """
+# class JeppessenFlight(models.Model):
+#     """
+#     Flight information from Jeppessen crew assignment files.
+#     Separate from FdmFlightData to keep Jeppessen data isolated.
+#     """
     
-    flight_no = models.CharField(max_length=6, db_index=True)           # e.g., "464", "9100", "1"
-    flight_date = models.DateField(db_index=True)                       # Flight date (DDMMYYYY from file)
-    origin_iata = models.CharField(max_length=3)                        # e.g., "EBB", "KGL"
-    origin_icao = models.CharField(max_length=4, null=True, blank=True) # e.g., "HKJK" (if found)
-    destination_iata = models.CharField(max_length=3)                   # e.g., "NBO", "JNB"
-    destination_icao = models.CharField(max_length=4, null=True, blank=True) # e.g., "HUEN" (if found)
+#     flight_no = models.CharField(max_length=6, db_index=True)           # e.g., "464", "9100", "1"
+#     flight_date = models.DateField(db_index=True)                       # Flight date (DDMMYYYY from file)
+#     origin_iata = models.CharField(max_length=3)                        # e.g., "EBB", "KGL"
+#     origin_icao = models.CharField(max_length=4, null=True, blank=True) # e.g., "HKJK" (if found)
+#     destination_iata = models.CharField(max_length=3)                   # e.g., "NBO", "JNB"
+#     destination_icao = models.CharField(max_length=4, null=True, blank=True) # e.g., "HUEN" (if found)
+    
+#     # Metadata
+#     raw_line = models.TextField()                                       # Original line from file
+#     processed_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+    
+#     class Meta:
+#         db_table = 'jeppesen_flight'
+#         unique_together = ('flight_no', 'flight_date', 'origin_iata', 'destination_iata')
+#         indexes = [
+#             models.Index(fields=['flight_no', 'flight_date']),
+#             models.Index(fields=['flight_date']),
+#         ]
+#         ordering = ['-flight_date', 'flight_no']
+    
+#     def __str__(self):
+#         return f"Jeppessen Flight {self.flight_no} on {self.flight_date} ({self.origin_iata}->{self.destination_iata})"
+
+
+# class JeppessenCrew(models.Model):
+#     """
+#     Crew member assignments from Jeppessen files.
+#     Stores crew with last 4 digits of crew ID only.
+#     """
+    
+#     POSITION_CHOICES = [
+#         ('CP', 'Captain'),
+#         ('FO', 'First Officer'),
+#         ('FP', 'Purser'),
+#         ('SA', 'Senior Attendant'),
+#         ('FA', 'Flight Attendant'),
+#         ('FE', 'Flight Engineer'),
+#         ('MX', 'Maintenance'),
+#         ('AC', 'Air Crew'),
+#     ]
+    
+#     # Link to flight (optional - can work standalone)
+#     flight = models.ForeignKey(
+#         JeppessenFlight, 
+#         on_delete=models.CASCADE, 
+#         related_name='crew_members',
+#         null=True,
+#         blank=True
+#     )
+    
+#     # Flight details (stored directly for easy querying)
+#     flight_no = models.CharField(max_length=6, db_index=True)
+#     flight_date = models.DateField(db_index=True)
+#     origin = models.CharField(max_length=4)                             # ICAO preferred, IATA fallback
+#     destination = models.CharField(max_length=4)                        # ICAO preferred, IATA fallback
+    
+#     # Crew details
+#     crew_id = models.CharField(max_length=4)                            # Last 4 digits ONLY
+#     full_crew_id = models.CharField(max_length=10, null=True, blank=True) # Original (00003537, D00002019)
+#     crew_name = models.CharField(max_length=100)                        # Full name
+#     position = models.CharField(max_length=2, choices=POSITION_CHOICES)
+#     email = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+#     # Metadata
+#     processed_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+    
+#     class Meta:
+#         db_table = 'jeppesen_crew'
+#         unique_together = ('flight_no', 'flight_date', 'origin', 'destination', 'crew_id')
+#         indexes = [
+#             models.Index(fields=['flight_no', 'flight_date']),
+#             models.Index(fields=['crew_id']),
+#             models.Index(fields=['flight_date']),
+#             models.Index(fields=['position']),
+#         ]
+#         ordering = ['-flight_date', 'flight_no', 'position']
+    
+#     def __str__(self):
+#         return f"{self.position} {self.crew_id} - {self.crew_name} on Flight {self.flight_no}"
+
+
+# class JeppessenProcessingLog(models.Model):
+#     """
+#     Log of Jeppessen file processing for auditing and debugging.
+#     """
+    
+#     STATUS_CHOICES = [
+#         ('SUCCESS', 'Success'),
+#         ('PARTIAL', 'Partial Success'),
+#         ('FAILED', 'Failed'),
+#     ]
+    
+#     # Email/File details
+#     email_subject = models.CharField(max_length=255)
+#     attachment_name = models.CharField(max_length=255, null=True, blank=True)
+    
+#     # Processing stats
+#     total_lines = models.IntegerField(default=0)
+#     successful_lines = models.IntegerField(default=0)
+#     failed_lines = models.IntegerField(default=0)
+#     total_flights = models.IntegerField(default=0)
+#     total_crew = models.IntegerField(default=0)
+    
+#     # Status
+#     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='SUCCESS')
+#     error_message = models.TextField(null=True, blank=True)
+    
+#     # Timestamps
+#     processed_at = models.DateTimeField(auto_now_add=True)
+#     processing_duration = models.FloatField(null=True, blank=True)  # seconds
+    
+#     class Meta:
+#         db_table = 'jeppesen_processing_log'
+#         ordering = ['-processed_at']
+    
+#     def __str__(self):
+#         return f"Jeppessen Processing {self.status} at {self.processed_at} ({self.total_flights} flights)"
+
+
+
+# ============================================================================
+# JEPPESSEN GENERAL DECLARATION (GD) - Job 97 Integration
+# ============================================================================
+
+class JEPPESSENGDCrewDetail(models.Model):
+    """
+    Crew personal details from General Declaration RTF.
+    Independent storage - all data parsed from GD RTF files.
+    """
+    crew_id = models.CharField(max_length=11, primary_key=True)
+    
+    # Name
+    surname = models.CharField(max_length=50, null=True, blank=True)
+    firstname = models.CharField(max_length=50, null=True, blank=True)
+    full_name = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Passport details
+    passport_number = models.CharField(max_length=20, null=True, blank=True)
+    passport_expiry = models.DateField(null=True, blank=True)
+    
+    # Personal details
+    birth_date = models.DateField(null=True, blank=True)
+    sex = models.CharField(max_length=1, choices=[('M','M'),('F','F')], null=True, blank=True)
+    nationality_code = models.CharField(max_length=3, null=True, blank=True)
+    
+    # Email from ERP
+    email = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     
     # Metadata
-    raw_line = models.TextField()                                       # Original line from file
+    last_seen_flight_date = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'jeppessen_gd_crew_detail'
+    
+    def __str__(self):
+        return f"{self.crew_id} - {self.full_name or self.surname or 'Unknown'}"
+
+
+class JEPPESSENGDFlight(models.Model):
+    """
+    General Declaration flight records from Job 97 RTF files.
+    Format: 212/BGF DLA/11112025 (Flight/Origin Dest/Date)
+    Links to actual FlightData when possible.
+    STD and STA come from FlightData when linked.
+    """
+    
+    # Link to actual flight (may be null if not found in FlightData)
+    flight = models.ForeignKey(
+        FlightData,
+        on_delete=models.SET_NULL,
+        related_name='general_declarations',
+        null=True,
+        blank=True
+    )
+    
+    # Flight information from GD
+    flight_no = models.CharField(max_length=6, db_index=True)
+    flight_date = models.DateField(db_index=True)
+    origin_iata = models.CharField(max_length=3)
+    origin_icao = models.CharField(max_length=4, null=True, blank=True)
+    destination_iata = models.CharField(max_length=3)
+    destination_icao = models.CharField(max_length=4, null=True, blank=True)
+    tail_no = models.CharField(max_length=10, null=True, blank=True)
+    
+    # Schedule from FlightData (when linked)
+    std_utc = models.TimeField(null=True, blank=True)  # From FlightData
+    sta_utc = models.TimeField(null=True, blank=True)  # From FlightData
+    
+    # Metadata
+    raw_filename = models.CharField(max_length=255, null=True, blank=True)
     processed_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'jeppesen_flight'
+        db_table = 'jeppessen_gd_flight'
         unique_together = ('flight_no', 'flight_date', 'origin_iata', 'destination_iata')
         indexes = [
             models.Index(fields=['flight_no', 'flight_date']),
@@ -563,13 +728,14 @@ class JeppessenFlight(models.Model):
         ordering = ['-flight_date', 'flight_no']
     
     def __str__(self):
-        return f"Jeppessen Flight {self.flight_no} on {self.flight_date} ({self.origin_iata}->{self.destination_iata})"
+        return f"GD Flight {self.flight_no} on {self.flight_date} ({self.origin_iata}->{self.destination_iata})"
 
 
-class JeppessenCrew(models.Model):
+class JEPPESSENGDCrew(models.Model):
     """
-    Crew member assignments from Jeppessen files.
-    Stores crew with last 4 digits of crew ID only.
+    Crew assignments from General Declaration (Job 97).
+    Tracks PIC and SIC positions.
+    Email comes from ERP (MSSQL).
     """
     
     POSITION_CHOICES = [
@@ -581,51 +747,74 @@ class JeppessenCrew(models.Model):
         ('FE', 'Flight Engineer'),
         ('MX', 'Maintenance'),
         ('AC', 'Air Crew'),
+        ('PIC', 'Pilot in Command'),
+        ('SIC', 'Second in Command'),
     ]
     
-    # Link to flight (optional - can work standalone)
+    # Crew identification
+    crew_id = models.CharField(max_length=11, db_index=True)
+    
+    # Link to GD flight
+    gd_flight = models.ForeignKey(
+        JEPPESSENGDFlight,
+        on_delete=models.CASCADE,
+        related_name='crew_assignments'
+    )
+    
+    # Link to actual flight (optional)
     flight = models.ForeignKey(
-        JeppessenFlight, 
-        on_delete=models.CASCADE, 
-        related_name='crew_members',
+        FlightData,
+        on_delete=models.CASCADE,
+        related_name='gd_crew_assignments',
         null=True,
         blank=True
     )
     
-    # Flight details (stored directly for easy querying)
+    # Position and role
+    position = models.CharField(max_length=3, choices=POSITION_CHOICES)
+    role = models.CharField(max_length=3, null=True, blank=True)
+    is_pic = models.BooleanField(default=False, db_index=True)
+    is_sic = models.BooleanField(default=False, db_index=True)
+    
+    # Email from ERP (MSSQL)
+    email = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    
+    # Flight details
     flight_no = models.CharField(max_length=6, db_index=True)
     flight_date = models.DateField(db_index=True)
-    origin = models.CharField(max_length=4)                             # ICAO preferred, IATA fallback
-    destination = models.CharField(max_length=4)                        # ICAO preferred, IATA fallback
+    origin = models.CharField(max_length=4)
+    destination = models.CharField(max_length=4)
+    tail_no = models.CharField(max_length=10, null=True, blank=True)
     
-    # Crew details
-    crew_id = models.CharField(max_length=4)                            # Last 4 digits ONLY
-    full_crew_id = models.CharField(max_length=10, null=True, blank=True) # Original (00003537, D00002019)
-    crew_name = models.CharField(max_length=100)                        # Full name
-    position = models.CharField(max_length=2, choices=POSITION_CHOICES)
-    email = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    # Timestamps
+    dep_date_utc = models.DateField(null=True, blank=True)
+    arr_date_utc = models.DateField(null=True, blank=True)
+    std_utc = models.TimeField(null=True, blank=True)
+    sta_utc = models.TimeField(null=True, blank=True)
+    
     # Metadata
     processed_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'jeppesen_crew'
-        unique_together = ('flight_no', 'flight_date', 'origin', 'destination', 'crew_id')
+        db_table = 'jeppessen_gd_crew'
+        unique_together = ('crew_id', 'gd_flight')
         indexes = [
-            models.Index(fields=['flight_no', 'flight_date']),
-            models.Index(fields=['crew_id']),
-            models.Index(fields=['flight_date']),
+            models.Index(fields=['crew_id', 'flight_date']),
+            models.Index(fields=['flight_date', 'is_pic']),
+            models.Index(fields=['flight_date', 'is_sic']),
             models.Index(fields=['position']),
         ]
-        ordering = ['-flight_date', 'flight_no', 'position']
+        ordering = ['-flight_date', 'flight_no', '-is_pic', '-is_sic', 'position']
     
     def __str__(self):
-        return f"{self.position} {self.crew_id} - {self.crew_name} on Flight {self.flight_no}"
+        pic_marker = " [PIC]" if self.is_pic else " [SIC]" if self.is_sic else ""
+        return f"{self.position} {self.crew_id}{pic_marker} on Flight {self.flight_no}"
 
 
-class JeppessenProcessingLog(models.Model):
+class JEPPESSENGDProcessingLog(models.Model):
     """
-    Log of Jeppessen file processing for auditing and debugging.
+    Log of General Declaration processing from Job 97.
     """
     
     STATUS_CHOICES = [
@@ -637,13 +826,15 @@ class JeppessenProcessingLog(models.Model):
     # Email/File details
     email_subject = models.CharField(max_length=255)
     attachment_name = models.CharField(max_length=255, null=True, blank=True)
+    gd_identifier = models.CharField(max_length=255, null=True, blank=True)
     
     # Processing stats
-    total_lines = models.IntegerField(default=0)
-    successful_lines = models.IntegerField(default=0)
-    failed_lines = models.IntegerField(default=0)
-    total_flights = models.IntegerField(default=0)
     total_crew = models.IntegerField(default=0)
+    emails_found = models.IntegerField(default=0)
+    emails_not_found = models.IntegerField(default=0)
+    pic_identified = models.BooleanField(default=False)
+    sic_identified = models.BooleanField(default=False)
+    flight_found = models.BooleanField(default=False)
     
     # Status
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='SUCCESS')
@@ -651,11 +842,11 @@ class JeppessenProcessingLog(models.Model):
     
     # Timestamps
     processed_at = models.DateTimeField(auto_now_add=True)
-    processing_duration = models.FloatField(null=True, blank=True)  # seconds
+    processing_duration = models.FloatField(null=True, blank=True)
     
     class Meta:
-        db_table = 'jeppesen_processing_log'
+        db_table = 'jeppessen_gd_processing_log'
         ordering = ['-processed_at']
     
     def __str__(self):
-        return f"Jeppessen Processing {self.status} at {self.processed_at} ({self.total_flights} flights)"
+        return f"GD Processing {self.status} at {self.processed_at} ({self.total_crew} crew)"

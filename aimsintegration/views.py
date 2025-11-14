@@ -4022,50 +4022,42 @@ def qatar_apis_details(request, record_id):
 
 
 # ================================================================
-# jeppessen
-
-# ===============================================================
-
-# aimsintegration/views.py
+# JEPPESSEN GENERAL DECLARATION (GD)
+# ================================================================
 
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.db.models import Count, Q
-from django.utils import timezone
 from datetime import date, timedelta
-from .models import JeppessenFlight, JeppessenCrew, JeppessenProcessingLog
+from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def jeppessen_dashboard(request):
     """
-    Main Jeppessen dashboard view with statistics and flight list.
+    Jeppessen General Declaration dashboard with PIC/SIC tracking.
     """
-    # Get date range for filtering (default: last 30 days)
+    # Get date range
     days_back = int(request.GET.get('days', 30))
     start_date = date.today() - timedelta(days=days_back)
     
-    # Get all flights in date range
-    flights = JeppessenFlight.objects.filter(
+    # Get GD flights
+    gd_flights = JEPPESSENGDFlight.objects.filter(
         flight_date__gte=start_date
-    ).select_related().order_by('-flight_date', 'flight_no')
+    ).order_by('-flight_date', 'flight_no')
     
     # Today's statistics
     today = date.today()
-    today_flights = JeppessenFlight.objects.filter(flight_date=today)
-    today_crew = JeppessenCrew.objects.filter(flight_date=today)
+    today_flights = JEPPESSENGDFlight.objects.filter(flight_date=today)
+    today_crew = JEPPESSENGDCrew.objects.filter(flight_date=today)
     
-    # Overall statistics
-    total_flights = flights.count()
-    total_crew = JeppessenCrew.objects.filter(
-        flight_date__gte=start_date
-    ).count()
+    # PIC/SIC stats
+    today_pic = today_crew.filter(is_pic=True).count()
+    today_sic = today_crew.filter(is_sic=True).count()
     
-    # Crew by position (today)
-    position_counts = today_crew.values('position').annotate(
-        count=Count('id')
-    ).order_by('-count')
-    
-    # Crew with/without email (today)
+    # Email stats
     today_crew_with_email = today_crew.exclude(email='').exclude(email__isnull=True).count()
     today_crew_without_email = today_crew.filter(Q(email='') | Q(email__isnull=True)).count()
     
@@ -4074,35 +4066,57 @@ def jeppessen_dashboard(request):
     if today_crew.count() > 0:
         email_success_rate = (today_crew_with_email / today_crew.count()) * 100
     
-    # Recent processing logs
-    recent_logs = JeppessenProcessingLog.objects.all()[:5]
+    # Position breakdown
+    position_counts = today_crew.values('position').annotate(
+        count=Count('id')
+    ).order_by('-count')
     
-    # Prepare flight data with crew counts (FIXED - includes origin/destination)
+    # Overall stats
+    total_flights = gd_flights.count()
+    total_crew = JEPPESSENGDCrew.objects.filter(
+        flight_date__gte=start_date
+    ).count()
+    
+    # Prepare flight data
     flight_data = []
-    for flight in flights:
-        # Determine which code to use
-        origin_code = flight.origin_icao if flight.origin_icao else flight.origin_iata
-        destination_code = flight.destination_icao if flight.destination_icao else flight.destination_iata
+    for gd_flight in gd_flights:
+        crew_count = gd_flight.crew_assignments.count()
+        pic = gd_flight.crew_assignments.filter(is_pic=True).first()
+        sic = gd_flight.crew_assignments.filter(is_sic=True).first()
         
-        # Get crew count for this specific route
-        crew_count = JeppessenCrew.objects.filter(
-            flight_no=flight.flight_no,
-            flight_date=flight.flight_date,
-            origin=origin_code,           # ← ADDED
-            destination=destination_code  # ← ADDED
-        ).count()
+        # Get PIC/SIC names
+        pic_name = None
+        sic_name = None
+        
+        if pic:
+            pic_detail = JEPPESSENGDCrewDetail.objects.filter(crew_id=pic.crew_id).first()
+            if pic_detail:
+                pic_name = pic_detail.full_name or f"{pic_detail.surname}, {pic_detail.firstname}"
+        
+        if sic:
+            sic_detail = JEPPESSENGDCrewDetail.objects.filter(crew_id=sic.crew_id).first()
+            if sic_detail:
+                sic_name = sic_detail.full_name or f"{sic_detail.surname}, {sic_detail.firstname}"
         
         flight_data.append({
-            'id': flight.id,
-            'flight_no': flight.flight_no,
-            'flight_date': flight.flight_date,
-            'origin_iata': flight.origin_iata,
-            'origin_icao': flight.origin_icao,
-            'destination_iata': flight.destination_iata,
-            'destination_icao': flight.destination_icao,
+            'id': gd_flight.id,
+            'flight_no': gd_flight.flight_no,
+            'flight_date': gd_flight.flight_date,
+            'origin_iata': gd_flight.origin_iata,
+            'destination_iata': gd_flight.destination_iata,
+            'tail_no': gd_flight.tail_no,
+            'std_utc': gd_flight.std_utc,
+            'sta_utc': gd_flight.sta_utc,
             'crew_count': crew_count,
-            'processed_at': flight.processed_at,
+            'pic_id': pic.crew_id if pic else None,
+            'pic_name': pic_name,
+            'sic_id': sic.crew_id if sic else None,
+            'sic_name': sic_name,
+            'processed_at': gd_flight.processed_at,
         })
+    
+    # Recent logs
+    recent_logs = JEPPESSENGDProcessingLog.objects.all()[:5]
     
     context = {
         'flights': flight_data,
@@ -4110,6 +4124,8 @@ def jeppessen_dashboard(request):
         'total_crew': total_crew,
         'today_flights': today_flights.count(),
         'today_crew': today_crew.count(),
+        'today_pic': today_pic,
+        'today_sic': today_sic,
         'today_crew_with_email': today_crew_with_email,
         'today_crew_without_email': today_crew_without_email,
         'email_success_rate': email_success_rate,
@@ -4124,55 +4140,54 @@ def jeppessen_dashboard(request):
 
 def jeppessen_flight_details(request, flight_id):
     """
-    API endpoint to get flight and crew details for modal display.
-    FIXED: Now filters by origin and destination to avoid duplicates.
+    API endpoint for Jeppessen GD flight details with PIC/SIC info.
     """
     try:
-        flight = JeppessenFlight.objects.get(id=flight_id)
+        gd_flight = JEPPESSENGDFlight.objects.get(id=flight_id)
         
-        # Determine which code to use (ICAO preferred, IATA fallback)
-        origin_code = flight.origin_icao if flight.origin_icao else flight.origin_iata
-        destination_code = flight.destination_icao if flight.destination_icao else flight.destination_iata
+        crew_assignments = gd_flight.crew_assignments.all().order_by(
+            '-is_pic', '-is_sic', 'position'
+        )
         
-        # Get crew for this specific flight route (FIXED)
-        crew_members = JeppessenCrew.objects.filter(
-            flight_no=flight.flight_no,
-            flight_date=flight.flight_date,
-            origin=origin_code,
-            destination=destination_code
-        ).order_by('position', 'crew_name')
-        
-        # Prepare crew data
         crew_data = []
-        for crew in crew_members:
+        for crew in crew_assignments:
+            crew_detail = JEPPESSENGDCrewDetail.objects.filter(crew_id=crew.crew_id).first()
+            
             crew_data.append({
                 'crew_id': crew.crew_id,
-                'full_crew_id': crew.full_crew_id,
-                'crew_name': crew.crew_name,
                 'position': crew.position,
                 'position_display': crew.get_position_display(),
+                'role': crew.role or '--',
+                'is_pic': crew.is_pic,
+                'is_sic': crew.is_sic,
+                'name': crew_detail.full_name if crew_detail and crew_detail.full_name else '--',
                 'email': crew.email or '--',
-                'origin': crew.origin,
-                'destination': crew.destination,
+                'passport': crew_detail.passport_number if crew_detail else '--',
+                'nationality': crew_detail.nationality_code if crew_detail else '--',
+                'birth_date': crew_detail.birth_date.strftime('%Y-%m-%d') if crew_detail and crew_detail.birth_date else '--',
+                'gender': crew_detail.sex if crew_detail else '--',
             })
         
-        # Prepare response
         data = {
-            'flight_no': flight.flight_no,
-            'flight_date': flight.flight_date.strftime('%Y-%m-%d'),
-            'origin_iata': flight.origin_iata,
-            'origin_icao': flight.origin_icao or '--',
-            'destination_iata': flight.destination_iata,
-            'destination_icao': flight.destination_icao or '--',
-            'route': f"{flight.origin_iata} → {flight.destination_iata}",
-            'processed_at': flight.processed_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'flight_no': gd_flight.flight_no,
+            'flight_date': gd_flight.flight_date.strftime('%Y-%m-%d'),
+            'origin_iata': gd_flight.origin_iata,
+            'origin_icao': gd_flight.origin_icao or '--',
+            'destination_iata': gd_flight.destination_iata,
+            'destination_icao': gd_flight.destination_icao or '--',
+            'tail_no': gd_flight.tail_no or '--',
+            'std_utc': gd_flight.std_utc.strftime('%H:%M') if gd_flight.std_utc else '--',
+            'sta_utc': gd_flight.sta_utc.strftime('%H:%M') if gd_flight.sta_utc else '--',
+            'route': f"{gd_flight.origin_iata} → {gd_flight.destination_iata}",
             'crew_members': crew_data,
             'crew_count': len(crew_data),
+            'processed_at': gd_flight.processed_at.strftime('%Y-%m-%d %H:%M:%S'),
         }
         
         return JsonResponse(data)
         
-    except JeppessenFlight.DoesNotExist:
+    except JEPPESSENGDFlight.DoesNotExist:
         return JsonResponse({'error': 'Flight not found'}, status=404)
     except Exception as e:
+        logger.error(f"Error in jeppessen_flight_details: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)

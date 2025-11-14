@@ -376,10 +376,11 @@ CELERY_BEAT_SCHEDULE = {
 
     #JEPPESEN Integration
 
-    'fetch_jeppessen_crew_data':{
-        'task':'aimsintegration.tasks.fetch_jeppessen_crew_data',
-        'schedule':crontab(minute='*/3'),
-    }
+    # Jeppessen GD - Runs every 3 minutes
+    'fetch-jeppessen-gd-every-30-min': {
+        'task': 'aimsintegration.tasks.fetch_jeppessen_gd',
+        'schedule': crontab(minute='*/3'),
+    },
 
 
 }

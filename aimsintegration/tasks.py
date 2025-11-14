@@ -1786,93 +1786,6 @@ import logging
 
 
 
-# @shared_task
-# def fetch_job97():
-#     """
-#     Fetch AIMS JOB #97 (DOH KGL / KGL DOH), process assignments,
-#     then immediately build the Qatar APIS EDIFACT file.
-#     Updated to handle both flight directions.
-#     """
-#     account = get_exchange_account()
-#     logger.info("Starting Job 97 email fetch process...")
-    
-#     # Only get emails from the last 7 days to avoid processing thousands of emails
-#     from datetime import timedelta
-#     from django.utils import timezone
-#     cutoff_date = timezone.now() - timedelta(days=7)
-    
-#     logger.info(f"Searching for Job 97 emails from {cutoff_date.strftime('%Y-%m-%d')} onwards...")
-    
-#     # Filter emails by date first, then check subjects
-#     recent_emails = account.inbox.filter(
-#         datetime_received__gte=cutoff_date
-#     ).order_by('-datetime_received')
-    
-#     # Count emails being checked
-#     email_count = 0
-#     job97_emails = []
-    
-#     for email in recent_emails:
-#         email_count += 1
-#         if email.subject and ('DOH KGL' in email.subject.upper() or 'KGL DOH' in email.subject.upper()):
-#             logger.info(f"✓ Found Job 97 email after checking {email_count} emails: {email.subject}")
-#             job97_emails.append(email)
-#             break  # Get the most recent one
-    
-#     if not job97_emails and email_count > 0:
-#         logger.info(f"✗ No Job 97 emails found after checking {email_count} recent emails")
-
-#     try:
-#         if not job97_emails:
-#             logger.info("❌ No Job 97 emails found. Task completed.")
-#             return
-                     
-#         email = job97_emails[0]
-#         subject = email.subject.upper()
-#         logger.info(f"📧 Processing Job 97 email: '{email.subject}'")
-#         logger.info(f"📅 Email received: {email.datetime_received.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-
-#         # Ingest and process attachments - this will return the flight date
-#         logger.info("📎 Processing email attachments...")
-#         flight_date = process_email_attachment(email, process_job97_file)
-#         logger.info("✅ Email attachments processed successfully")
-
-#         # Determine direction based on subject line
-#         if 'DOH KGL' in subject:
-#             direction = 'I'  # Inbound (DOH to KGL)
-#             logger.info("🛬 Detected INBOUND flight direction (DOH → KGL)")
-#         elif 'KGL DOH' in subject:
-#             direction = 'O'  # Outbound (KGL to DOH)
-#             logger.info("🛫 Detected OUTBOUND flight direction (KGL → DOH)")
-#         else:
-#             # Fallback: try to detect from email content or use default
-#             logger.warning("⚠️  Could not determine flight direction from subject, defaulting to INBOUND")
-#             direction = 'I'
-                 
-#         # Use the actual flight date from the RTF file, not today's date
-#         if flight_date:
-#             run_date = flight_date
-#             logger.info(f"📋 Using flight date from RTF: {run_date}")
-#         else:
-#             # Fallback to today's date if we couldn't parse the flight date
-#             run_date = datetime.utcnow().date()
-#             logger.warning(f"⚠️  Could not determine flight date from RTF, using today: {run_date}")
-
-#         # Generate EDIFACT file and save locally
-#         logger.info("🔧 Building Qatar APIS EDIFACT file...")
-#         edi_path = build_qatar_apis_edifact(direction, run_date)
-#         if edi_path:
-#             logger.info(f"✅ EDIFACT file generated successfully: {edi_path}")
-#             logger.info("🎉 Job 97 processing completed successfully!")
-#         else:
-#             logger.warning("⚠️  EDIFACT file generation returned None - check crew assignments for the flight date")
-
-#     except Exception as e:
-#         logger.error(f"❌ Error in fetch_job97: {e}")
-#         logger.error(f"🔍 Error details: {str(e)}")
-#         raise
-
-
 @shared_task
 def fetch_job97():
     """
@@ -2140,404 +2053,343 @@ def delete_emails_by_subject_list(self):
 
 
 # ============================================================================
-# JEPPESSEN INTEGRATION TASKS WITH ERP EMAIL INTEGRATION
+# JEPPESSEN GENERAL DECLARATION (GD) INTEGRATION
+# No Job 1008 dependency - all data from RTF
+# Email from ERP (MSSQL) - like old Jeppessen
+# STD/STA from FlightData when linked
+# Does NOT mark DOH emails as read (Qatar APIS needs them)
 # ============================================================================
-# ============================================================================
-# JEPPESSEN INTEGRATION TASKS - UPDATED
-# ============================================================================
-
-import logging
-import time
-from datetime import datetime, date
-from celery import shared_task
-from django.db import transaction, connections
-from django.conf import settings
-from exchangelib import FileAttachment
-
-logger = logging.getLogger(__name__)
-
 
 @shared_task
-def fetch_jeppessen_crew_data():
+def fetch_jeppessen_gd():
     """
-    Celery task to fetch and process Jeppessen crew data from email.
+    Fetch and process Jeppessen General Declaration (GD) from Job 97 emails.
+    Format: 212/BGF DLA/11112025
     
-    Email Subject: "AIMS JOB : #16.B AIMS-Jeppessen integration + ' file attached"
-    Runs: Every 16 minutes (configured in Celery Beat)
-    
-    Returns:
-        int: Number of emails processed
+    IMPORTANT: Does NOT mark DOH emails as read (Qatar APIS needs them)
     """
     start_time = time.time()
     
     try:
         logger.info("=" * 80)
-        logger.info("Starting Jeppessen crew data fetch task...")
+        logger.info("Starting Jeppessen GD fetch task...")
         logger.info("=" * 80)
         
-        # Get Exchange account using existing function
         account = get_exchange_account()
         
-        # Search for Jeppessen emails
-        jeppessen_subject = "AIMS JOB : #16.B AIMS-Jeppessen integration + ' file attached"
+        # Get emails from last 7 days
+        from datetime import timedelta
+        from django.utils import timezone
+        cutoff_date = timezone.now() - timedelta(days=7)
         
-        logger.info(f"Searching for emails with subject containing: '{jeppessen_subject}'")
-        
-        # Fetch emails, ordered by most recent first
-        emails = account.inbox.filter(
-            subject__contains=jeppessen_subject
+        recent_emails = account.inbox.filter(
+            datetime_received__gte=cutoff_date
         ).order_by('-datetime_received')
         
-        # Process only unread emails
-        unread_items = [email for email in emails if not email.is_read]
-        
-        logger.info(f"Found {len(unread_items)} unread Jeppessen emails")
-        
+        # Look for GD emails with format: 212/BGF DLA/11112025
+        gd_emails = []
         email_count = 0
-        total_processed = 0
         
-        for item in unread_items:
+        for email in recent_emails:
+            email_count += 1
+            if email.subject:
+                # Match format: FLIGHT_NO/ORIGIN DEST/DDMMYYYY
+                if re.search(r'\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8}', email.subject):
+                    if not email.is_read:
+                        gd_emails.append(email)
+                        logger.info(f"Found GD email: {email.subject}")
+        
+        logger.info(f"Checked {email_count} emails, found {len(gd_emails)} unread GD emails")
+        
+        if not gd_emails:
+            logger.info("No new GD emails to process")
+            return 0
+        
+        processed_count = 0
+        
+        for email in gd_emails:
             try:
                 logger.info("-" * 80)
-                logger.info(f"Processing email from: {item.sender}")
-                logger.info(f"Subject: {item.subject}")
-                logger.info(f"Received: {item.datetime_received}")
-                logger.info(f"Attachments: {len(item.attachments) if item.attachments else 0}")
+                logger.info(f"Processing GD: {email.subject}")
+                logger.info(f"Received: {email.datetime_received}")
                 
-                # Process attachments
-                if item.attachments:
-                    for attachment in item.attachments:
+                # Check if this is a DOH route
+                is_doh_route = 'DOH' in email.subject.upper()
+                
+                if is_doh_route:
+                    logger.info("⚠️  DOH route detected - will NOT mark as read (Qatar APIS needs it)")
+                
+                if email.attachments:
+                    for attachment in email.attachments:
                         if isinstance(attachment, FileAttachment):
                             logger.info(f"Processing attachment: {attachment.name}")
                             
-                            # Process the attachment
-                            result = process_jeppessen_attachment(
+                            # Extract GD identifier from subject
+                            gd_match = re.search(r'(\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8})', email.subject)
+                            gd_identifier = gd_match.group(1) if gd_match else email.subject
+                            
+                            result = process_jeppessen_gd_attachment(
                                 attachment=attachment,
-                                email_subject=item.subject
+                                email_subject=email.subject,
+                                gd_identifier=gd_identifier
                             )
                             
                             if result:
-                                total_processed += 1
-                                logger.info(f"✓ Successfully processed attachment: {attachment.name}")
-                            else:
-                                logger.warning(f"⚠ Failed to process attachment: {attachment.name}")
+                                processed_count += 1
+                                logger.info(f"✓ Successfully processed: {gd_identifier}")
                 else:
-                    logger.warning("No attachments found in email")
+                    logger.warning("No attachments found")
                 
-                # Mark email as read
-                item.is_read = True
-                item.save()
-                email_count += 1
-                
-                logger.info(f"✓ Email marked as read")
+                # CRITICAL: Only mark as read if NOT a DOH route
+                if not is_doh_route and not email.is_read:
+                    email.is_read = True
+                    email.save()
+                    logger.info("✓ Email marked as read")
+                elif is_doh_route:
+                    logger.info("ℹ️  Email left unread for Qatar APIS")
                 
             except Exception as e:
-                logger.error(f"❌ Error processing email: {e}", exc_info=True)
+                logger.error(f"Error processing GD email: {e}", exc_info=True)
                 continue
         
-        # Calculate duration
         duration = time.time() - start_time
         
         logger.info("=" * 80)
-        logger.info(f"Jeppessen crew data fetch completed")
-        logger.info(f"Emails processed: {email_count}")
-        logger.info(f"Attachments processed: {total_processed}")
+        logger.info(f"Jeppessen GD fetch completed")
+        logger.info(f"Processed: {processed_count}/{len(gd_emails)}")
         logger.info(f"Duration: {duration:.2f} seconds")
         logger.info("=" * 80)
         
-        return email_count
+        return processed_count
         
     except Exception as e:
         duration = time.time() - start_time
-        logger.error(f"❌ Fatal error in Jeppessen crew data fetch: {e}", exc_info=True)
-        logger.error(f"Duration before failure: {duration:.2f} seconds")
+        logger.error(f"Fatal error in Jeppessen GD fetch: {e}", exc_info=True)
         return 0
 
 
-def process_jeppessen_attachment(attachment, email_subject):
+def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
     """
-    Process a single Jeppessen crew data attachment.
-    
-    Args:
-        attachment: FileAttachment object from exchangelib
-        email_subject: Subject line of the email
-    
-    Returns:
-        bool: True if processing successful, False otherwise
+    Process Jeppessen GD RTF attachment.
+    Parses crew details from RTF, fetches emails from ERP, gets STD/STA from FlightData.
     """
-    from .models import JeppessenFlight, JeppessenCrew, JeppessenProcessingLog
+    from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
+    from .utils import rtf_to_text
     
     start_time = time.time()
     
     try:
-        # Decode file content
-        content = attachment.content.decode('utf-8').splitlines()
-        total_lines = len(content)
+        # Parse GD identifier: 212/BGF DLA/11112025
+        match = re.match(r'(\d+)/([A-Z]{3})\s+([A-Z]{3})/(\d{8})', gd_identifier)
         
-        logger.info(f"File contains {total_lines} lines")
+        if not match:
+            logger.error(f"Could not parse GD identifier: {gd_identifier}")
+            return False
         
-        # Initialize counters
-        successful_lines = 0
-        failed_lines = 0
-        total_flights = 0
-        total_crew_members = 0
+        flight_no = match.group(1)
+        origin_iata = match.group(2)
+        dest_iata = match.group(3)
+        date_str = match.group(4)
+        
+        try:
+            flight_date = datetime.strptime(date_str, '%d%m%Y').date()
+        except ValueError:
+            logger.error(f"Invalid date format: {date_str}")
+            return False
+        
+        logger.info(f"Processing: Flight {flight_no}, {origin_iata}→{dest_iata}, {flight_date}")
+        
+        # Process RTF
+        raw = attachment.content.decode('utf-8', errors='ignore')
+        text = rtf_to_text(raw)
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        
+        # Extract tail number
+        tail_number = None
+        for line in lines[:25]:
+            if re.match(r'^\d[A-Z]{2}-[A-Z]{2}$', line.strip()):
+                tail_number = line.strip()
+                logger.info(f"Found tail: {tail_number}")
+                break
+        
+        # Parse crew entries with FULL details from RTF
+        crew_entries = parse_jeppessen_gd_crew_full(lines)
+        logger.info(f"Found {len(crew_entries)} crew members")
+        
+        # Convert IATA to ICAO
+        origin_icao = get_icao_from_iata(origin_iata)
+        destination_icao = get_icao_from_iata(dest_iata)
+        
+        origin_code = origin_icao if origin_icao else origin_iata
+        destination_code = destination_icao if destination_icao else dest_iata
+        
+        # Find FlightData record
+        flight_record = FlightData.objects.filter(
+            flight_no=flight_no,
+            sd_date_utc=flight_date,
+            tail_no=tail_number
+        ).first()
+        
+        if not flight_record:
+            flight_record = FlightData.objects.filter(
+                flight_no=flight_no,
+                sd_date_utc=flight_date
+            ).first()
+        
+        flight_found = flight_record is not None
+        
+        # Get STD and STA from FlightData
+        std_utc = None
+        sta_utc = None
+        
+        if flight_found:
+            std_utc = flight_record.std_utc
+            sta_utc = flight_record.sta_utc
+            logger.info(f"✓ Linked to FlightData: {flight_record}")
+            logger.info(f"  STD: {std_utc}, STA: {sta_utc}")
+        else:
+            logger.warning("⚠ No FlightData record found - STD/STA unavailable")
+        
+        # Identify PIC and SIC
+        pic_crew = None
+        sic_crew = None
+        
+        for i, entry in enumerate(crew_entries):
+            if entry.get('is_pic') or entry.get('role') == 'PIC':
+                pic_crew = entry
+                logger.info(f"✓ PIC: {entry['crew_id']} - {entry['name']}")
+                
+                # Find SIC (next CP or FO after PIC)
+                for j in range(i + 1, len(crew_entries)):
+                    next_entry = crew_entries[j]
+                    if next_entry.get('role') in ['CP', 'FO']:
+                        sic_crew = next_entry
+                        logger.info(f"✓ SIC: {next_entry['crew_id']} - {next_entry['name']}")
+                        break
+                break
+        
+        # Track email statistics
         emails_found = 0
         emails_not_found = 0
-        error_messages = []
         
-        # Process each line
-        for line_num, line in enumerate(content, start=1):
-            line = line.strip()
+        # Save to database
+        with transaction.atomic():
+            # Create/update GD flight with STD/STA
+            gd_flight, created = JEPPESSENGDFlight.objects.update_or_create(
+                flight_no=flight_no,
+                flight_date=flight_date,
+                origin_iata=origin_iata,
+                destination_iata=dest_iata,
+                defaults={
+                    'flight': flight_record,
+                    'origin_icao': origin_icao,
+                    'destination_icao': destination_icao,
+                    'tail_no': tail_number,
+                    'raw_filename': gd_identifier,
+                    'std_utc': std_utc,  # From FlightData
+                    'sta_utc': sta_utc,  # From FlightData
+                }
+            )
             
-            if not line:
-                continue
+            logger.info(f"{'Created' if created else 'Updated'} GD flight")
             
-            try:
-                # Parse the line
-                parsed_data = parse_jeppessen_line(line)
+            # Delete existing crew
+            JEPPESSENGDCrew.objects.filter(gd_flight=gd_flight).delete()
+            
+            # Create crew assignments with email from ERP
+            for entry in crew_entries:
+                is_pic = (entry == pic_crew)
+                is_sic = (entry == sic_crew)
                 
-                if not parsed_data:
-                    logger.warning(f"Line {line_num}: Could not parse - {line[:60]}...")
-                    failed_lines += 1
-                    error_messages.append(f"Line {line_num}: Parse failed")
-                    continue
+                position = entry.get('role') or 'AC'
+                if is_pic:
+                    position = 'PIC'
+                elif is_sic:
+                    position = 'SIC'
                 
-                # Save to database (includes email fetching)
-                flight_obj, crew_count, email_stats = save_jeppessen_data(parsed_data, line)
+                # Fetch email from ERP
+                crew_email = get_jeppessen_crew_email_from_erp(entry['crew_id'])
                 
-                if flight_obj:
-                    successful_lines += 1
-                    total_flights += 1
-                    total_crew_members += crew_count
-                    emails_found += email_stats['found']
-                    emails_not_found += email_stats['not_found']
-                    
-                    logger.debug(f"Line {line_num}: ✓ Flight {parsed_data['flight_no']} - {crew_count} crew "
-                               f"({email_stats['found']} emails found)")
+                if crew_email:
+                    emails_found += 1
                 else:
-                    failed_lines += 1
-                    error_messages.append(f"Line {line_num}: Database save failed")
-                    
-            except Exception as e:
-                failed_lines += 1
-                error_msg = f"Line {line_num}: {str(e)[:100]}"
-                error_messages.append(error_msg)
-                logger.error(f"❌ {error_msg}", exc_info=True)
-                continue
+                    emails_not_found += 1
+                
+                # Create crew assignment
+                JEPPESSENGDCrew.objects.create(
+                    crew_id=entry['crew_id'],
+                    gd_flight=gd_flight,
+                    flight=flight_record,
+                    position=position,
+                    role=entry.get('role'),
+                    is_pic=is_pic,
+                    is_sic=is_sic,
+                    email=crew_email or '',
+                    flight_no=flight_no,
+                    flight_date=flight_date,
+                    origin=origin_code,
+                    destination=destination_code,
+                    tail_no=tail_number,
+                    dep_date_utc=flight_date,
+                    arr_date_utc=flight_date,
+                    std_utc=std_utc,
+                    sta_utc=sta_utc,
+                )
+                
+                # Update crew detail from RTF data (including email)
+                update_jeppessen_crew_detail(entry, flight_date, crew_email)
         
-        # Calculate duration
+        # Create log
         duration = time.time() - start_time
         
-        # Determine status
-        if failed_lines == 0:
-            status = 'SUCCESS'
-        elif successful_lines > 0:
-            status = 'PARTIAL'
-        else:
-            status = 'FAILED'
-        
-        # Create processing log
-        log = JeppessenProcessingLog.objects.create(
+        JEPPESSENGDProcessingLog.objects.create(
             email_subject=email_subject,
             attachment_name=attachment.name,
-            total_lines=total_lines,
-            successful_lines=successful_lines,
-            failed_lines=failed_lines,
-            total_flights=total_flights,
-            total_crew=total_crew_members,
-            status=status,
-            error_message='\n'.join(error_messages[:50]) if error_messages else None,
+            gd_identifier=gd_identifier,
+            total_crew=len(crew_entries),
+            emails_found=emails_found,
+            emails_not_found=emails_not_found,
+            pic_identified=(pic_crew is not None),
+            sic_identified=(sic_crew is not None),
+            flight_found=flight_found,
+            status='SUCCESS',
             processing_duration=duration
         )
         
-        # Log summary
-        logger.info("=" * 60)
-        logger.info(f"Processing Summary for {attachment.name}")
-        logger.info("-" * 60)
-        logger.info(f"Total lines:       {total_lines}")
-        logger.info(f"Successful:        {successful_lines}")
-        logger.info(f"Failed:            {failed_lines}")
-        logger.info(f"Success rate:      {(successful_lines/total_lines*100):.1f}%")
-        logger.info(f"Total flights:     {total_flights}")
-        logger.info(f"Total crew:        {total_crew_members}")
-        logger.info(f"Emails found:      {emails_found}")
-        logger.info(f"Emails not found:  {emails_not_found}")
-        logger.info(f"Email success:     {(emails_found/total_crew_members*100):.1f}%" if total_crew_members > 0 else "N/A")
-        logger.info(f"Avg crew/flight:   {(total_crew_members/total_flights):.1f}" if total_flights > 0 else "N/A")
-        logger.info(f"Duration:          {duration:.2f} seconds")
-        logger.info(f"Status:            {status}")
-        logger.info("=" * 60)
-        
-        return status in ['SUCCESS', 'PARTIAL']
+        logger.info(f"✅ Success in {duration:.2f}s - Emails: {emails_found}/{len(crew_entries)}")
+        return True
         
     except Exception as e:
-        logger.error(f"❌ Fatal error processing attachment: {e}", exc_info=True)
+        logger.error(f"Error processing GD: {e}", exc_info=True)
         
-        # Create error log
-        try:
-            JeppessenProcessingLog.objects.create(
-                email_subject=email_subject,
-                attachment_name=attachment.name if attachment else "Unknown",
-                total_lines=0,
-                successful_lines=0,
-                failed_lines=0,
-                total_flights=0,
-                total_crew=0,
-                status='FAILED',
-                error_message=str(e)[:1000],
-                processing_duration=time.time() - start_time
-            )
-        except:
-            pass
+        JEPPESSENGDProcessingLog.objects.create(
+            email_subject=email_subject,
+            attachment_name=attachment.name if attachment else "Unknown",
+            gd_identifier=gd_identifier,
+            total_crew=0,
+            emails_found=0,
+            emails_not_found=0,
+            pic_identified=False,
+            sic_identified=False,
+            flight_found=False,
+            status='FAILED',
+            error_message=str(e)[:1000],
+            processing_duration=time.time() - start_time
+        )
         
         return False
 
 
-def parse_jeppessen_line(line):
-    """
-    Parse a single line from Jeppessen crew file.
-    
-    Format: FLIGHT_NO DATE ORIGIN DEST POSITION1 CREW_ID1 NAME1 POSITION2 CREW_ID2 NAME2 ...
-    Example: 464  27102025EBB NBO  CP  00003537ROBERTO MANTJE  FO  00003139IRAFASHA PATRICK
-    
-    Args:
-        line (str): Raw line from file
-    
-    Returns:
-        dict: Parsed data or None if parsing fails
-    """
-    import re
-    
-    try:
-        # Extract flight number (1-4 digits at start)
-        flight_match = re.match(r'^(\d{1,4})\s+', line)
-        if not flight_match:
-            return None
-        
-        flight_no = flight_match.group(1).strip()
-        remaining = line[flight_match.end():].strip()
-        
-        # Extract date (8 digits - DDMMYYYY)
-        date_match = re.match(r'^(\d{8})\s*', remaining)
-        if not date_match:
-            return None
-        
-        date_str = date_match.group(1)
-        try:
-            flight_date = datetime.strptime(date_str, "%d%m%Y").date()
-        except ValueError:
-            logger.error(f"Invalid date format: {date_str}")
-            return None
-        
-        remaining = remaining[date_match.end():].strip()
-        
-        # Extract origin (3 letters)
-        origin_match = re.match(r'^([A-Z]{3})\s+', remaining)
-        if not origin_match:
-            return None
-        
-        origin_iata = origin_match.group(1)
-        remaining = remaining[origin_match.end():].strip()
-        
-        # Extract destination (3 letters)
-        dest_match = re.match(r'^([A-Z]{3})\s*', remaining)
-        if not dest_match:
-            return None
-        
-        destination_iata = dest_match.group(1)
-        crew_data = remaining[dest_match.end():].strip()
-        
-        # Parse crew members
-        crew_list = parse_crew_members(crew_data)
-        
-        return {
-            'flight_no': flight_no,
-            'flight_date': flight_date,
-            'origin_iata': origin_iata,
-            'destination_iata': destination_iata,
-            'crew_list': crew_list
-        }
-        
-    except Exception as e:
-        logger.error(f"Error parsing line: {e}")
-        return None
-
-
-def parse_crew_members(crew_data):
-    """
-    Parse crew member data from the crew section.
-    
-    Args:
-        crew_data (str): Crew data string
-    
-    Returns:
-        list: List of dicts with keys: position, crew_id (last 4), full_crew_id, name
-    """
-    import re
-    
-    crew_list = []
-    
-    if not crew_data or not crew_data.strip():
-        return crew_list
-    
-    # Valid position codes
-    valid_positions = ['CP', 'FO', 'FP', 'SA', 'FA', 'MX', 'AC', 'FE']
-    
-    # Find all position markers
-    position_pattern = r'\b(' + '|'.join(valid_positions) + r')\b'
-    position_matches = list(re.finditer(position_pattern, crew_data))
-    
-    if not position_matches:
-        return crew_list
-    
-    # Process each position marker
-    for i, pos_match in enumerate(position_matches):
-        position = pos_match.group(1)
-        start = pos_match.end()
-        
-        # Determine where this crew member's data ends
-        if i + 1 < len(position_matches):
-            end = position_matches[i + 1].start()
-        else:
-            end = len(crew_data)
-        
-        # Extract the data for this crew member
-        crew_section = crew_data[start:end].strip()
-        
-        # Extract crew ID (8 digits with optional D prefix)
-        crew_id_match = re.match(r'\s*(D?\d{8})\s*(.+)', crew_section)
-        
-        if crew_id_match:
-            full_crew_id = crew_id_match.group(1)
-            name = crew_id_match.group(2).strip()
-            
-            # Extract only the last 4 digits from crew_id
-            numeric_id = full_crew_id.lstrip('D')
-            crew_id = numeric_id[-4:]
-            
-            crew_list.append({
-                'position': position,
-                'crew_id': crew_id,           # Last 4 digits only
-                'full_crew_id': full_crew_id, # Original (00003537 or D00002019)
-                'name': name
-            })
-    
-    return crew_list
-
-
-def get_crew_email_from_erp(crew_id):
+def get_jeppessen_crew_email_from_erp(crew_id):
     """
     Fetch crew email from ERP (MSSQL) using crew_id.
+    Same logic as old Jeppessen integration.
     
     Args:
-        crew_id (str): Last 4 digits of crew ID (e.g., "3537")
+        crew_id (str): Crew ID (2-4 digits from RTF)
     
     Returns:
-        dict: {
-            'email': str or None,
-            'bank_name': str,
-            'bank_account_no': str
-        }
+        str: Email address or None
     """
     try:
         # Format crew_id as WB + 4 digits with leading zeros
@@ -2547,249 +2399,265 @@ def get_crew_email_from_erp(crew_id):
         
         with connections['mssql'].cursor() as cursor:
             cursor.execute("""
-                SELECT [Company E-Mail], [Bank Name], [Bank Account No]
+                SELECT [Company E-Mail]
                 FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
                 WHERE [No_] = %s
             """, [wb_formatted])
             
             row = cursor.fetchone()
             
-            if row:
-                crew_email = row[0].strip() if row[0] else None
-                bank_name = row[1].strip() if row[1] else '-'
-                bank_account_no = row[2].strip() if row[2] else '-'
-                
-                if crew_email:
-                    logger.debug(f"✓ Found email for {wb_formatted}: {crew_email}")
-                else:
-                    logger.debug(f"⚠ No email for {wb_formatted} in ERP")
-                
-                return {
-                    'email': crew_email,
-                    'bank_name': bank_name,
-                    'bank_account_no': bank_account_no
-                }
+            if row and row[0]:
+                crew_email = row[0].strip()
+                logger.debug(f"✓ Found email for {wb_formatted}: {crew_email}")
+                return crew_email
             else:
-                logger.debug(f"✗ Crew {wb_formatted} not found in ERP")
-                return {
-                    'email': None,
-                    'bank_name': '-',
-                    'bank_account_no': '-'
-                }
+                logger.debug(f"✗ No email for {wb_formatted} in ERP")
+                return None
                 
     except Exception as e:
         logger.warning(f"Error fetching email from ERP for crew {crew_id}: {e}")
-        return {
-            'email': None,
-            'bank_name': '-',
-            'bank_account_no': '-'
-        }
-
-
-def save_jeppessen_data(parsed_data, raw_line):
-    """
-    Save parsed Jeppessen data to database with ERP email lookup.
-    
-    Args:
-        parsed_data (dict): Parsed flight and crew data
-        raw_line (str): Original line from file
-    
-    Returns:
-        tuple: (JeppessenFlight object or None, crew_count, email_stats dict)
-    """
-    from .models import JeppessenFlight, JeppessenCrew, AirportData
-    
-    try:
-        flight_no = parsed_data['flight_no']
-        flight_date = parsed_data['flight_date']
-        origin_iata = parsed_data['origin_iata']
-        destination_iata = parsed_data['destination_iata']
-        crew_list = parsed_data['crew_list']
-        
-        # Convert IATA to ICAO codes
-        origin_icao = get_icao_from_iata(origin_iata)
-        destination_icao = get_icao_from_iata(destination_iata)
-        
-        # Use ICAO if available, otherwise IATA
-        origin_code = origin_icao if origin_icao else origin_iata
-        destination_code = destination_icao if destination_icao else destination_iata
-        
-        # Track email statistics
-        emails_found = 0
-        emails_not_found = 0
-        
-        with transaction.atomic():
-            # Create or update flight record
-            flight, created = JeppessenFlight.objects.update_or_create(
-                flight_no=flight_no,
-                flight_date=flight_date,
-                origin_iata=origin_iata,
-                destination_iata=destination_iata,
-                defaults={
-                    'origin_icao': origin_icao,
-                    'destination_icao': destination_icao,
-                    'raw_line': raw_line
-                }
-            )
-            
-            if created:
-                logger.debug(f"Created new flight: {flight_no} on {flight_date}")
-            else:
-                logger.debug(f"Updated existing flight: {flight_no} on {flight_date}")
-            
-            # Delete existing crew for this flight
-            deleted_count = JeppessenCrew.objects.filter(
-                flight_no=flight_no,
-                flight_date=flight_date,
-                origin=origin_code,
-                destination=destination_code
-            ).delete()[0]
-            
-            if deleted_count > 0:
-                logger.debug(f"Deleted {deleted_count} existing crew records")
-            
-            # Insert new crew records with email lookup
-            crew_count = 0
-            for crew in crew_list:
-                # Fetch email from ERP
-                erp_data = get_crew_email_from_erp(crew['crew_id'])
-                
-                if erp_data['email']:
-                    emails_found += 1
-                else:
-                    emails_not_found += 1
-                
-                # Create crew record
-                JeppessenCrew.objects.create(
-                    flight=flight,
-                    flight_no=flight_no,
-                    flight_date=flight_date,
-                    origin=origin_code,
-                    destination=destination_code,
-                    crew_id=crew['crew_id'],           # Last 4 digits
-                    full_crew_id=crew['full_crew_id'], # Original format
-                    crew_name=crew['name'],
-                    position=crew['position'],
-                    email=erp_data['email'] if erp_data['email'] else ''  # Empty string if None
-                )
-                crew_count += 1
-            
-            logger.debug(f"Inserted {crew_count} crew records ({emails_found} with email)")
-            
-            email_stats = {
-                'found': emails_found,
-                'not_found': emails_not_found
-            }
-            
-            return flight, crew_count, email_stats
-            
-    except Exception as e:
-        logger.error(f"Error saving Jeppessen data: {e}", exc_info=True)
-        return None, 0, {'found': 0, 'not_found': 0}
-
-
-def get_icao_from_iata(iata_code):
-    """
-    Convert IATA code to ICAO code using AirportData model.
-    
-    Args:
-        iata_code (str): 3-letter IATA code (e.g., "EBB")
-    
-    Returns:
-        str: 4-letter ICAO code (e.g., "HKJK") or None if not found
-    """
-    from .models import AirportData
-    
-    try:
-        airport = AirportData.objects.filter(iata_code=iata_code).first()
-        if airport:
-            logger.debug(f"Converted {iata_code} → {airport.icao_code}")
-            return airport.icao_code
-        else:
-            logger.debug(f"ICAO code not found for IATA: {iata_code}")
-            return None
-    except Exception as e:
-        logger.warning(f"Could not convert IATA {iata_code} to ICAO: {e}")
         return None
 
 
-# ============================================================================
-# OPTIONAL: Manual task to update emails for existing crew records
-# ============================================================================
+def parse_jeppessen_gd_crew_full(lines):
+    """
+    Parse crew entries from GD RTF with FULL details.
+    Returns list of crew dicts with all available information.
+    """
+    crew_entries = []
+    crew_data_started = False
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        # Start crew data section
+        if not crew_data_started:
+            if "EXPIRY" in line or "ON THIS STAGE" in line:
+                crew_data_started = True
+            i += 1
+            continue
+        
+        # Stop at declaration
+        if "DECLARATION OF HEALTH" in line or "FOR OFFICIAL USE" in line:
+            break
+        
+        # Skip markers
+        if line in ['DOH', 'KGL', 'BGF', 'DLA', 'EBB', 'NBO', 'JNB', '...', '*'] or not line:
+            i += 1
+            continue
+        
+        # Check for crew ID (2-4 digits)
+        if line.isdigit() and 2 <= len(line) <= 4:
+            crew_id = line
+            name = None
+            role = None
+            passport = None
+            birth_date = None
+            gender = None
+            nationality = None
+            expiry = None
+            is_pic = False
+            
+            j = i + 1
+            
+            # Get name
+            while j < len(lines):
+                next_line = lines[j].strip()
+                if next_line and next_line not in ['*', '...', 'DOH', 'KGL', 'BGF', 'DLA']:
+                    # Check for embedded role (e.g., "NAME PIC")
+                    if re.search(r'\s+(PIC|CP|FO|FP|SA|FA|FE)$', next_line):
+                        parts = next_line.rsplit(None, 1)
+                        if len(parts) == 2:
+                            name = parts[0]
+                            role = parts[1]
+                            if role == 'PIC':
+                                is_pic = True
+                        else:
+                            name = next_line
+                    else:
+                        name = next_line
+                    j += 1
+                    break
+                elif next_line == '*':
+                    j += 1
+                    continue
+                j += 1
+            
+            # Get role if not embedded
+            if j < len(lines) and not role:
+                next_line = lines[j].strip()
+                if next_line == '*':
+                    j += 1
+                    if j < len(lines):
+                        next_line = lines[j].strip()
+                
+                if len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
+                    role = next_line
+                    if role == 'PIC':
+                        is_pic = True
+                    j += 1
+            
+            # Get passport (6+ alphanumeric chars)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if len(next_line) >= 6 and next_line.replace(' ', '').isalnum():
+                    passport = next_line
+                    j += 1
+            
+            # Get birth date (dd/mm/yy)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
+                    birth_date = next_line
+                    j += 1
+            
+            # Get gender (M or F)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if len(next_line) == 1 and next_line.upper() in ['M', 'F']:
+                    gender = next_line.upper()
+                    j += 1
+            
+            # Get nationality (2-3 letters)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if 2 <= len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
+                    nationality = next_line
+                    j += 1
+            
+            # Get expiry (dd/mm/yy)
+            if j < len(lines):
+                next_line = lines[j].strip()
+                if re.match(r'^\d{2}/\d{2}/\d{2}$', next_line):
+                    expiry = next_line
+                    j += 1
+            
+            if crew_id and name:
+                crew_entries.append({
+                    'crew_id': crew_id,
+                    'name': name,
+                    'role': role,
+                    'passport': passport,
+                    'birth_date': birth_date,
+                    'gender': gender,
+                    'nationality': nationality,
+                    'expiry': expiry,
+                    'is_pic': is_pic
+                })
+                logger.debug(f"Parsed crew {crew_id}: {name}, {role}")
+            
+            i = j
+        else:
+            i += 1
+    
+    return crew_entries
 
-@shared_task
-def update_existing_crew_emails(days_back=7):
+
+def update_jeppessen_crew_detail(entry, flight_date, crew_email):
     """
-    Optional task to update emails for existing JeppessenCrew records.
-    Useful for backfilling emails after initial data load.
-    
-    Args:
-        days_back (int): Number of days back to process
-    
-    Returns:
-        dict: Statistics of the update
+    Update JEPPESSENGDCrewDetail from RTF entry.
+    Includes email from ERP.
     """
-    from .models import JeppessenCrew
-    from datetime import timedelta
+    from .models import JEPPESSENGDCrewDetail
     
     try:
-        logger.info("=" * 80)
-        logger.info(f"Starting email update for crew records from last {days_back} days...")
-        logger.info("=" * 80)
+        crew_id = entry['crew_id']
         
-        # Get crew records without emails from last N days
-        cutoff_date = date.today() - timedelta(days=days_back)
+        # Parse dates
+        birth_date = None
+        passport_expiry = None
         
-        crew_to_update = JeppessenCrew.objects.filter(
-            flight_date__gte=cutoff_date,
-            email__isnull=True
-        ) | JeppessenCrew.objects.filter(
-            flight_date__gte=cutoff_date,
-            email=''
+        if entry.get('birth_date'):
+            try:
+                birth_date = datetime.strptime(entry['birth_date'], '%d/%m/%y').date()
+            except:
+                pass
+        
+        if entry.get('expiry'):
+            try:
+                passport_expiry = datetime.strptime(entry['expiry'], '%d/%m/%y').date()
+            except:
+                pass
+        
+        # Parse name
+        surname = None
+        firstname = None
+        full_name = entry.get('name')
+        
+        if full_name:
+            parts = full_name.split()
+            if parts:
+                surname = parts[-1]
+                firstname = ' '.join(parts[:-1]) if len(parts) > 1 else ''
+        
+        # Get or create crew detail
+        crew_detail, created = JEPPESSENGDCrewDetail.objects.get_or_create(
+            crew_id=crew_id,
+            defaults={
+                'surname': surname,
+                'firstname': firstname,
+                'full_name': full_name,
+                'passport_number': entry.get('passport'),
+                'birth_date': birth_date,
+                'sex': entry.get('gender'),
+                'passport_expiry': passport_expiry,
+                'nationality_code': entry.get('nationality'),
+                'email': crew_email,
+                'last_seen_flight_date': flight_date,
+            }
         )
         
-        total_crew = crew_to_update.count()
-        logger.info(f"Found {total_crew} crew records without email")
-        
-        updated_count = 0
-        failed_count = 0
-        
-        for crew in crew_to_update:
-            try:
-                # Fetch email from ERP
-                erp_data = get_crew_email_from_erp(crew.crew_id)
-                
-                if erp_data['email']:
-                    crew.email = erp_data['email']
-                    crew.save(update_fields=['email', 'updated_at'])
-                    updated_count += 1
-                    logger.debug(f"✓ Updated email for crew {crew.crew_id}: {erp_data['email']}")
-                else:
-                    failed_count += 1
-                    logger.debug(f"✗ No email found for crew {crew.crew_id}")
-                    
-            except Exception as e:
-                failed_count += 1
-                logger.error(f"Error updating crew {crew.crew_id}: {e}")
-        
-        logger.info("=" * 80)
-        logger.info(f"Email update completed")
-        logger.info(f"Total crew: {total_crew}")
-        logger.info(f"Updated: {updated_count}")
-        logger.info(f"Failed: {failed_count}")
-        logger.info(f"Success rate: {(updated_count/total_crew*100):.1f}%" if total_crew > 0 else "N/A")
-        logger.info("=" * 80)
-        
-        return {
-            'total': total_crew,
-            'updated': updated_count,
-            'failed': failed_count
-        }
+        if not created:
+            # Update if new data is available
+            updated = False
+            
+            if full_name and not crew_detail.full_name:
+                crew_detail.full_name = full_name
+                crew_detail.surname = surname
+                crew_detail.firstname = firstname
+                updated = True
+            
+            if birth_date and not crew_detail.birth_date:
+                crew_detail.birth_date = birth_date
+                updated = True
+            
+            if entry.get('gender') and not crew_detail.sex:
+                crew_detail.sex = entry['gender']
+                updated = True
+            
+            if passport_expiry and not crew_detail.passport_expiry:
+                crew_detail.passport_expiry = passport_expiry
+                updated = True
+            
+            if entry.get('nationality') and not crew_detail.nationality_code:
+                crew_detail.nationality_code = entry['nationality']
+                updated = True
+            
+            if entry.get('passport') and not crew_detail.passport_number:
+                crew_detail.passport_number = entry['passport']
+                updated = True
+            
+            if crew_email and not crew_detail.email:
+                crew_detail.email = crew_email
+                updated = True
+            
+            # Always update last seen date
+            if flight_date > (crew_detail.last_seen_flight_date or date(2000, 1, 1)):
+                crew_detail.last_seen_flight_date = flight_date
+                updated = True
+            
+            if updated:
+                crew_detail.save()
         
     except Exception as e:
-        logger.error(f"Fatal error updating crew emails: {e}", exc_info=True)
-        return {
-            'total': 0,
-            'updated': 0,
-            'failed': 0
-        }
+        logger.warning(f"Could not update crew detail for {entry.get('crew_id')}: {e}")
+
+
+def get_icao_from_iata(iata_code):
+    """Convert IATA to ICAO using AirportData."""
+    try:
+        airport = AirportData.objects.filter(iata_code=iata_code).first()
+        return airport.icao_code if airport else None
+    except:
+        return None

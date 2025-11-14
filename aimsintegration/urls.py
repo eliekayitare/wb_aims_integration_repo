@@ -58,7 +58,7 @@ urlpatterns = [
     path('qatar_apis_dashboard/', views.qatar_apis_dashboard, name='qatar_apis_dashboard'),
     path('qatar-apis/details/<int:record_id>/', views.qatar_apis_details, name='qatar_apis_details'),
 
-    # Jeppessen Dashboard URLs
+    # Jeppessen General Declaration
     path('jeppessen/', views.jeppessen_dashboard, name='jeppessen_dashboard'),
     path('jeppessen/details/<int:flight_id>/', views.jeppessen_flight_details, name='jeppessen_flight_details'),
 
