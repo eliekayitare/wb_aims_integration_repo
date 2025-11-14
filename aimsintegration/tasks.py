@@ -2054,11 +2054,117 @@ def delete_emails_by_subject_list(self):
 
 # ============================================================================
 # JEPPESSEN GENERAL DECLARATION (GD) INTEGRATION
-# No Job 1008 dependency - all data from RTF
-# Email from ERP (MSSQL) - like old Jeppessen
-# STD/STA from FlightData when linked
-# Does NOT mark DOH emails as read (Qatar APIS needs them)
 # ============================================================================
+
+import time as time_module
+
+# @shared_task
+# def fetch_jeppessen_gd():
+#     """
+#     Fetch and process Jeppessen General Declaration (GD) from Job 97 emails.
+#     Format: 212/BGF DLA/11112025
+    
+#     IMPORTANT: Does NOT mark DOH emails as read (Qatar APIS needs them)
+#     """
+#     start_time = time_module.time()
+    
+#     try:
+#         logger.info("=" * 80)
+#         logger.info("Starting Jeppessen GD fetch task...")
+#         logger.info("=" * 80)
+        
+#         account = get_exchange_account()
+        
+#         # Get emails from last 7 days
+#         from datetime import timedelta
+#         from django.utils import timezone
+#         cutoff_date = timezone.now() - timedelta(days=7)
+        
+#         recent_emails = account.inbox.filter(
+#             datetime_received__gte=cutoff_date
+#         ).order_by('-datetime_received')
+        
+#         # Look for GD emails with format: 212/BGF DLA/11112025
+#         gd_emails = []
+#         email_count = 0
+        
+#         for email in recent_emails:
+#             email_count += 1
+#             if email.subject:
+#                 # Match format: FLIGHT_NO/ORIGIN DEST/DDMMYYYY
+#                 if re.search(r'\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8}', email.subject):
+#                     if not email.is_read:
+#                         gd_emails.append(email)
+#                         logger.info(f"Found GD email: {email.subject}")
+        
+#         logger.info(f"Checked {email_count} emails, found {len(gd_emails)} unread GD emails")
+        
+#         if not gd_emails:
+#             logger.info("No new GD emails to process")
+#             return 0
+        
+#         processed_count = 0
+        
+#         for email in gd_emails:
+#             try:
+#                 logger.info("-" * 80)
+#                 logger.info(f"Processing GD: {email.subject}")
+#                 logger.info(f"Received: {email.datetime_received}")
+                
+#                 # Check if this is a DOH route
+#                 is_doh_route = 'DOH' in email.subject.upper()
+                
+#                 if is_doh_route:
+#                     logger.info("⚠️  DOH route detected - will NOT mark as read (Qatar APIS needs it)")
+                
+#                 if email.attachments:
+#                     for attachment in email.attachments:
+#                         if isinstance(attachment, FileAttachment):
+#                             logger.info(f"Processing attachment: {attachment.name}")
+                            
+#                             # Extract GD identifier from subject
+#                             gd_match = re.search(r'(\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8})', email.subject)
+#                             gd_identifier = gd_match.group(1) if gd_match else email.subject
+                            
+#                             result = process_jeppessen_gd_attachment(
+#                                 attachment=attachment,
+#                                 email_subject=email.subject,
+#                                 gd_identifier=gd_identifier
+#                             )
+                            
+#                             if result:
+#                                 processed_count += 1
+#                                 logger.info(f"✓ Successfully processed: {gd_identifier}")
+#                 else:
+#                     logger.warning("No attachments found")
+                
+#                 # CRITICAL: Only mark as read if NOT a DOH route
+#                 if not is_doh_route and not email.is_read:
+#                     email.is_read = True
+#                     email.save()
+#                     logger.info("✓ Email marked as read")
+#                 elif is_doh_route:
+#                     logger.info("ℹ️  Email left unread for Qatar APIS")
+                
+#             except Exception as e:
+#                 logger.error(f"Error processing GD email: {e}", exc_info=True)
+#                 continue
+        
+#         duration = time_module.time() - start_time
+        
+#         logger.info("=" * 80)
+#         logger.info(f"Jeppessen GD fetch completed")
+#         logger.info(f"Processed: {processed_count}/{len(gd_emails)}")
+#         logger.info(f"Duration: {duration:.2f} seconds")
+#         logger.info("=" * 80)
+        
+#         return processed_count
+        
+#     except Exception as e:
+#         duration = time_module.time() - start_time
+#         logger.error(f"Fatal error in Jeppessen GD fetch: {e}", exc_info=True)
+#         return 0
+
 
 import time as time_module
 
@@ -2079,14 +2185,17 @@ def fetch_jeppessen_gd():
         
         account = get_exchange_account()
         
-        # Get emails from last 7 days
+        # Get emails from last 7 days - LIMITED TO 500 EMAILS
         from datetime import timedelta
         from django.utils import timezone
         cutoff_date = timezone.now() - timedelta(days=7)
         
-        recent_emails = account.inbox.filter(
+        # CRITICAL FIX: Limit to 500 most recent emails to prevent timeout
+        recent_emails = list(account.inbox.filter(
             datetime_received__gte=cutoff_date
-        ).order_by('-datetime_received')
+        ).order_by('-datetime_received')[:1])  # ← LIMIT TO 500
+        
+        logger.info(f"Retrieved {len(recent_emails)} recent emails to scan")
         
         # Look for GD emails with format: 212/BGF DLA/11112025
         gd_emails = []
@@ -2094,6 +2203,11 @@ def fetch_jeppessen_gd():
         
         for email in recent_emails:
             email_count += 1
+            
+            # Progress indicator every 50 emails
+            if email_count % 50 == 0:
+                logger.info(f"Scanned {email_count} emails so far...")
+            
             if email.subject:
                 # Match format: FLIGHT_NO/ORIGIN DEST/DDMMYYYY
                 if re.search(r'\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8}', email.subject):
@@ -2168,7 +2282,6 @@ def fetch_jeppessen_gd():
         duration = time_module.time() - start_time
         logger.error(f"Fatal error in Jeppessen GD fetch: {e}", exc_info=True)
         return 0
-
 
 def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
     """
