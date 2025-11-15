@@ -2401,8 +2401,8 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
                     'destination_icao': destination_icao,
                     'tail_no': tail_number,
                     'raw_filename': gd_identifier,
-                    'std_utc': std_utc,  # From FlightData
-                    'sta_utc': sta_utc,  # From FlightData
+                    'std_utc': std_utc,
+                    'sta_utc': sta_utc,
                 }
             )
             
@@ -2411,16 +2411,14 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
             # Delete existing crew
             JEPPESSENGDCrew.objects.filter(gd_flight=gd_flight).delete()
             
-            # Create crew assignments with email from ERP
+            # ✅ FIXED: Create crew assignments WITHOUT overwriting position
             for entry in crew_entries:
                 is_pic = (entry == pic_crew)
                 is_sic = (entry == sic_crew)
                 
+                # KEEP the original role (CP, FO, FP, etc.)
                 position = entry.get('role') or 'AC'
-                if is_pic:
-                    position = 'PIC'
-                elif is_sic:
-                    position = 'SIC'
+                # DON'T overwrite with PIC/SIC - just use flags
                 
                 # Fetch email from ERP
                 crew_email = get_jeppessen_crew_email_from_erp(entry['crew_id'])
@@ -2435,10 +2433,10 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
                     crew_id=entry['crew_id'],
                     gd_flight=gd_flight,
                     flight=flight_record,
-                    position=position,
+                    position=position,  # ✅ Original role
                     role=entry.get('role'),
-                    is_pic=is_pic,
-                    is_sic=is_sic,
+                    is_pic=is_pic,  # ✅ PIC flag
+                    is_sic=is_sic,  # ✅ SIC flag
                     email=crew_email or '',
                     flight_no=flight_no,
                     flight_date=flight_date,
