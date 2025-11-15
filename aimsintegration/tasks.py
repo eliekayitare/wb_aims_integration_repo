@@ -3560,8 +3560,13 @@ def combine_date_time(date_obj, time_obj):
         datetime: Combined datetime in UTC
     """
     if date_obj and time_obj:
-        return timezone.make_aware(
-            datetime.combine(date_obj, time_obj),
-            timezone.utc
-        )
+        # Import UTC from Python's datetime module (NOT django.utils.timezone)
+        from datetime import timezone as dt_timezone
+        
+        # Combine date and time
+        naive_datetime = datetime.combine(date_obj, time_obj)
+        
+        # Add UTC timezone info
+        return naive_datetime.replace(tzinfo=dt_timezone.utc)
+    
     return None
