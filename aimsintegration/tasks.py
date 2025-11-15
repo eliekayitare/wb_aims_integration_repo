@@ -2574,18 +2574,25 @@ def parse_jeppessen_gd_crew_full(lines):
             
             j = i + 1
             
-            # Get name
+            # Get name (and check for embedded PIC marker)
             while j < len(lines):
                 next_line = lines[j].strip()
                 if next_line and next_line not in ['*', '...', 'DOH', 'KGL', 'BGF', 'DLA']:
-                    # Check for embedded role (e.g., "NAME PIC")
-                    if re.search(r'\s+(PIC|CP|FO|FP|SA|FA|FE)$', next_line):
+                    # Check for embedded PIC marker (e.g., "FREDRICK OCHIENG PIC")
+                    if re.search(r'\s+PIC$', next_line):
+                        parts = next_line.rsplit(None, 1)
+                        if len(parts) == 2:
+                            name = parts[0]
+                            is_pic = True  # ✅ Set PIC flag
+                            # ✅ DON'T set role = 'PIC' - continue to get actual role
+                        else:
+                            name = next_line
+                    # Check for embedded role that's NOT PIC (CP, FO, FP, SA, FA, FE)
+                    elif re.search(r'\s+(CP|FO|FP|SA|FA|FE)$', next_line):
                         parts = next_line.rsplit(None, 1)
                         if len(parts) == 2:
                             name = parts[0]
                             role = parts[1]
-                            if role == 'PIC':
-                                is_pic = True
                         else:
                             name = next_line
                     else:
@@ -2597,7 +2604,7 @@ def parse_jeppessen_gd_crew_full(lines):
                     continue
                 j += 1
             
-            # Get role if not embedded
+            # Get role if not embedded (or if we only found PIC marker)
             if j < len(lines) and not role:
                 next_line = lines[j].strip()
                 if next_line == '*':
@@ -2607,8 +2614,7 @@ def parse_jeppessen_gd_crew_full(lines):
                 
                 if len(next_line) <= 3 and next_line.isupper() and next_line.isalpha():
                     role = next_line
-                    if role == 'PIC':
-                        is_pic = True
+                    # ✅ Don't set is_pic here - it's already set from name parsing
                     j += 1
             
             # Get passport (6+ alphanumeric chars)
@@ -2658,14 +2664,13 @@ def parse_jeppessen_gd_crew_full(lines):
                     'expiry': expiry,
                     'is_pic': is_pic
                 })
-                logger.debug(f"Parsed crew {crew_id}: {name}, {role}")
+                logger.debug(f"Parsed crew {crew_id}: {name}, role={role}, is_pic={is_pic}")
             
             i = j
         else:
             i += 1
     
     return crew_entries
-
 
 def update_jeppessen_crew_detail(entry, flight_date, crew_email):
     """
