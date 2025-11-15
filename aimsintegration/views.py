@@ -4021,15 +4021,193 @@ def qatar_apis_details(request, record_id):
 
 
 
+# # ================================================================
+# # JEPPESSEN GENERAL DECLARATION (GD)
+# # ================================================================
+
+# from django.shortcuts import render
+# from django.http import JsonResponse
+# from django.db.models import Count, Q
+# from datetime import date, timedelta
+# from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
+# import logging
+
+# logger = logging.getLogger(__name__)
+
+
+# def jeppessen_dashboard(request):
+#     """
+#     Jeppessen General Declaration dashboard with PIC/SIC tracking.
+#     """
+#     # Get date range
+#     days_back = int(request.GET.get('days', 30))
+#     start_date = date.today() - timedelta(days=days_back)
+    
+#     # Get GD flights
+#     gd_flights = JEPPESSENGDFlight.objects.filter(
+#         flight_date__gte=start_date
+#     ).order_by('-flight_date', 'flight_no')
+    
+#     # Today's statistics
+#     today = date.today()
+#     today_flights = JEPPESSENGDFlight.objects.filter(flight_date=today)
+#     today_crew = JEPPESSENGDCrew.objects.filter(flight_date=today)
+    
+#     # PIC/SIC stats
+#     today_pic = today_crew.filter(is_pic=True).count()
+#     today_sic = today_crew.filter(is_sic=True).count()
+    
+#     # Email stats
+#     today_crew_with_email = today_crew.exclude(email='').exclude(email__isnull=True).count()
+#     today_crew_without_email = today_crew.filter(Q(email='') | Q(email__isnull=True)).count()
+    
+#     # Calculate email success rate
+#     email_success_rate = 0
+#     if today_crew.count() > 0:
+#         email_success_rate = (today_crew_with_email / today_crew.count()) * 100
+    
+#     # Position breakdown
+#     position_counts = today_crew.values('position').annotate(
+#         count=Count('id')
+#     ).order_by('-count')
+    
+#     # Overall stats
+#     total_flights = gd_flights.count()
+#     total_crew = JEPPESSENGDCrew.objects.filter(
+#         flight_date__gte=start_date
+#     ).count()
+    
+#     # Prepare flight data
+#     flight_data = []
+#     for gd_flight in gd_flights:
+#         crew_count = gd_flight.crew_assignments.count()
+#         pic = gd_flight.crew_assignments.filter(is_pic=True).first()
+#         sic = gd_flight.crew_assignments.filter(is_sic=True).first()
+        
+#         # Get PIC/SIC names
+#         pic_name = None
+#         sic_name = None
+        
+#         if pic:
+#             pic_detail = JEPPESSENGDCrewDetail.objects.filter(crew_id=pic.crew_id).first()
+#             if pic_detail:
+#                 pic_name = pic_detail.full_name or f"{pic_detail.surname}, {pic_detail.firstname}"
+        
+#         if sic:
+#             sic_detail = JEPPESSENGDCrewDetail.objects.filter(crew_id=sic.crew_id).first()
+#             if sic_detail:
+#                 sic_name = sic_detail.full_name or f"{sic_detail.surname}, {sic_detail.firstname}"
+        
+#         flight_data.append({
+#             'id': gd_flight.id,
+#             'flight_no': gd_flight.flight_no,
+#             'flight_date': gd_flight.flight_date,
+#             'origin_iata': gd_flight.origin_iata,
+#             'destination_iata': gd_flight.destination_iata,
+#             'tail_no': gd_flight.tail_no,
+#             'std_utc': gd_flight.std_utc,
+#             'sta_utc': gd_flight.sta_utc,
+#             'crew_count': crew_count,
+#             'pic_id': pic.crew_id if pic else None,
+#             'pic_name': pic_name,
+#             'sic_id': sic.crew_id if sic else None,
+#             'sic_name': sic_name,
+#             'processed_at': gd_flight.processed_at,
+#         })
+    
+#     # Recent logs
+#     recent_logs = JEPPESSENGDProcessingLog.objects.all()[:5]
+    
+#     context = {
+#         'flights': flight_data,
+#         'total_flights': total_flights,
+#         'total_crew': total_crew,
+#         'today_flights': today_flights.count(),
+#         'today_crew': today_crew.count(),
+#         'today_pic': today_pic,
+#         'today_sic': today_sic,
+#         'today_crew_with_email': today_crew_with_email,
+#         'today_crew_without_email': today_crew_without_email,
+#         'email_success_rate': email_success_rate,
+#         'position_counts': position_counts,
+#         'recent_logs': recent_logs,
+#         'days_back': days_back,
+#         'start_date': start_date,
+#     }
+    
+#     return render(request, 'aimsintegration/jeppessen_dashboard.html', context)
+
+
+# def jeppessen_flight_details(request, flight_id):
+#     """
+#     API endpoint for Jeppessen GD flight details with PIC/SIC info.
+#     """
+#     try:
+#         gd_flight = JEPPESSENGDFlight.objects.get(id=flight_id)
+        
+#         crew_assignments = gd_flight.crew_assignments.all().order_by(
+#             '-is_pic', '-is_sic', 'position'
+#         )
+        
+#         crew_data = []
+#         for crew in crew_assignments:
+#             crew_detail = JEPPESSENGDCrewDetail.objects.filter(crew_id=crew.crew_id).first()
+            
+#             crew_data.append({
+#                 'crew_id': crew.crew_id,
+#                 'position': crew.position,
+#                 'position_display': crew.get_position_display(),
+#                 'role': crew.role or '--',
+#                 'is_pic': crew.is_pic,
+#                 'is_sic': crew.is_sic,
+#                 'name': crew_detail.full_name if crew_detail and crew_detail.full_name else '--',
+#                 'email': crew.email or '--',
+#                 'passport': crew_detail.passport_number if crew_detail else '--',
+#                 'nationality': crew_detail.nationality_code if crew_detail else '--',
+#                 'birth_date': crew_detail.birth_date.strftime('%Y-%m-%d') if crew_detail and crew_detail.birth_date else '--',
+#                 'gender': crew_detail.sex if crew_detail else '--',
+#             })
+        
+#         data = {
+#             'flight_no': gd_flight.flight_no,
+#             'flight_date': gd_flight.flight_date.strftime('%Y-%m-%d'),
+#             'origin_iata': gd_flight.origin_iata,
+#             'origin_icao': gd_flight.origin_icao or '--',
+#             'destination_iata': gd_flight.destination_iata,
+#             'destination_icao': gd_flight.destination_icao or '--',
+#             'tail_no': gd_flight.tail_no or '--',
+#             'std_utc': gd_flight.std_utc.strftime('%H:%M') if gd_flight.std_utc else '--',
+#             'sta_utc': gd_flight.sta_utc.strftime('%H:%M') if gd_flight.sta_utc else '--',
+#             'route': f"{gd_flight.origin_iata} → {gd_flight.destination_iata}",
+#             'crew_members': crew_data,
+#             'crew_count': len(crew_data),
+#             'processed_at': gd_flight.processed_at.strftime('%Y-%m-%d %H:%M:%S'),
+#         }
+        
+#         return JsonResponse(data)
+        
+#     except JEPPESSENGDFlight.DoesNotExist:
+#         return JsonResponse({'error': 'Flight not found'}, status=404)
+#     except Exception as e:
+#         logger.error(f"Error in jeppessen_flight_details: {e}", exc_info=True)
+#         return JsonResponse({'error': str(e)}, status=500)
+
+
 # ================================================================
-# JEPPESSEN GENERAL DECLARATION (GD)
+# JEPPESSEN GENERAL DECLARATION (GD) - ENHANCED WITH FLITELINK
 # ================================================================
 
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.db.models import Count, Q
 from datetime import date, timedelta
-from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
+from .models import (
+    JEPPESSENGDFlight, 
+    JEPPESSENGDCrew, 
+    JEPPESSENGDProcessingLog, 
+    JEPPESSENGDCrewDetail,
+    FlitelinkAPILog
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -4037,7 +4215,8 @@ logger = logging.getLogger(__name__)
 
 def jeppessen_dashboard(request):
     """
-    Jeppessen General Declaration dashboard with PIC/SIC tracking.
+    Enhanced Jeppessen General Declaration dashboard with Flitelink integration.
+    Shows GD flights with PIC/SIC tracking AND Flitelink submission status.
     """
     # Get date range
     days_back = int(request.GET.get('days', 30))
@@ -4071,13 +4250,26 @@ def jeppessen_dashboard(request):
         count=Count('id')
     ).order_by('-count')
     
+    # ✨ NEW: Flitelink statistics
+    flitelink_not_submitted = gd_flights.filter(flitelink_status='NOT_SUBMITTED').count()
+    flitelink_pending = gd_flights.filter(flitelink_status='PENDING').count()
+    flitelink_queued = gd_flights.filter(flitelink_status='QUEUED').count()
+    flitelink_completed = gd_flights.filter(flitelink_status='COMPLETED').count()
+    flitelink_failed = gd_flights.filter(flitelink_status='FAILED').count()
+    
+    # Flitelink success rate
+    total_submitted = flitelink_queued + flitelink_completed + flitelink_failed + flitelink_pending
+    flitelink_success_rate = 0
+    if total_submitted > 0:
+        flitelink_success_rate = (flitelink_completed / total_submitted) * 100
+    
     # Overall stats
     total_flights = gd_flights.count()
     total_crew = JEPPESSENGDCrew.objects.filter(
         flight_date__gte=start_date
     ).count()
     
-    # Prepare flight data
+    # Prepare flight data with Flitelink status
     flight_data = []
     for gd_flight in gd_flights:
         crew_count = gd_flight.crew_assignments.count()
@@ -4113,10 +4305,22 @@ def jeppessen_dashboard(request):
             'sic_id': sic.crew_id if sic else None,
             'sic_name': sic_name,
             'processed_at': gd_flight.processed_at,
+            # ✨ NEW: Flitelink data
+            'flitelink_status': gd_flight.flitelink_status,
+            'flitelink_status_display': gd_flight.get_flitelink_status_display(),
+            'flitelink_request_id': str(gd_flight.flitelink_request_id) if gd_flight.flitelink_request_id else None,
+            'flitelink_submitted_at': gd_flight.flitelink_submitted_at,
+            'flitelink_completed_at': gd_flight.flitelink_completed_at,
+            'flitelink_error_message': gd_flight.flitelink_error_message,
+            'flitelink_retry_count': gd_flight.flitelink_retry_count,
+            'can_submit_to_flitelink': gd_flight.can_submit_to_flitelink,
         })
     
     # Recent logs
     recent_logs = JEPPESSENGDProcessingLog.objects.all()[:5]
+    
+    # ✨ NEW: Recent Flitelink API logs
+    recent_api_logs = FlitelinkAPILog.objects.select_related('gd_flight').all()[:10]
     
     context = {
         'flights': flight_data,
@@ -4133,6 +4337,14 @@ def jeppessen_dashboard(request):
         'recent_logs': recent_logs,
         'days_back': days_back,
         'start_date': start_date,
+        # ✨ NEW: Flitelink stats
+        'flitelink_not_submitted': flitelink_not_submitted,
+        'flitelink_pending': flitelink_pending,
+        'flitelink_queued': flitelink_queued,
+        'flitelink_completed': flitelink_completed,
+        'flitelink_failed': flitelink_failed,
+        'flitelink_success_rate': flitelink_success_rate,
+        'recent_api_logs': recent_api_logs,
     }
     
     return render(request, 'aimsintegration/jeppessen_dashboard.html', context)
@@ -4140,7 +4352,7 @@ def jeppessen_dashboard(request):
 
 def jeppessen_flight_details(request, flight_id):
     """
-    API endpoint for Jeppessen GD flight details with PIC/SIC info.
+    Enhanced API endpoint with Flitelink information.
     """
     try:
         gd_flight = JEPPESSENGDFlight.objects.get(id=flight_id)
@@ -4168,6 +4380,21 @@ def jeppessen_flight_details(request, flight_id):
                 'gender': crew_detail.sex if crew_detail else '--',
             })
         
+        # ✨ NEW: Flitelink API logs for this flight
+        api_logs = FlitelinkAPILog.objects.filter(gd_flight=gd_flight).order_by('-request_time')
+        
+        api_logs_data = []
+        for log in api_logs:
+            api_logs_data.append({
+                'request_type': log.get_request_type_display(),
+                'http_method': log.http_method,
+                'response_status': log.response_status_code,
+                'success': log.success,
+                'duration_ms': log.duration_ms,
+                'request_time': log.request_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'error_message': log.error_message,
+            })
+        
         data = {
             'flight_no': gd_flight.flight_no,
             'flight_date': gd_flight.flight_date.strftime('%Y-%m-%d'),
@@ -4182,6 +4409,16 @@ def jeppessen_flight_details(request, flight_id):
             'crew_members': crew_data,
             'crew_count': len(crew_data),
             'processed_at': gd_flight.processed_at.strftime('%Y-%m-%d %H:%M:%S'),
+            # ✨ NEW: Flitelink data
+            'flitelink_status': gd_flight.flitelink_status,
+            'flitelink_status_display': gd_flight.get_flitelink_status_display(),
+            'flitelink_request_id': str(gd_flight.flitelink_request_id) if gd_flight.flitelink_request_id else None,
+            'flitelink_submitted_at': gd_flight.flitelink_submitted_at.strftime('%Y-%m-%d %H:%M:%S') if gd_flight.flitelink_submitted_at else None,
+            'flitelink_completed_at': gd_flight.flitelink_completed_at.strftime('%Y-%m-%d %H:%M:%S') if gd_flight.flitelink_completed_at else None,
+            'flitelink_error_message': gd_flight.flitelink_error_message,
+            'flitelink_retry_count': gd_flight.flitelink_retry_count,
+            'can_submit_to_flitelink': gd_flight.can_submit_to_flitelink,
+            'api_logs': api_logs_data,
         }
         
         return JsonResponse(data)
@@ -4190,4 +4427,177 @@ def jeppessen_flight_details(request, flight_id):
         return JsonResponse({'error': 'Flight not found'}, status=404)
     except Exception as e:
         logger.error(f"Error in jeppessen_flight_details: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ================================================================
+# ✨ NEW: FLITELINK ACTION ENDPOINTS
+# ================================================================
+
+def flitelink_submit_flight(request, flight_id):
+    """
+    Manually submit a GD flight to Flitelink.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        gd_flight = get_object_or_404(JEPPESSENGDFlight, id=flight_id)
+        
+        # Check if can submit
+        if not gd_flight.can_submit_to_flitelink:
+            missing = []
+            if not gd_flight.origin_icao: missing.append("origin_icao")
+            if not gd_flight.destination_icao: missing.append("destination_icao")
+            if not gd_flight.std_utc: missing.append("std_utc")
+            if not gd_flight.sta_utc: missing.append("sta_utc")
+            
+            return JsonResponse({
+                'error': f'Cannot submit - Missing: {", ".join(missing)}'
+            }, status=400)
+        
+        # Submit
+        from .tasks import submit_flight_to_flitelink
+        result = submit_flight_to_flitelink.delay(gd_flight.id)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Flight {gd_flight.flight_no} queued for submission',
+            'task_id': result.id,
+        })
+        
+    except Exception as e:
+        logger.error(f"Error submitting flight: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def flitelink_retry_submission(request, flight_id):
+    """
+    Retry a failed Flitelink submission.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        gd_flight = get_object_or_404(JEPPESSENGDFlight, id=flight_id)
+        
+        # Check if failed
+        if gd_flight.flitelink_status != 'FAILED':
+            return JsonResponse({
+                'error': f'Cannot retry - Status is {gd_flight.get_flitelink_status_display()}'
+            }, status=400)
+        
+        # Check retry limit
+        max_retries = 3
+        if gd_flight.flitelink_retry_count >= max_retries:
+            return JsonResponse({
+                'error': f'Maximum retries ({max_retries}) exceeded'
+            }, status=400)
+        
+        # Increment retry count and reset status
+        gd_flight.flitelink_retry_count += 1
+        gd_flight.flitelink_status = 'PENDING'
+        gd_flight.flitelink_error_message = None
+        gd_flight.save()
+        
+        # Submit
+        from .tasks import submit_flight_to_flitelink
+        result = submit_flight_to_flitelink.delay(gd_flight.id)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Retry queued for flight {gd_flight.flight_no}',
+            'task_id': result.id,
+            'retry_count': gd_flight.flitelink_retry_count,
+        })
+        
+    except Exception as e:
+        logger.error(f"Error retrying submission: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def flitelink_refresh_status(request, flight_id):
+    """
+    Manually refresh Flitelink status of a flight.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        gd_flight = get_object_or_404(JEPPESSENGDFlight, id=flight_id)
+        
+        # Check if queued
+        if gd_flight.flitelink_status != 'QUEUED':
+            return JsonResponse({
+                'error': f'Cannot check status - Status is {gd_flight.get_flitelink_status_display()}'
+            }, status=400)
+        
+        # Check status
+        from .tasks import check_submission_status
+        success = check_submission_status(gd_flight)
+        
+        if success:
+            gd_flight.refresh_from_db()
+            return JsonResponse({
+                'success': True,
+                'status': gd_flight.flitelink_status,
+                'status_display': gd_flight.get_flitelink_status_display(),
+                'message': f'Status updated to {gd_flight.get_flitelink_status_display()}',
+            })
+        else:
+            return JsonResponse({
+                'error': 'Failed to check status'
+            }, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error refreshing status: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def flitelink_bulk_submit(request):
+    """
+    Bulk submit all unsubmitted flights from last 7 days.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        start_date = date.today() - timedelta(days=7)
+        
+        # Get unsubmitted flights
+        unsubmitted = JEPPESSENGDFlight.objects.filter(
+            flight_date__gte=start_date,
+            flitelink_status='NOT_SUBMITTED'
+        )
+        
+        # Filter to only submittable flights
+        submittable = [f for f in unsubmitted if f.can_submit_to_flitelink]
+        
+        if not submittable:
+            return JsonResponse({
+                'success': True,
+                'message': 'No flights to submit',
+                'count': 0,
+            })
+        
+        # Submit all
+        from .tasks import submit_flight_to_flitelink
+        
+        submitted = 0
+        for flight in submittable:
+            try:
+                submit_flight_to_flitelink.delay(flight.id)
+                submitted += 1
+            except Exception as e:
+                logger.error(f"Error submitting flight {flight.id}: {e}")
+                continue
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Queued {submitted} flights for submission',
+            'count': submitted,
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in bulk submit: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)

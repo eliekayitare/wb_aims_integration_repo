@@ -2283,10 +2283,221 @@ def fetch_jeppessen_gd():
         logger.error(f"Fatal error in Jeppessen GD fetch: {e}", exc_info=True)
         return 0
 
+# def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
+#     """
+#     Process Jeppessen GD RTF attachment.
+#     Parses crew details from RTF, fetches emails from ERP, gets STD/STA from FlightData.
+#     """
+#     from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
+#     from .utils import rtf_to_text
+    
+#     start_time = time_module.time()
+    
+#     try:
+#         # Parse GD identifier: 212/BGF DLA/11112025
+#         match = re.match(r'(\d+)/([A-Z]{3})\s+([A-Z]{3})/(\d{8})', gd_identifier)
+        
+#         if not match:
+#             logger.error(f"Could not parse GD identifier: {gd_identifier}")
+#             return False
+        
+#         flight_no = match.group(1)
+#         origin_iata = match.group(2)
+#         dest_iata = match.group(3)
+#         date_str = match.group(4)
+        
+#         try:
+#             flight_date = datetime.strptime(date_str, '%d%m%Y').date()
+#         except ValueError:
+#             logger.error(f"Invalid date format: {date_str}")
+#             return False
+        
+#         logger.info(f"Processing: Flight {flight_no}, {origin_iata}→{dest_iata}, {flight_date}")
+        
+#         # Process RTF
+#         raw = attachment.content.decode('utf-8', errors='ignore')
+#         text = rtf_to_text(raw)
+#         lines = [ln for ln in text.splitlines() if ln.strip()]
+        
+#         # Extract tail number
+#         tail_number = None
+#         for line in lines[:25]:
+#             if re.match(r'^\d[A-Z]{2}-[A-Z]{2}$', line.strip()):
+#                 tail_number = line.strip()
+#                 logger.info(f"Found tail: {tail_number}")
+#                 break
+        
+#         # Parse crew entries with FULL details from RTF
+#         crew_entries = parse_jeppessen_gd_crew_full(lines)
+#         logger.info(f"Found {len(crew_entries)} crew members")
+        
+#         # Convert IATA to ICAO
+#         origin_icao = get_icao_from_iata(origin_iata)
+#         destination_icao = get_icao_from_iata(dest_iata)
+        
+#         origin_code = origin_icao if origin_icao else origin_iata
+#         destination_code = destination_icao if destination_icao else dest_iata
+        
+#         # Find FlightData record
+#         flight_record = FlightData.objects.filter(
+#             flight_no=flight_no,
+#             sd_date_utc=flight_date,
+#             tail_no=tail_number
+#         ).first()
+        
+#         if not flight_record:
+#             flight_record = FlightData.objects.filter(
+#                 flight_no=flight_no,
+#                 sd_date_utc=flight_date
+#             ).first()
+        
+#         flight_found = flight_record is not None
+        
+#         # Get STD and STA from FlightData
+#         std_utc = None
+#         sta_utc = None
+        
+#         if flight_found:
+#             std_utc = flight_record.std_utc
+#             sta_utc = flight_record.sta_utc
+#             logger.info(f"✓ Linked to FlightData: {flight_record}")
+#             logger.info(f"  STD: {std_utc}, STA: {sta_utc}")
+#         else:
+#             logger.warning("⚠ No FlightData record found - STD/STA unavailable")
+        
+#         # Identify PIC and SIC
+#         pic_crew = None
+#         sic_crew = None
+        
+#         for i, entry in enumerate(crew_entries):
+#             if entry.get('is_pic') or entry.get('role') == 'PIC':
+#                 pic_crew = entry
+#                 logger.info(f"✓ PIC: {entry['crew_id']} - {entry['name']}")
+                
+#                 # Find SIC (next CP or FO after PIC)
+#                 for j in range(i + 1, len(crew_entries)):
+#                     next_entry = crew_entries[j]
+#                     if next_entry.get('role') in ['CP', 'FO']:
+#                         sic_crew = next_entry
+#                         logger.info(f"✓ SIC: {next_entry['crew_id']} - {next_entry['name']}")
+#                         break
+#                 break
+        
+#         # Track email statistics
+#         emails_found = 0
+#         emails_not_found = 0
+        
+#         # Save to database
+#         with transaction.atomic():
+#             # Create/update GD flight with STD/STA
+#             gd_flight, created = JEPPESSENGDFlight.objects.update_or_create(
+#                 flight_no=flight_no,
+#                 flight_date=flight_date,
+#                 origin_iata=origin_iata,
+#                 destination_iata=dest_iata,
+#                 defaults={
+#                     'flight': flight_record,
+#                     'origin_icao': origin_icao,
+#                     'destination_icao': destination_icao,
+#                     'tail_no': tail_number,
+#                     'raw_filename': gd_identifier,
+#                     'std_utc': std_utc,
+#                     'sta_utc': sta_utc,
+#                 }
+#             )
+            
+#             logger.info(f"{'Created' if created else 'Updated'} GD flight")
+            
+#             # Delete existing crew
+#             JEPPESSENGDCrew.objects.filter(gd_flight=gd_flight).delete()
+            
+#             # ✅ FIXED: Create crew assignments WITHOUT overwriting position
+#             for entry in crew_entries:
+#                 is_pic = (entry == pic_crew)
+#                 is_sic = (entry == sic_crew)
+                
+#                 # KEEP the original role (CP, FO, FP, etc.)
+#                 position = entry.get('role') or 'AC'
+#                 # DON'T overwrite with PIC/SIC - just use flags
+                
+#                 # Fetch email from ERP
+#                 crew_email = get_jeppessen_crew_email_from_erp(entry['crew_id'])
+                
+#                 if crew_email:
+#                     emails_found += 1
+#                 else:
+#                     emails_not_found += 1
+                
+#                 # Create crew assignment
+#                 JEPPESSENGDCrew.objects.create(
+#                     crew_id=entry['crew_id'],
+#                     gd_flight=gd_flight,
+#                     flight=flight_record,
+#                     position=position,  # ✅ Original role
+#                     role=entry.get('role'),
+#                     is_pic=is_pic,  # ✅ PIC flag
+#                     is_sic=is_sic,  # ✅ SIC flag
+#                     email=crew_email or '',
+#                     flight_no=flight_no,
+#                     flight_date=flight_date,
+#                     origin=origin_code,
+#                     destination=destination_code,
+#                     tail_no=tail_number,
+#                     dep_date_utc=flight_date,
+#                     arr_date_utc=flight_date,
+#                     std_utc=std_utc,
+#                     sta_utc=sta_utc,
+#                 )
+                
+#                 # Update crew detail from RTF data (including email)
+#                 update_jeppessen_crew_detail(entry, flight_date, crew_email)
+        
+#         # Create log
+#         duration = time_module.time() - start_time
+        
+#         JEPPESSENGDProcessingLog.objects.create(
+#             email_subject=email_subject,
+#             attachment_name=attachment.name,
+#             gd_identifier=gd_identifier,
+#             total_crew=len(crew_entries),
+#             emails_found=emails_found,
+#             emails_not_found=emails_not_found,
+#             pic_identified=(pic_crew is not None),
+#             sic_identified=(sic_crew is not None),
+#             flight_found=flight_found,
+#             status='SUCCESS',
+#             processing_duration=duration
+#         )
+        
+#         logger.info(f"✅ Success in {duration:.2f}s - Emails: {emails_found}/{len(crew_entries)}")
+#         return True
+        
+#     except Exception as e:
+#         logger.error(f"Error processing GD: {e}", exc_info=True)
+        
+#         JEPPESSENGDProcessingLog.objects.create(
+#             email_subject=email_subject,
+#             attachment_name=attachment.name if attachment else "Unknown",
+#             gd_identifier=gd_identifier,
+#             total_crew=0,
+#             emails_found=0,
+#             emails_not_found=0,
+#             pic_identified=False,
+#             sic_identified=False,
+#             flight_found=False,
+#             status='FAILED',
+#             error_message=str(e)[:1000],
+#             processing_duration=time_module.time() - start_time
+#         )
+        
+#         return False
+
+
 def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
     """
     Process Jeppessen GD RTF attachment.
     Parses crew details from RTF, fetches emails from ERP, gets STD/STA from FlightData.
+    ✨ NEW: Auto-submits to Flitelink after successful processing
     """
     from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
     from .utils import rtf_to_text
@@ -2411,7 +2622,7 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
             # Delete existing crew
             JEPPESSENGDCrew.objects.filter(gd_flight=gd_flight).delete()
             
-            # ✅ FIXED: Create crew assignments WITHOUT overwriting position
+            # Create crew assignments WITHOUT overwriting position
             for entry in crew_entries:
                 is_pic = (entry == pic_crew)
                 is_sic = (entry == sic_crew)
@@ -2433,10 +2644,10 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
                     crew_id=entry['crew_id'],
                     gd_flight=gd_flight,
                     flight=flight_record,
-                    position=position,  # ✅ Original role
+                    position=position,
                     role=entry.get('role'),
-                    is_pic=is_pic,  # ✅ PIC flag
-                    is_sic=is_sic,  # ✅ SIC flag
+                    is_pic=is_pic,
+                    is_sic=is_sic,
                     email=crew_email or '',
                     flight_no=flight_no,
                     flight_date=flight_date,
@@ -2470,6 +2681,42 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
         )
         
         logger.info(f"✅ Success in {duration:.2f}s - Emails: {emails_found}/{len(crew_entries)}")
+        
+        # ============================================================================
+        # AUTO-SUBMIT TO FLITELINK
+        # ============================================================================
+        if getattr(settings, 'FLITELINK_AUTO_SUBMIT', True):
+            # Check if flight can be submitted
+            if gd_flight.can_submit_to_flitelink:
+                logger.info(f"🚀 Queuing flight {gd_flight.flight_no} for Flitelink submission")
+                try:
+                    # Queue for submission with 60-second delay
+                    submit_flight_to_flitelink.apply_async(
+                        args=[gd_flight.id],
+                        countdown=60
+                    )
+                    logger.info(f"✓ Flight {gd_flight.flight_no} queued for Flitelink (will submit in 60s)")
+                except Exception as e:
+                    logger.error(f"✗ Error queuing Flitelink submission: {e}", exc_info=True)
+            else:
+                # Log why it can't be submitted
+                missing = []
+                if not gd_flight.origin_icao:
+                    missing.append("origin_icao")
+                if not gd_flight.destination_icao:
+                    missing.append("destination_icao")
+                if not gd_flight.std_utc:
+                    missing.append("std_utc")
+                if not gd_flight.sta_utc:
+                    missing.append("sta_utc")
+                
+                logger.warning(
+                    f"⚠️  Flight {gd_flight.flight_no} NOT queued for Flitelink - "
+                    f"Missing: {', '.join(missing)}"
+                )
+        else:
+            logger.info("ℹ️  Flitelink auto-submit is disabled")
+        
         return True
         
     except Exception as e:
@@ -2779,3 +3026,542 @@ def get_icao_from_iata(iata_code):
         return airport.icao_code if airport else None
     except:
         return None
+    
+
+
+
+
+# ============================================================================
+# FLITELINK API INTEGRATION TASKS
+# ============================================================================
+
+import uuid
+import requests
+from datetime import datetime, timedelta
+from django.conf import settings
+from django.utils import timezone
+from django.db import transaction
+
+@shared_task
+def submit_flight_to_flitelink(gd_flight_id):
+    """
+    Submit a GD flight to Flitelink API.
+    Updates the existing JEPPESSENGDFlight record with submission status.
+    
+    Args:
+        gd_flight_id: ID of JEPPESSENGDFlight record
+    
+    Returns:
+        str: Request ID if successful, None if failed
+    """
+    from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, FlitelinkAPILog
+    
+    try:
+        # Get GD flight
+        gd_flight = JEPPESSENGDFlight.objects.get(id=gd_flight_id)
+        
+        logger.info(f"Preparing Flitelink submission for flight {gd_flight.flight_no}")
+        
+        # Check if already submitted successfully
+        if gd_flight.flitelink_status in ['QUEUED', 'COMPLETED']:
+            logger.info(f"Flight already submitted with status {gd_flight.flitelink_status}")
+            return str(gd_flight.flitelink_request_id)
+        
+        # Validate required fields
+        if not gd_flight.can_submit_to_flitelink:
+            error_msg = f"Missing required fields: "
+            missing = []
+            if not gd_flight.origin_icao: missing.append("origin_icao")
+            if not gd_flight.destination_icao: missing.append("destination_icao")
+            if not gd_flight.std_utc: missing.append("std_utc")
+            if not gd_flight.sta_utc: missing.append("sta_utc")
+            
+            error_msg += ", ".join(missing)
+            logger.error(error_msg)
+            
+            gd_flight.flitelink_status = 'FAILED'
+            gd_flight.flitelink_error_message = error_msg
+            gd_flight.save()
+            return None
+        
+        # Get crew
+        crew_assignments = JEPPESSENGDCrew.objects.filter(
+            gd_flight=gd_flight
+        ).select_related('gd_flight')
+        
+        if not crew_assignments.exists():
+            logger.warning(f"No crew found for flight {gd_flight.flight_no}")
+        
+        # Generate request ID (or reuse existing if retrying)
+        if not gd_flight.flitelink_request_id:
+            request_id = uuid.uuid4()
+            gd_flight.flitelink_request_id = request_id
+        else:
+            request_id = gd_flight.flitelink_request_id
+        
+        # Build payload
+        payload = build_flitelink_payload(gd_flight, crew_assignments)
+        
+        # Update status to PENDING
+        gd_flight.flitelink_status = 'PENDING'
+        gd_flight.save()
+        
+        # Submit to API
+        success = submit_to_flitelink_api(gd_flight, payload)
+        
+        if success:
+            logger.info(f"✓ Successfully submitted flight {gd_flight.flight_no} - Request ID: {request_id}")
+            return str(request_id)
+        else:
+            logger.error(f"✗ Failed to submit flight {gd_flight.flight_no}")
+            return None
+            
+    except JEPPESSENGDFlight.DoesNotExist:
+        logger.error(f"GD Flight {gd_flight_id} not found")
+        return None
+    except Exception as e:
+        logger.error(f"Error submitting flight to Flitelink: {e}", exc_info=True)
+        return None
+
+
+def build_flitelink_payload(gd_flight, crew_assignments):
+    """
+    Build Flitelink API payload from GD flight data.
+    Maps our data structure to Flitelink format.
+    
+    Args:
+        gd_flight: JEPPESSENGDFlight instance
+        crew_assignments: QuerySet of JEPPESSENGDCrew
+    
+    Returns:
+        dict: Flitelink API payload
+    """
+    from .models import JEPPESSENGDCrewDetail
+    
+    # Build crew list
+    crew_list = []
+    
+    for crew_assignment in crew_assignments:
+        # Get crew details
+        crew_detail = JEPPESSENGDCrewDetail.objects.filter(
+            crew_id=crew_assignment.crew_id
+        ).first()
+        
+        # Map position to Flitelink format
+        pos_mapping = {
+            'CP': 'CPT',
+            'FO': 'FO',
+            'FP': 'CM',
+            'SA': 'CM',
+            'FA': 'CC',
+            'FE': 'OTHER',
+            'MX': 'OTHER',
+            'AC': 'OTHER',
+        }
+        
+        pos = pos_mapping.get(crew_assignment.position, 'OTHER')
+        
+        # Map function
+        if crew_assignment.is_pic:
+            function = 'PIC'
+        elif crew_assignment.is_sic:
+            function = 'SIC'
+        elif crew_assignment.position in ['FP', 'SA', 'FA']:
+            function = 'FA'
+        else:
+            function = 'OTHER'
+        
+        # Parse name
+        given_name = crew_detail.firstname if crew_detail else ''
+        family_name = crew_detail.surname if crew_detail else crew_assignment.crew_id
+        
+        # Staff ID
+        staff_id = f"WB{int(crew_assignment.crew_id):04d}"
+        
+        # Email
+        email = crew_assignment.email or ''
+        
+        crew_obj = {
+            "pos": pos,
+            "function": function,
+            "givenName": given_name or "Unknown",
+            "familyName": family_name or "Unknown",
+            "staffId": staff_id,
+            "email": email,
+            "deadheading": False,
+            "onDuty": None,  # We don't have this data
+            "offDuty": None  # We don't have this data
+        }
+        
+        crew_list.append(crew_obj)
+    
+    # Combine date and time for STD/STA
+    std_datetime = combine_date_time(gd_flight.flight_date, gd_flight.std_utc)
+    sta_datetime = combine_date_time(gd_flight.flight_date, gd_flight.sta_utc)
+    
+    # Build sector
+    sector = {
+        "customerUniqueId": str(gd_flight.id),
+        "carrier": "WB",
+        "flightNumber": f"WB{gd_flight.flight_no}",
+        "std": std_datetime.strftime('%Y-%m-%dT%H:%M:%SZ') if std_datetime else None,
+        "sta": sta_datetime.strftime('%Y-%m-%dT%H:%M:%SZ') if sta_datetime else None,
+        "departure": {
+            "icao": gd_flight.origin_icao,
+            "iata": gd_flight.origin_iata,
+            "domesticCode": None
+        },
+        "destination": {
+            "icao": gd_flight.destination_icao,
+            "iata": gd_flight.destination_iata,
+            "domesticCode": None
+        },
+        "crew": crew_list,
+        "callSign": None,
+        "flightStatus": "SCH",  # Scheduled
+        "aircraftRegistration": gd_flight.tail_no,
+        "etd": None,
+        "eta": None,
+        "remarks": f"General Declaration processed on {gd_flight.processed_at.strftime('%Y-%m-%d')}",
+        "typeOfFlight": None
+    }
+    
+    payload = {
+        "sectors": [sector]
+    }
+    
+    return payload
+
+
+def submit_to_flitelink_api(gd_flight, payload):
+    """
+    Make HTTP POST request to Flitelink API.
+    Updates gd_flight with submission results.
+    
+    Args:
+        gd_flight: JEPPESSENGDFlight instance
+        payload: dict payload to submit
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    from .models import FlitelinkAPILog
+    
+    start_time = timezone.now()
+    
+    headers = {
+        'x-api-key': settings.FLITELINK_API_KEY,
+        'request-id': str(gd_flight.flitelink_request_id),
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        logger.info(f"Sending request to Flitelink API - Request ID: {gd_flight.flitelink_request_id}")
+        
+        response = requests.post(
+            settings.FLITELINK_SUBMIT_ENDPOINT,
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+        
+        end_time = timezone.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        # Log API call
+        FlitelinkAPILog.objects.create(
+            gd_flight=gd_flight,
+            request_type='SUBMIT',
+            request_id=gd_flight.flitelink_request_id,
+            endpoint=settings.FLITELINK_SUBMIT_ENDPOINT,
+            http_method='POST',
+            request_payload=payload,
+            response_status_code=response.status_code,
+            response_data=response.json() if response.status_code in [200, 202] else {'error': response.text},
+            response_time=end_time,
+            duration_ms=duration_ms,
+            success=(response.status_code == 202),
+            error_message=None if response.status_code == 202 else response.text
+        )
+        
+        if response.status_code == 202:
+            # Success
+            response_data = response.json()
+            
+            with transaction.atomic():
+                gd_flight.flitelink_status = 'QUEUED'
+                gd_flight.flitelink_submitted_at = timezone.now()
+                gd_flight.flitelink_response = response_data
+                gd_flight.flitelink_error_message = None
+                gd_flight.save()
+            
+            logger.info(f"✓ Flight submitted successfully - Status: {response_data.get('status')}")
+            return True
+        else:
+            # Error
+            error_msg = f"HTTP {response.status_code}: {response.text}"
+            
+            with transaction.atomic():
+                gd_flight.flitelink_status = 'FAILED'
+                gd_flight.flitelink_error_message = error_msg
+                gd_flight.save()
+            
+            logger.error(f"✗ API returned error: {error_msg}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        error_msg = "Request timeout after 30 seconds"
+        
+        with transaction.atomic():
+            gd_flight.flitelink_status = 'FAILED'
+            gd_flight.flitelink_error_message = error_msg
+            gd_flight.save()
+        
+        logger.error(f"✗ {error_msg}")
+        return False
+        
+    except Exception as e:
+        error_msg = str(e)
+        
+        with transaction.atomic():
+            gd_flight.flitelink_status = 'FAILED'
+            gd_flight.flitelink_error_message = error_msg
+            gd_flight.save()
+        
+        logger.error(f"✗ Error: {e}", exc_info=True)
+        return False
+
+
+@shared_task
+def check_flitelink_status():
+    """
+    Check status of queued Flitelink submissions.
+    Runs periodically to update flight statuses.
+    """
+    from .models import JEPPESSENGDFlight
+    
+    logger.info("Checking Flitelink submission statuses...")
+    
+    # Get flights with QUEUED status
+    queued_flights = JEPPESSENGDFlight.objects.filter(
+        flitelink_status='QUEUED'
+    )
+    
+    if not queued_flights.exists():
+        logger.info("No queued submissions to check")
+        return 0
+    
+    updated_count = 0
+    
+    for gd_flight in queued_flights:
+        try:
+            # Check if enough time has passed since last check (avoid rate limiting)
+            if gd_flight.flitelink_last_check:
+                time_since_check = (timezone.now() - gd_flight.flitelink_last_check).total_seconds()
+                if time_since_check < 60:  # Wait at least 1 minute between checks
+                    continue
+            
+            # Check status
+            if check_submission_status(gd_flight):
+                updated_count += 1
+            
+        except Exception as e:
+            logger.error(f"Error checking status for flight {gd_flight.id}: {e}")
+            continue
+    
+    logger.info(f"Checked {updated_count} submissions")
+    return updated_count
+
+
+def check_submission_status(gd_flight):
+    """
+    Check status of a single flight submission via API.
+    Updates gd_flight with latest status.
+    
+    Args:
+        gd_flight: JEPPESSENGDFlight instance
+    
+    Returns:
+        bool: True if status was checked, False otherwise
+    """
+    from .models import FlitelinkAPILog
+    
+    start_time = timezone.now()
+    
+    headers = {
+        'x-api-key': settings.FLITELINK_API_KEY,
+        'request-id': str(gd_flight.flitelink_request_id)
+    }
+    
+    url = f"{settings.FLITELINK_STATUS_ENDPOINT}/{gd_flight.flitelink_request_id}/status"
+    
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=15
+        )
+        
+        end_time = timezone.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        # Log API call
+        FlitelinkAPILog.objects.create(
+            gd_flight=gd_flight,
+            request_type='STATUS',
+            request_id=gd_flight.flitelink_request_id,
+            endpoint=url,
+            http_method='GET',
+            request_payload=None,
+            response_status_code=response.status_code,
+            response_data=response.json() if response.status_code == 200 else {'error': response.text},
+            response_time=end_time,
+            duration_ms=duration_ms,
+            success=(response.status_code == 200),
+            error_message=None if response.status_code == 200 else response.text
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            status = data.get('status', 'QUEUED').upper()
+            
+            with transaction.atomic():
+                # Update last check time
+                gd_flight.flitelink_last_check = timezone.now()
+                
+                if status == 'COMPLETED':
+                    gd_flight.flitelink_status = 'COMPLETED'
+                    gd_flight.flitelink_completed_at = timezone.now()
+                    logger.info(f"✓ Flight {gd_flight.flight_no} completed")
+                    
+                elif status in ['FAILED', 'ERROR']:
+                    gd_flight.flitelink_status = 'FAILED'
+                    gd_flight.flitelink_error_message = data.get('message', 'Unknown error from Flitelink')
+                    logger.warning(f"✗ Flight {gd_flight.flight_no} failed: {gd_flight.flitelink_error_message}")
+                    
+                else:
+                    gd_flight.flitelink_status = 'QUEUED'
+                
+                gd_flight.flitelink_response = data
+                gd_flight.save()
+            
+            return True
+        else:
+            logger.warning(f"Status check failed with HTTP {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error checking status: {e}")
+        return False
+
+
+@shared_task
+def auto_submit_recent_flights():
+    """
+    Automatically submit recently processed GD flights to Flitelink.
+    Runs periodically to catch new flights.
+    """
+    from .models import JEPPESSENGDFlight
+    
+    if not getattr(settings, 'FLITELINK_AUTO_SUBMIT', True):
+        logger.info("Auto-submit disabled")
+        return 0
+    
+    logger.info("Checking for flights to auto-submit...")
+    
+    # Get flights processed in the last hour that haven't been submitted
+    delay_minutes = getattr(settings, 'FLITELINK_SUBMIT_DELAY_MINUTES', 5)
+    cutoff_time = timezone.now() - timedelta(minutes=delay_minutes)
+    
+    flights = JEPPESSENGDFlight.objects.filter(
+        processed_at__gte=timezone.now() - timedelta(hours=1),
+        processed_at__lte=cutoff_time,
+        flitelink_status='NOT_SUBMITTED'
+    )
+    
+    # Filter to only flights that can be submitted
+    submittable = [f for f in flights if f.can_submit_to_flitelink]
+    
+    submitted_count = 0
+    
+    for flight in submittable:
+        try:
+            result = submit_flight_to_flitelink.delay(flight.id)
+            if result:
+                submitted_count += 1
+                logger.info(f"✓ Auto-submitted flight {flight.flight_no}")
+        except Exception as e:
+            logger.error(f"Error auto-submitting flight {flight.id}: {e}")
+            continue
+    
+    logger.info(f"Auto-submitted {submitted_count} flights")
+    return submitted_count
+
+
+@shared_task
+def retry_failed_submissions():
+    """
+    Retry failed Flitelink submissions (up to 3 times).
+    Runs periodically to retry failures.
+    """
+    from .models import JEPPESSENGDFlight
+    
+    logger.info("Checking for failed submissions to retry...")
+    
+    max_retries = 3
+    
+    # Get failed flights that haven't exceeded retry limit
+    failed_flights = JEPPESSENGDFlight.objects.filter(
+        flitelink_status='FAILED',
+        flitelink_retry_count__lt=max_retries
+    )
+    
+    if not failed_flights.exists():
+        logger.info("No failed submissions to retry")
+        return 0
+    
+    retried_count = 0
+    
+    for flight in failed_flights:
+        try:
+            # Increment retry count
+            flight.flitelink_retry_count += 1
+            flight.flitelink_status = 'PENDING'
+            flight.flitelink_error_message = None
+            flight.save()
+            
+            # Submit
+            result = submit_flight_to_flitelink.delay(flight.id)
+            if result:
+                retried_count += 1
+                logger.info(f"✓ Retried flight {flight.flight_no} (attempt {flight.flitelink_retry_count})")
+            
+        except Exception as e:
+            logger.error(f"Error retrying flight {flight.id}: {e}")
+            continue
+    
+    logger.info(f"Retried {retried_count} failed submissions")
+    return retried_count
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def combine_date_time(date_obj, time_obj):
+    """
+    Combine date and time into datetime with UTC timezone.
+    
+    Args:
+        date_obj: date object
+        time_obj: time object
+    
+    Returns:
+        datetime: Combined datetime in UTC
+    """
+    if date_obj and time_obj:
+        return timezone.make_aware(
+            datetime.combine(date_obj, time_obj),
+            timezone.utc
+        )
+    return None

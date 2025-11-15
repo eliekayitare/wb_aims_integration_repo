@@ -510,142 +510,8 @@ class QatarFlightDetails(models.Model):
 
 
 
-
-# ====================================================================================
-
-# JEPPESSEN PROJECT
-
-#  ===================================================================================
-
-# class JeppessenFlight(models.Model):
-#     """
-#     Flight information from Jeppessen crew assignment files.
-#     Separate from FdmFlightData to keep Jeppessen data isolated.
-#     """
-    
-#     flight_no = models.CharField(max_length=6, db_index=True)           # e.g., "464", "9100", "1"
-#     flight_date = models.DateField(db_index=True)                       # Flight date (DDMMYYYY from file)
-#     origin_iata = models.CharField(max_length=3)                        # e.g., "EBB", "KGL"
-#     origin_icao = models.CharField(max_length=4, null=True, blank=True) # e.g., "HKJK" (if found)
-#     destination_iata = models.CharField(max_length=3)                   # e.g., "NBO", "JNB"
-#     destination_icao = models.CharField(max_length=4, null=True, blank=True) # e.g., "HUEN" (if found)
-    
-#     # Metadata
-#     raw_line = models.TextField()                                       # Original line from file
-#     processed_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-    
-#     class Meta:
-#         db_table = 'jeppesen_flight'
-#         unique_together = ('flight_no', 'flight_date', 'origin_iata', 'destination_iata')
-#         indexes = [
-#             models.Index(fields=['flight_no', 'flight_date']),
-#             models.Index(fields=['flight_date']),
-#         ]
-#         ordering = ['-flight_date', 'flight_no']
-    
-#     def __str__(self):
-#         return f"Jeppessen Flight {self.flight_no} on {self.flight_date} ({self.origin_iata}->{self.destination_iata})"
-
-
-# class JeppessenCrew(models.Model):
-#     """
-#     Crew member assignments from Jeppessen files.
-#     Stores crew with last 4 digits of crew ID only.
-#     """
-    
-#     POSITION_CHOICES = [
-#         ('CP', 'Captain'),
-#         ('FO', 'First Officer'),
-#         ('FP', 'Purser'),
-#         ('SA', 'Senior Attendant'),
-#         ('FA', 'Flight Attendant'),
-#         ('FE', 'Flight Engineer'),
-#         ('MX', 'Maintenance'),
-#         ('AC', 'Air Crew'),
-#     ]
-    
-#     # Link to flight (optional - can work standalone)
-#     flight = models.ForeignKey(
-#         JeppessenFlight, 
-#         on_delete=models.CASCADE, 
-#         related_name='crew_members',
-#         null=True,
-#         blank=True
-#     )
-    
-#     # Flight details (stored directly for easy querying)
-#     flight_no = models.CharField(max_length=6, db_index=True)
-#     flight_date = models.DateField(db_index=True)
-#     origin = models.CharField(max_length=4)                             # ICAO preferred, IATA fallback
-#     destination = models.CharField(max_length=4)                        # ICAO preferred, IATA fallback
-    
-#     # Crew details
-#     crew_id = models.CharField(max_length=4)                            # Last 4 digits ONLY
-#     full_crew_id = models.CharField(max_length=10, null=True, blank=True) # Original (00003537, D00002019)
-#     crew_name = models.CharField(max_length=100)                        # Full name
-#     position = models.CharField(max_length=2, choices=POSITION_CHOICES)
-#     email = models.CharField(max_length=100, null=True, blank=True, db_index=True)
-#     # Metadata
-#     processed_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-    
-#     class Meta:
-#         db_table = 'jeppesen_crew'
-#         unique_together = ('flight_no', 'flight_date', 'origin', 'destination', 'crew_id')
-#         indexes = [
-#             models.Index(fields=['flight_no', 'flight_date']),
-#             models.Index(fields=['crew_id']),
-#             models.Index(fields=['flight_date']),
-#             models.Index(fields=['position']),
-#         ]
-#         ordering = ['-flight_date', 'flight_no', 'position']
-    
-#     def __str__(self):
-#         return f"{self.position} {self.crew_id} - {self.crew_name} on Flight {self.flight_no}"
-
-
-# class JeppessenProcessingLog(models.Model):
-#     """
-#     Log of Jeppessen file processing for auditing and debugging.
-#     """
-    
-#     STATUS_CHOICES = [
-#         ('SUCCESS', 'Success'),
-#         ('PARTIAL', 'Partial Success'),
-#         ('FAILED', 'Failed'),
-#     ]
-    
-#     # Email/File details
-#     email_subject = models.CharField(max_length=255)
-#     attachment_name = models.CharField(max_length=255, null=True, blank=True)
-    
-#     # Processing stats
-#     total_lines = models.IntegerField(default=0)
-#     successful_lines = models.IntegerField(default=0)
-#     failed_lines = models.IntegerField(default=0)
-#     total_flights = models.IntegerField(default=0)
-#     total_crew = models.IntegerField(default=0)
-    
-#     # Status
-#     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='SUCCESS')
-#     error_message = models.TextField(null=True, blank=True)
-    
-#     # Timestamps
-#     processed_at = models.DateTimeField(auto_now_add=True)
-#     processing_duration = models.FloatField(null=True, blank=True)  # seconds
-    
-#     class Meta:
-#         db_table = 'jeppesen_processing_log'
-#         ordering = ['-processed_at']
-    
-#     def __str__(self):
-#         return f"Jeppessen Processing {self.status} at {self.processed_at} ({self.total_flights} flights)"
-
-
-
 # ============================================================================
-# JEPPESSEN GENERAL DECLARATION (GD) - Job 97 Integration
+# JEPPESSEN PROJECT GENERAL DECLARATION (GD) - Job 97 Integration  - Models
 # ============================================================================
 
 class JEPPESSENGDCrewDetail(models.Model):
@@ -683,12 +549,66 @@ class JEPPESSENGDCrewDetail(models.Model):
         return f"{self.crew_id} - {self.full_name or self.surname or 'Unknown'}"
 
 
+# class JEPPESSENGDFlight(models.Model):
+#     """
+#     General Declaration flight records from Job 97 RTF files.
+#     Format: 212/BGF DLA/11112025 (Flight/Origin Dest/Date)
+#     Links to actual FlightData when possible.
+#     STD and STA come from FlightData when linked.
+#     """
+    
+#     # Link to actual flight (may be null if not found in FlightData)
+#     flight = models.ForeignKey(
+#         FlightData,
+#         on_delete=models.SET_NULL,
+#         related_name='general_declarations',
+#         null=True,
+#         blank=True
+#     )
+    
+#     # Flight information from GD
+#     flight_no = models.CharField(max_length=6, db_index=True)
+#     flight_date = models.DateField(db_index=True)
+#     origin_iata = models.CharField(max_length=3)
+#     origin_icao = models.CharField(max_length=4, null=True, blank=True)
+#     destination_iata = models.CharField(max_length=3)
+#     destination_icao = models.CharField(max_length=4, null=True, blank=True)
+#     tail_no = models.CharField(max_length=10, null=True, blank=True)
+    
+#     # Schedule from FlightData (when linked)
+#     std_utc = models.TimeField(null=True, blank=True)  # From FlightData
+#     sta_utc = models.TimeField(null=True, blank=True)  # From FlightData
+    
+#     # Metadata
+#     raw_filename = models.CharField(max_length=255, null=True, blank=True)
+#     processed_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+    
+#     class Meta:
+#         db_table = 'jeppessen_gd_flight'
+#         unique_together = ('flight_no', 'flight_date', 'origin_iata', 'destination_iata')
+#         indexes = [
+#             models.Index(fields=['flight_no', 'flight_date']),
+#             models.Index(fields=['flight_date']),
+#         ]
+#         ordering = ['-flight_date', 'flight_no']
+    
+#     def __str__(self):
+#         return f"GD Flight {self.flight_no} on {self.flight_date} ({self.origin_iata}->{self.destination_iata})"
+
+
+# ============================================================================
+# JEPPESSEN PROJECT GENERAL DECLARATION (GD) - Job 97 Integration  - Models
+# ============================================================================
+
 class JEPPESSENGDFlight(models.Model):
     """
     General Declaration flight records from Job 97 RTF files.
     Format: 212/BGF DLA/11112025 (Flight/Origin Dest/Date)
     Links to actual FlightData when possible.
     STD and STA come from FlightData when linked.
+    
+    ✨ NEW: Now includes Flitelink API submission tracking
     """
     
     # Link to actual flight (may be null if not found in FlightData)
@@ -718,17 +638,125 @@ class JEPPESSENGDFlight(models.Model):
     processed_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # ✨ NEW: Flitelink API Integration Fields
+    flitelink_request_id = models.UUIDField(null=True, blank=True, db_index=True, unique=True)
+    flitelink_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('NOT_SUBMITTED', 'Not Submitted'),
+            ('PENDING', 'Pending'),
+            ('QUEUED', 'Queued'),
+            ('COMPLETED', 'Completed'),
+            ('FAILED', 'Failed'),
+        ],
+        default='NOT_SUBMITTED',
+        db_index=True
+    )
+    flitelink_submitted_at = models.DateTimeField(null=True, blank=True)
+    flitelink_completed_at = models.DateTimeField(null=True, blank=True)
+    flitelink_last_check = models.DateTimeField(null=True, blank=True)
+    flitelink_error_message = models.TextField(null=True, blank=True)
+    flitelink_retry_count = models.IntegerField(default=0)
+    flitelink_response = models.JSONField(null=True, blank=True)
+    
     class Meta:
         db_table = 'jeppessen_gd_flight'
         unique_together = ('flight_no', 'flight_date', 'origin_iata', 'destination_iata')
         indexes = [
             models.Index(fields=['flight_no', 'flight_date']),
             models.Index(fields=['flight_date']),
+            models.Index(fields=['flitelink_status']),
+            models.Index(fields=['flitelink_request_id']),
         ]
         ordering = ['-flight_date', 'flight_no']
     
     def __str__(self):
         return f"GD Flight {self.flight_no} on {self.flight_date} ({self.origin_iata}->{self.destination_iata})"
+    
+    # ✨ NEW: Helper methods
+    @property
+    def flitelink_status_display(self):
+        """Human-readable Flitelink status"""
+        return self.get_flitelink_status_display()
+    
+    @property
+    def can_submit_to_flitelink(self):
+        """Check if flight can be submitted to Flitelink"""
+        return (
+            self.origin_icao and 
+            self.destination_icao and 
+            self.std_utc and 
+            self.sta_utc and
+            self.flitelink_status in ['NOT_SUBMITTED', 'FAILED']
+        )
+    
+    @property
+    def crew_count(self):
+        """Get total crew count"""
+        return self.crew_assignments.count()
+    
+    @property
+    def pic_crew(self):
+        """Get PIC crew member"""
+        return self.crew_assignments.filter(is_pic=True).first()
+    
+    @property
+    def sic_crew(self):
+        """Get SIC crew member"""
+        return self.crew_assignments.filter(is_sic=True).first()
+
+
+#  model for API logging
+class FlitelinkAPILog(models.Model):
+    """
+    Detailed API call logs for Flitelink integration.
+    Tracks every API request/response for debugging and monitoring.
+    """
+    
+    REQUEST_TYPE_CHOICES = [
+        ('SUBMIT', 'Submit Flight'),
+        ('STATUS', 'Check Status'),
+    ]
+    
+    # Link to GD flight
+    gd_flight = models.ForeignKey(
+        JEPPESSENGDFlight,
+        on_delete=models.CASCADE,
+        related_name='flitelink_api_logs',
+        null=True,
+        blank=True
+    )
+    
+    # API call details
+    request_type = models.CharField(max_length=20, choices=REQUEST_TYPE_CHOICES)
+    request_id = models.UUIDField(db_index=True)
+    endpoint = models.CharField(max_length=255)
+    http_method = models.CharField(max_length=10)
+    
+    # Request/Response
+    request_payload = models.JSONField(null=True, blank=True)
+    response_status_code = models.IntegerField(null=True, blank=True)
+    response_data = models.JSONField(null=True, blank=True)
+    
+    # Timing
+    request_time = models.DateTimeField(auto_now_add=True)
+    response_time = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.IntegerField(null=True, blank=True)
+    
+    # Error tracking
+    success = models.BooleanField(default=True)
+    error_message = models.TextField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'flitelink_api_log'
+        ordering = ['-request_time']
+        indexes = [
+            models.Index(fields=['request_id', '-request_time']),
+            models.Index(fields=['gd_flight', '-request_time']),
+        ]
+    
+    def __str__(self):
+        return f"{self.request_type} - {self.request_id} - {self.response_status_code or 'No response'}"
 
 
 class JEPPESSENGDCrew(models.Model):
@@ -850,3 +878,6 @@ class JEPPESSENGDProcessingLog(models.Model):
     
     def __str__(self):
         return f"GD Processing {self.status} at {self.processed_at} ({self.total_crew} crew)"
+    
+
+

@@ -24,6 +24,22 @@
   .position-mx { background-color: #fd7e14; color: #fff; }
   .position-ac { background-color: #6c757d; color: #fff; }
   
+  /* ✨ NEW: Flitelink status badges */
+  .flitelink-badge {
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    display: inline-block;
+  }
+  
+  .flitelink-not_submitted { background-color: #6c757d; color: #fff; }
+  .flitelink-pending { background-color: #ffc107; color: #000; }
+  .flitelink-queued { background-color: #17a2b8; color: #fff; }
+  .flitelink-completed { background-color: #28a745; color: #fff; }
+  .flitelink-failed { background-color: #dc3545; color: #fff; }
+  
   /* Email badge */
   .email-badge {
     padding: 3px 8px;
@@ -46,6 +62,48 @@
   .status-success { background-color: #28a745; color: #fff; }
   .status-partial { background-color: #ffc107; color: #000; }
   .status-failed { background-color: #dc3545; color: #fff; }
+  
+  /* ✨ NEW: Action buttons */
+  .btn-action {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    margin: 2px;
+    transition: 0.3s;
+  }
+  
+  .btn-submit {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+  
+  .btn-retry {
+    background: #fd7e14;
+    color: white;
+  }
+  
+  .btn-refresh {
+    background: #17a2b8;
+    color: white;
+  }
+  
+  .btn-view {
+    background: #6c757d;
+    color: white;
+  }
+  
+  .btn-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  
+  .btn-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
   
   /* Modal styling */
   .modal {
@@ -192,23 +250,6 @@
     border-bottom: none;
   }
   
-  /* Action buttons */
-  .btn-view {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 8px 20px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: 0.3s;
-  }
-  
-  .btn-view:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-  }
-  
   /* Summary cards */
   .summary-cards {
     display: grid;
@@ -250,6 +291,12 @@
     color: #999;
     margin-top: 5px;
   }
+  
+  /* ✨ NEW: Flitelink specific card colors */
+  .summary-card.flitelink-completed h3 { color: #28a745; }
+  .summary-card.flitelink-queued h3 { color: #17a2b8; }
+  .summary-card.flitelink-failed h3 { color: #dc3545; }
+  .summary-card.flitelink-pending h3 { color: #ffc107; }
   
   /* Position breakdown */
   .position-breakdown {
@@ -302,6 +349,50 @@
     font-size: 11px;
     color: #6c757d;
   }
+  
+  /* ✨ NEW: Loading spinner */
+  .spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* ✨ NEW: Alert box */
+  .alert-box {
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border-left: 4px solid;
+  }
+  
+  .alert-error {
+    background: #f8d7da;
+    border-color: #dc3545;
+    color: #721c24;
+  }
+  
+  .alert-success {
+    background: #d4edda;
+    border-color: #28a745;
+    color: #155724;
+  }
+  
+  .alert-warning {
+    background: #fff3cd;
+    border-color: #ffc107;
+    color: #856404;
+  }
 </style>
 {% endblock %}
 
@@ -324,13 +415,17 @@
   <div class="main-content">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
       <h1 style="margin: 0; color: #212529;">General Declaration (GD) Dashboard</h1>
-      <div style="color: #6c757d; font-size: 14px;">
-        Showing data from: <strong>{{ start_date|date:"Y-m-d" }}</strong> to <strong>today</strong>
+      <div>
+        <!-- ✨ NEW: Bulk Submit Button -->
+        <button class="btn-action btn-submit" onclick="bulkSubmitFlights()" title="Submit all unsubmitted flights">
+          📤 Bulk Submit to Flitelink
+        </button>
       </div>
     </div>
     
     <!-- Summary Cards -->
     <div class="summary-cards">
+      <!-- GD Stats -->
       <div class="summary-card">
         <p>Today's Flights</p>
         <h3>{{ today_flights }}</h3>
@@ -348,42 +443,37 @@
         <h3>{{ today_sic }}</h3>
       </div>
       <div class="summary-card">
-        <p>Crew with Email</p>
-        <h3>{{ today_crew_with_email }}</h3>
-        <p class="subtitle">{{ today_crew_without_email }} without</p>
-      </div>
-      <div class="summary-card">
         <p>Email Success Rate</p>
         <h3>{{ email_success_rate|floatformat:0 }}%</h3>
-        <p class="subtitle">Today</p>
+        <p class="subtitle">{{ today_crew_with_email }}/{{ today_crew }} found</p>
+      </div>
+      
+      <!-- ✨ NEW: Flitelink Stats -->
+      <div class="summary-card flitelink-completed">
+        <p>Flitelink Completed</p>
+        <h3>{{ flitelink_completed }}</h3>
+        <p class="subtitle">Successfully synced</p>
+      </div>
+      <div class="summary-card flitelink-queued">
+        <p>Flitelink Queued</p>
+        <h3>{{ flitelink_queued }}</h3>
+        <p class="subtitle">In progress</p>
+      </div>
+      <div class="summary-card flitelink-failed">
+        <p>Flitelink Failed</p>
+        <h3>{{ flitelink_failed }}</h3>
+        <p class="subtitle">Need attention</p>
       </div>
       <div class="summary-card">
-        <p>Total Flights</p>
-        <h3>{{ total_flights }}</h3>
-        <p class="subtitle">Last {{ days_back }} days</p>
+        <p>Not Submitted</p>
+        <h3>{{ flitelink_not_submitted }}</h3>
+        <p class="subtitle">Pending submission</p>
       </div>
       <div class="summary-card">
-        <p>Total Crew</p>
-        <h3>{{ total_crew }}</h3>
-        <p class="subtitle">Last {{ days_back }} days</p>
+        <p>Flitelink Success</p>
+        <h3>{{ flitelink_success_rate|floatformat:0 }}%</h3>
+        <p class="subtitle">Submission rate</p>
       </div>
-    </div>
-    
-    <!-- Position Breakdown (Today) -->
-    <h2 style="margin: 30px 0 15px 0; color: #212529; font-size: 20px;">Crew by Position (Today)</h2>
-    <div class="position-breakdown">
-      {% for pos in position_counts %}
-      <div class="position-mini-card">
-        <h4>{{ pos.count }}</h4>
-        <p>
-          <span class="position-badge position-{{ pos.position|lower }}">{{ pos.position }}</span>
-        </p>
-      </div>
-      {% empty %}
-      <div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #6c757d;">
-        No crew data for today
-      </div>
-      {% endfor %}
     </div>
     
     <!-- Search and Filter -->
@@ -396,6 +486,14 @@
         id="search-input"
       />
       <input type="date" id="date-filter" class="search-input" style="width: 200px;" />
+      <select class="filter-select" id="flitelink-filter">
+        <option value="">All Flitelink Status</option>
+        <option value="NOT_SUBMITTED">Not Submitted</option>
+        <option value="PENDING">Pending</option>
+        <option value="QUEUED">Queued</option>
+        <option value="COMPLETED">Completed</option>
+        <option value="FAILED">Failed</option>
+      </select>
       <select class="filter-select" id="days-filter">
         <option value="7" {% if days_back == 7 %}selected{% endif %}>Last 7 days</option>
         <option value="30" {% if days_back == 30 %}selected{% endif %}>Last 30 days</option>
@@ -417,13 +515,13 @@
             <th>PIC</th>
             <th>SIC</th>
             <th>Crew</th>
-            <th>Processed</th>
+            <th>Flitelink Status</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="flight-data">
           {% for flight in flights %}
-          <tr>
+          <tr data-flitelink-status="{{ flight.flitelink_status }}">
             <td>{{ flight.flight_date|date:"Y-m-d" }}</td>
             <td><strong>{{ flight.flight_no }}</strong></td>
             <td>{{ flight.origin_iata }} → {{ flight.destination_iata }}</td>
@@ -451,11 +549,33 @@
               {% endif %}
             </td>
             <td><strong>{{ flight.crew_count }}</strong></td>
-            <td>{{ flight.processed_at|date:"Y-m-d H:i" }}</td>
             <td>
-              <button class="btn-view" onclick="viewDetails({{ flight.id }})">
-                View Crew
+              <span class="flitelink-badge flitelink-{{ flight.flitelink_status|lower }}">
+                {{ flight.flitelink_status_display }}
+              </span>
+              {% if flight.flitelink_retry_count > 0 %}
+                <br><small style="color: #6c757d;">Retry: {{ flight.flitelink_retry_count }}</small>
+              {% endif %}
+            </td>
+            <td>
+              <button class="btn-action btn-view" onclick="viewDetails({{ flight.id }})">
+                👁️ View
               </button>
+              {% if flight.can_submit_to_flitelink and flight.flitelink_status == 'NOT_SUBMITTED' %}
+                <button class="btn-action btn-submit" onclick="submitFlight({{ flight.id }})">
+                  📤 Submit
+                </button>
+              {% endif %}
+              {% if flight.flitelink_status == 'QUEUED' %}
+                <button class="btn-action btn-refresh" onclick="refreshStatus({{ flight.id }})">
+                  🔄 Check
+                </button>
+              {% endif %}
+              {% if flight.flitelink_status == 'FAILED' %}
+                <button class="btn-action btn-retry" onclick="retryFlight({{ flight.id }})">
+                  ↩️ Retry
+                </button>
+              {% endif %}
             </td>
           </tr>
           {% empty %}
@@ -469,8 +589,66 @@
       </table>
     </div>
     
+    <!-- ✨ NEW: Recent Flitelink API Logs -->
+    <h2 style="margin: 30px 0 15px 0; color: #212529; font-size: 20px;">Recent Flitelink API Activity</h2>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Flight</th>
+            <th>Type</th>
+            <th>Method</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in recent_api_logs %}
+          <tr>
+            <td>{{ log.request_time|date:"Y-m-d H:i:s" }}</td>
+            <td>
+              {% if log.gd_flight %}
+                <strong>{{ log.gd_flight.flight_no }}</strong>
+                <br><small>{{ log.gd_flight.flight_date|date:"Y-m-d" }}</small>
+              {% else %}
+                --
+              {% endif %}
+            </td>
+            <td>{{ log.get_request_type_display }}</td>
+            <td><code>{{ log.http_method }}</code></td>
+            <td>
+              {% if log.response_status_code %}
+                <span style="color: {% if log.success %}#28a745{% else %}#dc3545{% endif %}; font-weight: bold;">
+                  {{ log.response_status_code }}
+                </span>
+              {% else %}
+                <span style="color: #6c757d;">N/A</span>
+              {% endif %}
+            </td>
+            <td>{{ log.duration_ms }}ms</td>
+            <td>
+              {% if log.success %}
+                <span style="color: #28a745;">✓ Success</span>
+              {% else %}
+                <span style="color: #dc3545;">✗ Failed</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 20px; color: #6c757d;">
+              No API activity yet
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
     <!-- Recent Processing Logs -->
-    <h2 style="margin: 30px 0 15px 0; color: #212529; font-size: 20px;">Recent Processing Logs</h2>
+    <h2 style="margin: 30px 0 15px 0; color: #212529; font-size: 20px;">Recent GD Processing Logs</h2>
     <div class="table-container">
       <table>
         <thead>
@@ -480,9 +658,8 @@
             <th>Status</th>
             <th>Total Crew</th>
             <th>Emails Found</th>
-            <th>Emails Missing</th>
-            <th>PIC Found</th>
-            <th>SIC Found</th>
+            <th>PIC</th>
+            <th>SIC</th>
             <th>Flight Linked</th>
             <th>Duration</th>
           </tr>
@@ -498,8 +675,7 @@
               </span>
             </td>
             <td><strong>{{ log.total_crew }}</strong></td>
-            <td style="color: #28a745; font-weight: bold;">{{ log.emails_found }}</td>
-            <td style="color: #dc3545; font-weight: bold;">{{ log.emails_not_found }}</td>
+            <td style="color: #28a745; font-weight: bold;">{{ log.emails_found }}/{{ log.total_crew }}</td>
             <td>
               {% if log.pic_identified %}
                 <span style="color: #28a745;">✓</span>
@@ -525,7 +701,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="10" style="text-align: center; padding: 20px; color: #6c757d;">
+            <td colspan="9" style="text-align: center; padding: 20px; color: #6c757d;">
               No processing logs yet
             </td>
           </tr>
@@ -536,7 +712,7 @@
   </div>
 </div>
 
-<!-- Modal for Crew Details -->
+<!-- Modal for Flight & Crew Details -->
 <div id="crewModal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -553,6 +729,7 @@
   // Filter functionality
   document.getElementById('search-input').addEventListener('input', filterTable);
   document.getElementById('date-filter').addEventListener('change', filterTable);
+  document.getElementById('flitelink-filter').addEventListener('change', filterTable);
   document.getElementById('days-filter').addEventListener('change', function() {
     window.location.href = `?days=${this.value}`;
   });
@@ -560,6 +737,7 @@
   function filterTable() {
     const searchValue = document.getElementById('search-input').value.toLowerCase();
     const dateValue = document.getElementById('date-filter').value;
+    const flitelinkValue = document.getElementById('flitelink-filter').value;
     
     const rows = document.querySelectorAll('#flight-data tr');
     
@@ -567,8 +745,9 @@
       const text = row.textContent.toLowerCase();
       const dateMatch = !dateValue || row.cells[0].textContent === dateValue;
       const searchMatch = !searchValue || text.includes(searchValue);
+      const flitelinkMatch = !flitelinkValue || row.getAttribute('data-flitelink-status') === flitelinkValue;
       
-      row.style.display = (dateMatch && searchMatch) ? '' : 'none';
+      row.style.display = (dateMatch && searchMatch && flitelinkMatch) ? '' : 'none';
     });
   }
 
@@ -604,14 +783,6 @@
           <span class="info-value">${data.route}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Origin</span>
-          <span class="info-value">${data.origin_iata} / ${data.origin_icao}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Destination</span>
-          <span class="info-value">${data.destination_iata} / ${data.destination_icao}</span>
-        </div>
-        <div class="info-item">
           <span class="info-label">Tail Number</span>
           <span class="info-value">${data.tail_no}</span>
         </div>
@@ -624,31 +795,57 @@
           <span class="info-value">${data.sta_utc}</span>
         </div>
         <div class="info-item">
+          <span class="info-label">Flitelink Status</span>
+          <span class="info-value">
+            <span class="flitelink-badge flitelink-${data.flitelink_status.toLowerCase()}">
+              ${data.flitelink_status_display}
+            </span>
+          </span>
+        </div>
+        <div class="info-item">
           <span class="info-label">Total Crew</span>
           <span class="info-value"><strong>${data.crew_count}</strong></span>
         </div>
-        <div class="info-item">
-          <span class="info-label">Processed At</span>
-          <span class="info-value">${data.processed_at}</span>
-        </div>
       </div>
-      
-      <h3 class="crew-section-title">Crew Members (${data.crew_members.length})</h3>
-      <table class="crew-table">
-        <thead>
-          <tr>
-            <th>Position</th>
-            <th>Crew ID</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Passport</th>
-            <th>Birth Date</th>
-            <th>Gender</th>
-            <th>Nationality</th>
-          </tr>
-        </thead>
-        <tbody>
     `;
+    
+    // Flitelink details
+    if (data.flitelink_request_id) {
+      html += `
+        <div style="padding: 15px; background: #e7f3ff; border-left: 4px solid #17a2b8; margin: 20px 0; border-radius: 5px;">
+          <strong>Flitelink Request ID:</strong> <code>${data.flitelink_request_id}</code><br>
+          ${data.flitelink_submitted_at ? `<strong>Submitted:</strong> ${data.flitelink_submitted_at}<br>` : ''}
+          ${data.flitelink_completed_at ? `<strong>Completed:</strong> ${data.flitelink_completed_at}<br>` : ''}
+          ${data.flitelink_retry_count > 0 ? `<strong>Retries:</strong> ${data.flitelink_retry_count}<br>` : ''}
+        </div>
+      `;
+    }
+    
+    // Error message
+    if (data.flitelink_error_message) {
+      html += `
+        <div class="alert-box alert-error">
+          <strong>Flitelink Error:</strong> ${data.flitelink_error_message}
+        </div>
+      `;
+    }
+    
+    // Crew section
+    html += `<h3 class="crew-section-title">Crew Members (${data.crew_members.length})</h3>`;
+    html += `<table class="crew-table">
+      <thead>
+        <tr>
+          <th>Position</th>
+          <th>Crew ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Passport</th>
+          <th>Birth Date</th>
+          <th>Gender</th>
+          <th>Nationality</th>
+        </tr>
+      </thead>
+      <tbody>`;
     
     data.crew_members.forEach(crew => {
       let positionClass = crew.position.toLowerCase();
@@ -675,10 +872,40 @@
       `;
     });
     
-    html += `
-        </tbody>
-      </table>
-    `;
+    html += `</tbody></table>`;
+    
+    // API Logs
+    if (data.api_logs && data.api_logs.length > 0) {
+      html += `<h3 class="crew-section-title">Flitelink API History (${data.api_logs.length})</h3>`;
+      html += `<table class="crew-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Method</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Time</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      
+      data.api_logs.forEach(log => {
+        const statusColor = log.success ? '#28a745' : '#dc3545';
+        html += `
+          <tr>
+            <td>${log.request_type}</td>
+            <td><code>${log.http_method}</code></td>
+            <td style="color: ${statusColor}; font-weight: bold;">${log.response_status || 'N/A'}</td>
+            <td>${log.duration_ms}ms</td>
+            <td>${log.request_time}</td>
+            <td style="color: ${statusColor};">${log.success ? '✓ Success' : '✗ Failed'}</td>
+          </tr>
+        `;
+      });
+      
+      html += `</tbody></table>`;
+    }
     
     modalBody.innerHTML = html;
   }
@@ -687,13 +914,122 @@
     document.getElementById('crewModal').style.display = 'none';
   }
 
-  // Close modal when clicking outside
+  // ✨ NEW: Submit flight to Flitelink
+  function submitFlight(flightId) {
+    if (!confirm('Submit this flight to Flitelink?')) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '⏳ Submitting... <span class="spinner"></span>';
+    
+    fetch(`/aims/jeppessen/flitelink/submit/${flightId}/`, { method: 'POST' })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '📤 Submit';
+        }
+      })
+      .catch(error => {
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '📤 Submit';
+      });
+  }
+
+  // ✨ NEW: Retry failed submission
+  function retryFlight(flightId) {
+    if (!confirm('Retry this failed submission?')) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '⏳ Retrying... <span class="spinner"></span>';
+    
+    fetch(`/aims/jeppessen/flitelink/retry/${flightId}/`, { method: 'POST' })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '↩️ Retry';
+        }
+      })
+      .catch(error => {
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '↩️ Retry';
+      });
+  }
+
+  // ✨ NEW: Refresh status
+  function refreshStatus(flightId) {
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '🔄 Checking... <span class="spinner"></span>';
+    
+    fetch(`/aims/jeppessen/flitelink/refresh/${flightId}/`, { method: 'POST' })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '🔄 Check';
+        }
+      })
+      .catch(error => {
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '🔄 Check';
+      });
+  }
+
+  // ✨ NEW: Bulk submit
+  function bulkSubmitFlights() {
+    if (!confirm('Submit all unsubmitted flights from the last 7 days?')) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '📤 Submitting... <span class="spinner"></span>';
+    
+    fetch('/aims/jeppessen/flitelink/bulk-submit/', { method: 'POST' })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '📤 Bulk Submit to Flitelink';
+        }
+      })
+      .catch(error => {
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '📤 Bulk Submit to Flitelink';
+      });
+  }
+
+  // Close modal on outside click
   window.onclick = function(event) {
     const modal = document.getElementById('crewModal');
     if (event.target === modal) {
       modal.style.display = 'none';
     }
   }
+
+  // Auto-refresh page every 60 seconds for live updates
+  setTimeout(() => location.reload(), 60000);
 </script>
 
 {% endblock %}

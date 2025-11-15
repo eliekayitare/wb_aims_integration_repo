@@ -58,8 +58,17 @@ urlpatterns = [
     path('qatar_apis_dashboard/', views.qatar_apis_dashboard, name='qatar_apis_dashboard'),
     path('qatar-apis/details/<int:record_id>/', views.qatar_apis_details, name='qatar_apis_details'),
 
-    # Jeppessen General Declaration
+    # # Jeppessen General Declaration
+    # path('jeppessen/', views.jeppessen_dashboard, name='jeppessen_dashboard'),
+    # path('jeppessen/details/<int:flight_id>/', views.jeppessen_flight_details, name='jeppessen_flight_details'),
+
     path('jeppessen/', views.jeppessen_dashboard, name='jeppessen_dashboard'),
     path('jeppessen/details/<int:flight_id>/', views.jeppessen_flight_details, name='jeppessen_flight_details'),
+    
+    # ✨ NEW: Flitelink Actions
+    path('jeppessen/flitelink/submit/<int:flight_id>/', views.flitelink_submit_flight, name='flitelink_submit_flight'),
+    path('jeppessen/flitelink/retry/<int:flight_id>/', views.flitelink_retry_submission, name='flitelink_retry_submission'),
+    path('jeppessen/flitelink/refresh/<int:flight_id>/', views.flitelink_refresh_status, name='flitelink_refresh_status'),
+    path('jeppessen/flitelink/bulk-submit/', views.flitelink_bulk_submit, name='flitelink_bulk_submit'),
 
 ]

@@ -382,6 +382,28 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/2'),
     },
 
+    # ============================================================================
+    # FLITELINK API SCHEDULES
+    # ============================================================================
+    
+    # Auto-submit new flights every 10 minutes
+    'flitelink-auto-submit': {
+        'task': 'aimsintegration.tasks.auto_submit_recent_flights',
+        'schedule': crontab(minute='*/10'),
+    },
+    
+    # Check status every 5 minutes
+    'flitelink-check-status': {
+        'task': 'aimsintegration.tasks.check_flitelink_status',
+        'schedule': crontab(minute='*/5'),
+    },
+    
+    # Retry failed submissions every 30 minutes
+    'flitelink-retry-failed': {
+        'task': 'aimsintegration.tasks.retry_failed_submissions',
+        'schedule': crontab(minute='*/30'),
+    },
+
 
 }
 
@@ -390,7 +412,22 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 
+# ============================================================================
+# FLITELINK API CONFIGURATION
+# ============================================================================
 
+# ============================================================================
+# FLITELINK API CONFIGURATION
+# ============================================================================
+
+FLITELINK_API_KEY = "Qm0URmvHKZHyCnsMfBnLSDIekcfHlHjskOFInSEQxc="
+FLITELINK_BASE_URL = "https://flitelink-scheduled-flights.ac.foreflight.com/api/v2"
+FLITELINK_SUBMIT_ENDPOINT = f"{FLITELINK_BASE_URL}/scheduled-flights/flitebrief"
+FLITELINK_STATUS_ENDPOINT = f"{FLITELINK_BASE_URL}/scheduled-flights"
+
+# Submission settings
+FLITELINK_AUTO_SUBMIT = True  # Auto-submit flights after GD processing
+FLITELINK_SUBMIT_DELAY_MINUTES = 5  # Wait 5 minutes after GD processing before auto-submit
 
 
 # Static files (CSS, JavaScript, Images)
