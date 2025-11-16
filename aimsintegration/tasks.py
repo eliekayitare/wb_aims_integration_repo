@@ -3127,8 +3127,7 @@ def submit_flight_to_flitelink(gd_flight_id):
 
 def build_flitelink_payload(gd_flight, crew_assignments):
     """
-    Build Flitelink API payload from GD flight data.
-    Uses the CORRECT Flitelink API structure.
+    Build Flitelink API payload matching exact Postman structure.
     
     Args:
         gd_flight: JEPPESSENGDFlight instance
@@ -3139,70 +3138,100 @@ def build_flitelink_payload(gd_flight, crew_assignments):
     """
     from .models import JEPPESSENGDCrewDetail
     
-    # Combine date and time for ETD/ETA
-    etd_datetime = combine_date_time(gd_flight.flight_date, gd_flight.std_utc)
-    eta_datetime = combine_date_time(gd_flight.flight_date, gd_flight.sta_utc)
+    # Combine date and time for STD/STA
+    std_datetime = combine_date_time(gd_flight.flight_date, gd_flight.std_utc)
+    sta_datetime = combine_date_time(gd_flight.flight_date, gd_flight.sta_utc)
     
-    # Build crew list - SIMPLE structure
+    # Build crew list
     crew_list = []
     
     for crew_assignment in crew_assignments:
-        # Get crew details for name
+        # Get crew details
         crew_detail = JEPPESSENGDCrewDetail.objects.filter(
             crew_id=crew_assignment.crew_id
         ).first()
         
-        # Determine role
-        if crew_assignment.is_pic or crew_assignment.position == 'CP':
-            role = 'Captain'
-        elif crew_assignment.is_sic or crew_assignment.position == 'FO':
-            role = 'First Officer'
-        elif crew_assignment.position in ['FP', 'SA']:
-            role = 'Purser'
-        elif crew_assignment.position == 'FA':
-            role = 'Flight Attendant'
-        else:
-            role = 'Crew'
+        # Map position to Flitelink format
+        pos_mapping = {
+            'CP': 'CPT',
+            'FO': 'FO',
+            'FP': 'CM',
+            'SA': 'CM',
+            'FA': 'CC',
+            'FE': 'OTHER',
+            'MX': 'OTHER',
+            'AC': 'OTHER',
+        }
         
-        # Get full name
-        if crew_detail and crew_detail.full_name:
-            name = crew_detail.full_name
-        elif crew_detail and crew_detail.firstname and crew_detail.surname:
-            name = f"{crew_detail.firstname} {crew_detail.surname}"
+        pos = pos_mapping.get(crew_assignment.position, 'OTHER')
+        
+        # Map function
+        if crew_assignment.is_pic:
+            function = 'PIC'
+        elif crew_assignment.is_sic:
+            function = 'SIC'
+        elif crew_assignment.position in ['FP', 'SA']:
+            function = 'SA'
+        elif crew_assignment.position == 'FA':
+            function = 'FA'
         else:
-            name = f"Crew {crew_assignment.crew_id}"
+            function = 'OTHER'
+        
+        # Parse name
+        given_name = crew_detail.firstname if crew_detail else ''
+        family_name = crew_detail.surname if crew_detail else crew_assignment.crew_id
+        
+        # Staff ID - format as needed
+        staff_id = f"WB{int(crew_assignment.crew_id):04d}"
         
         # Email
         email = crew_assignment.email or ''
         
-        # Only add crew with email
+        # Only include crew with email
         if email:
             crew_obj = {
-                "role": role,
-                "name": name,
-                "email": email
+                "pos": pos,
+                "function": function,
+                "givenName": given_name or "Unknown",
+                "familyName": family_name or "Unknown",
+                "staffId": staff_id,
+                "email": email,
+                "deadheading": False,
+                "onDuty": None,
+                "offDuty": None
             }
             crew_list.append(crew_obj)
     
-    # Build flight object - CORRECT structure
-    flight = {
-        "aircraft": {
-            "registration": gd_flight.tail_no or "UNKNOWN"
-        },
+    # Build sector - EXACT structure from Postman
+    sector = {
+        "customerUniqueId": None,  # Can use str(gd_flight.id) if needed
+        "carrier": "WB",
+        "flightNumber": f"WB{gd_flight.flight_no}",
+        "std": std_datetime.strftime('%Y-%m-%dT%H:%M:%SZ') if std_datetime else None,
+        "sta": sta_datetime.strftime('%Y-%m-%dT%H:%M:%SZ') if sta_datetime else None,
         "departure": {
             "icao": gd_flight.origin_icao,
-            "etd": etd_datetime.strftime('%Y-%m-%dT%H:%M:%SZ') if etd_datetime else None
+            "iata": gd_flight.origin_iata,
+            "domesticCode": None  # Not "name"
         },
-        "arrival": {
+        "destination": {
             "icao": gd_flight.destination_icao,
-            "eta": eta_datetime.strftime('%Y-%m-%dT%H:%M:%SZ') if eta_datetime else None
+            "iata": gd_flight.destination_iata,
+            "domesticCode": None  # Not "name"
         },
-        "crew": crew_list
+        "crew": crew_list,
+        "callSign": None,
+        "flightStatus": None,
+        "aircraftRegistration": gd_flight.tail_no,
+        "etd": None,
+        "eta": None,
+        "remarks": None,
+        "typeOfFlight": None
     }
     
-    # Build payload - top level is "flights" not "sectors"
+    # Final payload
     payload = {
-        "flights": [flight]
+        "sectors": [sector]
     }
     
     return payload
@@ -3211,7 +3240,7 @@ def build_flitelink_payload(gd_flight, crew_assignments):
 def submit_to_flitelink_api(gd_flight, payload):
     """
     Make HTTP POST request to Flitelink API.
-    Updates gd_flight with submission results.
+    Uses exact headers from working Postman request.
     
     Args:
         gd_flight: JEPPESSENGDFlight instance
@@ -3224,13 +3253,16 @@ def submit_to_flitelink_api(gd_flight, payload):
     
     start_time = timezone.now()
     
+    # ✅ EXACT headers from Postman
     headers = {
         'x-api-key': settings.FLITELINK_API_KEY,
+        'request-id': str(gd_flight.flitelink_request_id),  # UUID in headers
         'Content-Type': 'application/json'
     }
     
     try:
         logger.info(f"Sending request to Flitelink API")
+        logger.info(f"Request ID: {gd_flight.flitelink_request_id}")
         logger.info(f"Payload: {payload}")
         
         response = requests.post(
@@ -3249,11 +3281,11 @@ def submit_to_flitelink_api(gd_flight, payload):
         except:
             response_data = {'error': response.text}
         
-        # ✅ FIX: Use gd_flight.flitelink_request_id for logging
+        # Log API call
         FlitelinkAPILog.objects.create(
             gd_flight=gd_flight,
             request_type='SUBMIT',
-            request_id=gd_flight.flitelink_request_id,  # Use our tracking ID
+            request_id=gd_flight.flitelink_request_id,
             endpoint=settings.FLITELINK_SUBMIT_ENDPOINT,
             http_method='POST',
             request_payload=payload,
@@ -3261,23 +3293,16 @@ def submit_to_flitelink_api(gd_flight, payload):
             response_data=response_data,
             response_time=end_time,
             duration_ms=duration_ms,
-            success=(response.status_code in [200, 201, 202]),
-            error_message=None if response.status_code in [200, 201, 202] else response.text
+            success=(response.status_code == 202),
+            error_message=None if response.status_code == 202 else response.text
         )
         
-        # Check success
-        if response.status_code in [200, 201, 202]:
-            logger.info(f"✓ Flight submitted successfully - HTTP {response.status_code}")
+        if response.status_code == 202:
+            # Success
+            logger.info(f"✓ Flight submitted successfully - HTTP 202 Accepted")
             logger.info(f"Response: {response_data}")
             
             with transaction.atomic():
-                # ✅ If API returns its own requestId, update it
-                if isinstance(response_data, dict) and 'requestId' in response_data:
-                    api_request_id = response_data['requestId']
-                    logger.info(f"API returned requestId: {api_request_id}")
-                    # Store API's request ID for status checks
-                    gd_flight.flitelink_request_id = api_request_id
-                
                 gd_flight.flitelink_status = 'QUEUED'
                 gd_flight.flitelink_submitted_at = timezone.now()
                 gd_flight.flitelink_response = response_data
@@ -3286,10 +3311,20 @@ def submit_to_flitelink_api(gd_flight, payload):
             
             return True
             
+        elif response.status_code == 400:
+            error_msg = f"HTTP 400: {response_data}"
+            logger.error(f"✗ Validation failed: {error_msg}")
+            
+            with transaction.atomic():
+                gd_flight.flitelink_status = 'FAILED'
+                gd_flight.flitelink_error_message = error_msg
+                gd_flight.save()
+            
+            return False
+            
         elif response.status_code == 401:
-            error_msg = f"HTTP 401: Authentication failed - API key rejected"
+            error_msg = f"HTTP 401: Invalid API Key"
             logger.error(f"✗ {error_msg}")
-            logger.error(f"Response: {response_data}")
             
             with transaction.atomic():
                 gd_flight.flitelink_status = 'FAILED'
@@ -3300,7 +3335,7 @@ def submit_to_flitelink_api(gd_flight, payload):
             
         else:
             error_msg = f"HTTP {response.status_code}: {response.text}"
-            logger.error(f"✗ API returned error: {error_msg}")
+            logger.error(f"✗ API error: {error_msg}")
             
             with transaction.atomic():
                 gd_flight.flitelink_status = 'FAILED'
@@ -3375,8 +3410,8 @@ def check_flitelink_status():
 
 def check_submission_status(gd_flight):
     """
-    Check status of a single flight submission via API.
-    Updates gd_flight with latest status.
+    Check status via GET request.
+    Uses requestId in URL path as shown in Postman.
     
     Args:
         gd_flight: JEPPESSENGDFlight instance
@@ -3388,12 +3423,12 @@ def check_submission_status(gd_flight):
     
     start_time = timezone.now()
     
-    # ✅ CORRECT: Only x-api-key in headers
+    # ✅ Only x-api-key header for status check
     headers = {
         'x-api-key': settings.FLITELINK_API_KEY
     }
     
-    # ✅ CORRECT: request-id is in the URL path, not headers
+    # ✅ requestId in URL path
     url = f"{settings.FLITELINK_STATUS_ENDPOINT}/{gd_flight.flitelink_request_id}/status"
     
     try:
@@ -3443,7 +3478,7 @@ def check_submission_status(gd_flight):
                     
                 elif status in ['FAILED', 'ERROR']:
                     gd_flight.flitelink_status = 'FAILED'
-                    gd_flight.flitelink_error_message = response_data.get('message', 'Unknown error from Flitelink')
+                    gd_flight.flitelink_error_message = response_data.get('message', 'Unknown error')
                     logger.warning(f"✗ Flight {gd_flight.flight_no} failed: {gd_flight.flitelink_error_message}")
                     
                 else:
