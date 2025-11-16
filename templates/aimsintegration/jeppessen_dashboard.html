@@ -24,7 +24,7 @@
   .position-mx { background-color: #fd7e14; color: #fff; }
   .position-ac { background-color: #6c757d; color: #fff; }
   
-  /* ✨ NEW: Flitelink status badges */
+  /* Flitelink status badges */
   .flitelink-badge {
     padding: 5px 12px;
     border-radius: 15px;
@@ -63,7 +63,7 @@
   .status-partial { background-color: #ffc107; color: #000; }
   .status-failed { background-color: #dc3545; color: #fff; }
   
-  /* ✨ NEW: Action buttons */
+  /* Action buttons */
   .btn-action {
     padding: 6px 12px;
     border: none;
@@ -292,7 +292,7 @@
     margin-top: 5px;
   }
   
-  /* ✨ NEW: Flitelink specific card colors */
+  /* Flitelink specific card colors */
   .summary-card.flitelink-completed h3 { color: #28a745; }
   .summary-card.flitelink-queued h3 { color: #17a2b8; }
   .summary-card.flitelink-failed h3 { color: #dc3545; }
@@ -350,7 +350,7 @@
     color: #6c757d;
   }
   
-  /* ✨ NEW: Loading spinner */
+  /* Loading spinner */
   .spinner {
     border: 3px solid #f3f3f3;
     border-top: 3px solid #667eea;
@@ -368,7 +368,7 @@
     100% { transform: rotate(360deg); }
   }
   
-  /* ✨ NEW: Alert box */
+  /* Alert box */
   .alert-box {
     padding: 15px;
     border-radius: 8px;
@@ -416,7 +416,6 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
       <h1 style="margin: 0; color: #212529;">AIMS-Jeppesen Integration Dashboard</h1>
       <div>
-        <!-- ✨ NEW: Bulk Submit Button -->
         <button class="btn-action btn-submit" onclick="bulkSubmitFlights()" title="Submit all unsubmitted flights">
           📤 Bulk Submit to Flitelink
         </button>
@@ -448,7 +447,7 @@
         <p class="subtitle">{{ today_crew_with_email }}/{{ today_crew }} found</p>
       </div>
       
-      <!-- ✨ NEW: Flitelink Stats -->
+      <!-- Flitelink Stats -->
       <div class="summary-card flitelink-completed">
         <p>Flitelink Completed</p>
         <h3>{{ flitelink_completed }}</h3>
@@ -589,7 +588,7 @@
       </table>
     </div>
     
-    <!-- ✨ NEW: Recent Flitelink API Logs -->
+    <!-- Recent Flitelink API Logs -->
     <h2 style="margin: 30px 0 15px 0; color: #212529; font-size: 20px;">Recent Flitelink API Activity</h2>
     <div class="table-container">
       <table>
@@ -725,7 +724,7 @@
   </div>
 </div>
 
-{% comment %} <script>
+<script>
   // Filter functionality
   document.getElementById('search-input').addEventListener('input', filterTable);
   document.getElementById('date-filter').addEventListener('change', filterTable);
@@ -914,7 +913,7 @@
     document.getElementById('crewModal').style.display = 'none';
   }
 
-  // ✨ NEW: Submit flight to Flitelink
+  // Submit flight to Flitelink
   function submitFlight(flightId) {
     if (!confirm('Submit this flight to Flitelink?')) return;
     
@@ -941,7 +940,7 @@
       });
   }
 
-  // ✨ NEW: Retry failed submission
+  // Retry failed submission
   function retryFlight(flightId) {
     if (!confirm('Retry this failed submission?')) return;
     
@@ -968,7 +967,7 @@
       });
   }
 
-  // ✨ NEW: Refresh status
+  // Refresh status
   function refreshStatus(flightId) {
     const button = event.target;
     button.disabled = true;
@@ -993,7 +992,7 @@
       });
   }
 
-  // ✨ NEW: Bulk submit
+  // Bulk submit
   function bulkSubmitFlights() {
     if (!confirm('Submit all unsubmitted flights from the last 7 days?')) return;
     
@@ -1030,216 +1029,6 @@
 
   // Auto-refresh page every 60 seconds for live updates
   setTimeout(() => location.reload(), 60000);
-</script> {% endcomment %}
-<script>
-  // ✅ CSRF Token Helper
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  }
-
-  const csrftoken = getCookie('csrftoken');
-
-  // Filter functionality
-  document.getElementById('search-input').addEventListener('input', filterTable);
-  document.getElementById('date-filter').addEventListener('change', filterTable);
-  document.getElementById('flitelink-filter').addEventListener('change', filterTable);
-  document.getElementById('days-filter').addEventListener('change', function() {
-    window.location.href = `?days=${this.value}`;
-  });
-
-  function filterTable() {
-    const searchValue = document.getElementById('search-input').value.toLowerCase();
-    const dateValue = document.getElementById('date-filter').value;
-    const flitelinkValue = document.getElementById('flitelink-filter').value;
-    
-    const rows = document.querySelectorAll('#flight-data tr');
-    
-    rows.forEach(row => {
-      const text = row.textContent.toLowerCase();
-      const dateMatch = !dateValue || row.cells[0].textContent === dateValue;
-      const searchMatch = !searchValue || text.includes(searchValue);
-      const flitelinkMatch = !flitelinkValue || row.getAttribute('data-flitelink-status') === flitelinkValue;
-      
-      row.style.display = (dateMatch && searchMatch && flitelinkMatch) ? '' : 'none';
-    });
-  }
-
-  // View details function
-  function viewDetails(flightId) {
-    fetch(`/aims/jeppessen/details/${flightId}/`)
-      .then(response => response.json())
-      .then(data => {
-        displayModalContent(data);
-        document.getElementById('crewModal').style.display = 'block';
-      })
-      .catch(error => {
-        console.error('Error fetching details:', error);
-        alert('Error loading crew details');
-      });
-  }
-
-  function displayModalContent(data) {
-    // ... your existing displayModalContent code stays the same ...
-  }
-
-  function closeModal() {
-    document.getElementById('crewModal').style.display = 'none';
-  }
-
-  // ✅ UPDATED: Submit flight with CSRF token
-  function submitFlight(flightId) {
-    if (!confirm('Submit this flight to Flitelink?')) return;
-    
-    const button = event.target;
-    button.disabled = true;
-    button.innerHTML = '⏳ Submitting... <span class="spinner"></span>';
-    
-    fetch(`/aims/jeppessen/flitelink/submit/${flightId}/`, { 
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': csrftoken,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert(data.message);
-          location.reload();
-        } else {
-          alert('Error: ' + (data.error || 'Unknown error'));
-          button.disabled = false;
-          button.innerHTML = '📤 Submit';
-        }
-      })
-      .catch(error => {
-        console.error('Fetch error:', error);
-        alert('Error: ' + error);
-        button.disabled = false;
-        button.innerHTML = '📤 Submit';
-      });
-  }
-
-  // ✅ UPDATED: Retry with CSRF token
-  function retryFlight(flightId) {
-    if (!confirm('Retry this failed submission?')) return;
-    
-    const button = event.target;
-    button.disabled = true;
-    button.innerHTML = '⏳ Retrying... <span class="spinner"></span>';
-    
-    fetch(`/aims/jeppessen/flitelink/retry/${flightId}/`, { 
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': csrftoken,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert(data.message);
-          location.reload();
-        } else {
-          alert('Error: ' + (data.error || 'Unknown error'));
-          button.disabled = false;
-          button.innerHTML = '↩️ Retry';
-        }
-      })
-      .catch(error => {
-        console.error('Fetch error:', error);
-        alert('Error: ' + error);
-        button.disabled = false;
-        button.innerHTML = '↩️ Retry';
-      });
-  }
-
-  // ✅ UPDATED: Refresh status with CSRF token
-  function refreshStatus(flightId) {
-    const button = event.target;
-    button.disabled = true;
-    button.innerHTML = '🔄 Checking... <span class="spinner"></span>';
-    
-    fetch(`/aims/jeppessen/flitelink/refresh/${flightId}/`, { 
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': csrftoken,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert(data.message);
-          location.reload();
-        } else {
-          alert('Error: ' + (data.error || 'Unknown error'));
-          button.disabled = false;
-          button.innerHTML = '🔄 Check';
-        }
-      })
-      .catch(error => {
-        console.error('Fetch error:', error);
-        alert('Error: ' + error);
-        button.disabled = false;
-        button.innerHTML = '🔄 Check';
-      });
-  }
-
-  // ✅ UPDATED: Bulk submit with CSRF token
-  function bulkSubmitFlights() {
-    if (!confirm('Submit all unsubmitted flights from the last 7 days?')) return;
-    
-    const button = event.target;
-    button.disabled = true;
-    button.innerHTML = '📤 Submitting... <span class="spinner"></span>';
-    
-    fetch('/aims/jeppessen/flitelink/bulk-submit/', { 
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': csrftoken,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert(data.message);
-          location.reload();
-        } else {
-          alert('Error: ' + (data.error || 'Unknown error'));
-          button.disabled = false;
-          button.innerHTML = '📤 Bulk Submit to Flitelink';
-        }
-      })
-      .catch(error => {
-        console.error('Fetch error:', error);
-        alert('Error: ' + error);
-        button.disabled = false;
-        button.innerHTML = '📤 Bulk Submit to Flitelink';
-      });
-  }
-
-  // Close modal on outside click
-  window.onclick = function(event) {
-    const modal = document.getElementById('crewModal');
-    if (event.target === modal) {
-      modal.style.display = 'none';
-    }
-  }
-
-  // Auto-refresh page every 60 seconds for live updates
-  setTimeout(() => location.reload(), 60000);
 </script>
+
 {% endblock %}
