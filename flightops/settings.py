@@ -420,14 +420,20 @@ CORS_ALLOWED_ORIGINS = [
 # FLITELINK API CONFIGURATION
 # ============================================================================
 
-FLITELINK_API_KEY = "Qm0URmvHKZHyCnsMfBnLSDIekcfHlHjskOFInSEQxc="
+# ============================================================================
+# FLITELINK API CONFIGURATION
+# ============================================================================
+
+# ✅ CORRECT API KEY (with the forward slash!)
+FLITELINK_API_KEY = "Qm0URmvHKZHyCnsMfBnL/SDIekcfHiHjskOFlnSEQxc="
+
 FLITELINK_BASE_URL = "https://flitelink-scheduled-flights.ac.foreflight.com/api/v2"
 FLITELINK_SUBMIT_ENDPOINT = f"{FLITELINK_BASE_URL}/scheduled-flights/flitebrief"
 FLITELINK_STATUS_ENDPOINT = f"{FLITELINK_BASE_URL}/scheduled-flights"
 
 # Submission settings
-FLITELINK_AUTO_SUBMIT = True  # Auto-submit flights after GD processing
-FLITELINK_SUBMIT_DELAY_MINUTES = 5  # Wait 5 minutes after GD processing before auto-submit
+FLITELINK_AUTO_SUBMIT = True
+FLITELINK_SUBMIT_DELAY_MINUTES = 5
 
 
 # Static files (CSS, JavaScript, Images)

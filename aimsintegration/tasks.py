@@ -3092,6 +3092,14 @@ def submit_flight_to_flitelink(gd_flight_id):
         if not crew_assignments.exists():
             logger.warning(f"No crew found for flight {gd_flight.flight_no}")
         
+        # ✅ FIX: Generate UUID for tracking (even though API doesn't use it in headers)
+        if not gd_flight.flitelink_request_id:
+            tracking_id = uuid.uuid4()
+            gd_flight.flitelink_request_id = tracking_id
+            gd_flight.save()
+        else:
+            tracking_id = gd_flight.flitelink_request_id
+        
         # Build payload
         payload = build_flitelink_payload(gd_flight, crew_assignments)
         
@@ -3099,12 +3107,12 @@ def submit_flight_to_flitelink(gd_flight_id):
         gd_flight.flitelink_status = 'PENDING'
         gd_flight.save()
         
-        # Submit to API (request_id will be returned by API)
+        # Submit to API (API will return its own request_id in response)
         success = submit_to_flitelink_api(gd_flight, payload)
         
         if success:
             logger.info(f"✓ Successfully submitted flight {gd_flight.flight_no}")
-            return str(gd_flight.flitelink_request_id) if gd_flight.flitelink_request_id else "Success"
+            return str(gd_flight.flitelink_request_id)
         else:
             logger.error(f"✗ Failed to submit flight {gd_flight.flight_no}")
             return None
@@ -3216,7 +3224,6 @@ def submit_to_flitelink_api(gd_flight, payload):
     
     start_time = timezone.now()
     
-    # ✅ CORRECT: Only x-api-key in headers, NO request-id header
     headers = {
         'x-api-key': settings.FLITELINK_API_KEY,
         'Content-Type': 'application/json'
@@ -3242,11 +3249,11 @@ def submit_to_flitelink_api(gd_flight, payload):
         except:
             response_data = {'error': response.text}
         
-        # Log API call
+        # ✅ FIX: Use gd_flight.flitelink_request_id for logging
         FlitelinkAPILog.objects.create(
             gd_flight=gd_flight,
             request_type='SUBMIT',
-            request_id=gd_flight.flitelink_request_id,
+            request_id=gd_flight.flitelink_request_id,  # Use our tracking ID
             endpoint=settings.FLITELINK_SUBMIT_ENDPOINT,
             http_method='POST',
             request_payload=payload,
@@ -3258,15 +3265,18 @@ def submit_to_flitelink_api(gd_flight, payload):
             error_message=None if response.status_code in [200, 201, 202] else response.text
         )
         
-        # Check success - accept 200, 201, or 202
+        # Check success
         if response.status_code in [200, 201, 202]:
             logger.info(f"✓ Flight submitted successfully - HTTP {response.status_code}")
             logger.info(f"Response: {response_data}")
             
             with transaction.atomic():
-                # Store the response request ID if provided
+                # ✅ If API returns its own requestId, update it
                 if isinstance(response_data, dict) and 'requestId' in response_data:
-                    gd_flight.flitelink_request_id = response_data['requestId']
+                    api_request_id = response_data['requestId']
+                    logger.info(f"API returned requestId: {api_request_id}")
+                    # Store API's request ID for status checks
+                    gd_flight.flitelink_request_id = api_request_id
                 
                 gd_flight.flitelink_status = 'QUEUED'
                 gd_flight.flitelink_submitted_at = timezone.now()
@@ -3277,9 +3287,9 @@ def submit_to_flitelink_api(gd_flight, payload):
             return True
             
         elif response.status_code == 401:
-            # Authentication error
-            error_msg = f"HTTP 401: Authentication failed - Check API key"
+            error_msg = f"HTTP 401: Authentication failed - API key rejected"
             logger.error(f"✗ {error_msg}")
+            logger.error(f"Response: {response_data}")
             
             with transaction.atomic():
                 gd_flight.flitelink_status = 'FAILED'
@@ -3289,7 +3299,6 @@ def submit_to_flitelink_api(gd_flight, payload):
             return False
             
         else:
-            # Other error
             error_msg = f"HTTP {response.status_code}: {response.text}"
             logger.error(f"✗ API returned error: {error_msg}")
             
