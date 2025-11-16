@@ -401,7 +401,7 @@ CELERY_BEAT_SCHEDULE = {
     # Retry failed submissions every 30 minutes
     'flitelink-retry-failed': {
         'task': 'aimsintegration.tasks.retry_failed_submissions',
-        'schedule': crontab(minute='*/30'),
+        'schedule': crontab(minute='*/3'),
     },
 
 
