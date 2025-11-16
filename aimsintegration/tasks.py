@@ -3551,91 +3551,194 @@ def check_submission_status(gd_flight):
         return False
 
 
+# @shared_task
+# def auto_submit_recent_flights():
+#     """
+#     Automatically submit recently processed GD flights to Flitelink.
+#     Runs periodically to catch new flights.
+#     """
+#     from .models import JEPPESSENGDFlight
+    
+#     if not getattr(settings, 'FLITELINK_AUTO_SUBMIT', True):
+#         logger.info("Auto-submit disabled")
+#         return 0
+    
+#     logger.info("Checking for flights to auto-submit...")
+    
+#     # Get flights processed in the last hour that haven't been submitted
+#     delay_minutes = getattr(settings, 'FLITELINK_SUBMIT_DELAY_MINUTES', 5)
+#     cutoff_time = timezone.now() - timedelta(minutes=delay_minutes)
+    
+#     flights = JEPPESSENGDFlight.objects.filter(
+#         processed_at__gte=timezone.now() - timedelta(hours=1),
+#         processed_at__lte=cutoff_time,
+#         flitelink_status='NOT_SUBMITTED'
+#     )
+    
+#     # Filter to only flights that can be submitted
+#     submittable = [f for f in flights if f.can_submit_to_flitelink]
+    
+#     submitted_count = 0
+    
+#     for flight in submittable:
+#         try:
+#             result = submit_flight_to_flitelink.delay(flight.id)
+#             if result:
+#                 submitted_count += 1
+#                 logger.info(f"✓ Auto-submitted flight {flight.flight_no}")
+#         except Exception as e:
+#             logger.error(f"Error auto-submitting flight {flight.id}: {e}")
+#             continue
+    
+#     logger.info(f"Auto-submitted {submitted_count} flights")
+#     return submitted_count
+
+
 @shared_task
 def auto_submit_recent_flights():
     """
     Automatically submit recently processed GD flights to Flitelink.
-    Runs periodically to catch new flights.
+    Includes NOT_SUBMITTED, FAILED, and stale PENDING flights.
     """
     from .models import JEPPESSENGDFlight
-    
+
     if not getattr(settings, 'FLITELINK_AUTO_SUBMIT', True):
         logger.info("Auto-submit disabled")
         return 0
-    
+
     logger.info("Checking for flights to auto-submit...")
-    
-    # Get flights processed in the last hour that haven't been submitted
+
     delay_minutes = getattr(settings, 'FLITELINK_SUBMIT_DELAY_MINUTES', 5)
     cutoff_time = timezone.now() - timedelta(minutes=delay_minutes)
-    
+
+    # Fetch flights that were processed recently, regardless of current submission status
     flights = JEPPESSENGDFlight.objects.filter(
         processed_at__gte=timezone.now() - timedelta(hours=1),
         processed_at__lte=cutoff_time,
-        flitelink_status='NOT_SUBMITTED'
+        flitelink_status__in=['NOT_SUBMITTED', 'FAILED', 'PENDING']
     )
-    
-    # Filter to only flights that can be submitted
-    submittable = [f for f in flights if f.can_submit_to_flitelink]
-    
+
+    submittable = []
+
+    for f in flights:
+        # Handle PENDING flights only if the submission is stale (older than 15 min)
+        if f.flitelink_status == 'PENDING':
+            if f.flitelink_submitted_at and \
+               (timezone.now() - f.flitelink_submitted_at).total_seconds() < 900:
+                # PENDING but not stale → skip
+                continue
+
+        # Reset status before resubmission
+        f.flitelink_status = 'NOT_SUBMITTED'
+        f.flitelink_error_message = None
+        f.save()
+
+        if f.can_submit_to_flitelink:
+            submittable.append(f)
+
     submitted_count = 0
-    
+
     for flight in submittable:
         try:
-            result = submit_flight_to_flitelink.delay(flight.id)
-            if result:
-                submitted_count += 1
-                logger.info(f"✓ Auto-submitted flight {flight.flight_no}")
+            submit_flight_to_flitelink.delay(flight.id)
+            submitted_count += 1
+            logger.info(f"✓ Auto-submitted flight {flight.flight_no}")
         except Exception as e:
             logger.error(f"Error auto-submitting flight {flight.id}: {e}")
             continue
-    
+
     logger.info(f"Auto-submitted {submitted_count} flights")
     return submitted_count
+
+
+
+# @shared_task
+# def retry_failed_submissions():
+#     """
+#     Retry failed Flitelink submissions (up to 3 times).
+#     Runs periodically to retry failures.
+#     """
+#     from .models import JEPPESSENGDFlight
+    
+#     logger.info("Checking for failed submissions to retry...")
+    
+#     max_retries = 3
+    
+#     # Get failed flights that haven't exceeded retry limit
+#     failed_flights = JEPPESSENGDFlight.objects.filter(
+#         flitelink_status='FAILED',
+#         flitelink_retry_count__lt=max_retries
+#     )
+    
+#     if not failed_flights.exists():
+#         logger.info("No failed submissions to retry")
+#         return 0
+    
+#     retried_count = 0
+    
+#     for flight in failed_flights:
+#         try:
+#             # Increment retry count
+#             flight.flitelink_retry_count += 1
+#             flight.flitelink_status = 'PENDING'
+#             flight.flitelink_error_message = None
+#             flight.save()
+            
+#             # Submit
+#             result = submit_flight_to_flitelink.delay(flight.id)
+#             if result:
+#                 retried_count += 1
+#                 logger.info(f"✓ Retried flight {flight.flight_no} (attempt {flight.flitelink_retry_count})")
+            
+#         except Exception as e:
+#             logger.error(f"Error retrying flight {flight.id}: {e}")
+#             continue
+    
+#     logger.info(f"Retried {retried_count} failed submissions")
+#     return retried_count
 
 
 @shared_task
 def retry_failed_submissions():
     """
-    Retry failed Flitelink submissions (up to 3 times).
-    Runs periodically to retry failures.
+    Retry FAILED submissions (up to 3 times).
+    Now resets FAILED flights back to NOT_SUBMITTED so they can be resubmitted.
     """
-    from .models import JEPPESSENGDFlight
-    
+    from .models import JEPPESSENGGDFlight
+
     logger.info("Checking for failed submissions to retry...")
-    
+
     max_retries = 3
-    
-    # Get failed flights that haven't exceeded retry limit
+
     failed_flights = JEPPESSENGDFlight.objects.filter(
         flitelink_status='FAILED',
         flitelink_retry_count__lt=max_retries
     )
-    
+
     if not failed_flights.exists():
         logger.info("No failed submissions to retry")
         return 0
-    
+
     retried_count = 0
-    
+
     for flight in failed_flights:
         try:
-            # Increment retry count
             flight.flitelink_retry_count += 1
-            flight.flitelink_status = 'PENDING'
+            flight.flitelink_status = 'NOT_SUBMITTED'
             flight.flitelink_error_message = None
             flight.save()
-            
-            # Submit
-            result = submit_flight_to_flitelink.delay(flight.id)
-            if result:
-                retried_count += 1
-                logger.info(f"✓ Retried flight {flight.flight_no} (attempt {flight.flitelink_retry_count})")
-            
+
+            submit_flight_to_flitelink.delay(flight.id)
+            retried_count += 1
+
+            logger.info(
+                f"✓ Retried flight {flight.flight_no} (attempt {flight.flitelink_retry_count})"
+            )
+
         except Exception as e:
             logger.error(f"Error retrying flight {flight.id}: {e}")
             continue
-    
+
     logger.info(f"Retried {retried_count} failed submissions")
     return retried_count
 
