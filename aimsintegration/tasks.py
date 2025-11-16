@@ -2058,6 +2058,10 @@ def delete_emails_by_subject_list(self):
 
 import time as time_module
 
+
+
+import time as time_module
+
 # @shared_task
 # def fetch_jeppessen_gd():
 #     """
@@ -2075,14 +2079,17 @@ import time as time_module
         
 #         account = get_exchange_account()
         
-#         # Get emails from last 7 days
+#         # Get emails from last 7 days - LIMITED TO 500 EMAILS
 #         from datetime import timedelta
 #         from django.utils import timezone
 #         cutoff_date = timezone.now() - timedelta(days=7)
         
-#         recent_emails = account.inbox.filter(
+#         # CRITICAL FIX: Limit to 500 most recent emails to prevent timeout
+#         recent_emails = list(account.inbox.filter(
 #             datetime_received__gte=cutoff_date
-#         ).order_by('-datetime_received')
+#         ).order_by('-datetime_received')[:500])  # ← LIMIT TO 500
+        
+#         logger.info(f"Retrieved {len(recent_emails)} recent emails to scan")
         
 #         # Look for GD emails with format: 212/BGF DLA/11112025
 #         gd_emails = []
@@ -2090,6 +2097,11 @@ import time as time_module
         
 #         for email in recent_emails:
 #             email_count += 1
+            
+#             # Progress indicator every 50 emails
+#             if email_count % 50 == 0:
+#                 logger.info(f"Scanned {email_count} emails so far...")
+            
 #             if email.subject:
 #                 # Match format: FLIGHT_NO/ORIGIN DEST/DDMMYYYY
 #                 if re.search(r'\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8}', email.subject):
@@ -2166,8 +2178,6 @@ import time as time_module
 #         return 0
 
 
-import time as time_module
-
 @shared_task
 def fetch_jeppessen_gd():
     """
@@ -2175,6 +2185,7 @@ def fetch_jeppessen_gd():
     Format: 212/BGF DLA/11112025
     
     IMPORTANT: Does NOT mark DOH emails as read (Qatar APIS needs them)
+    ✨ UPDATED: Processes emails from last 24 hours only
     """
     start_time = time_module.time()
     
@@ -2185,19 +2196,19 @@ def fetch_jeppessen_gd():
         
         account = get_exchange_account()
         
-        # Get emails from last 7 days - LIMITED TO 500 EMAILS
+        # ✅ CHANGED: Get emails from last 24 hours only (runs every 5 min)
         from datetime import timedelta
         from django.utils import timezone
-        cutoff_date = timezone.now() - timedelta(days=7)
+        cutoff_date = timezone.now() - timedelta(hours=24)  # ← Changed from 7 days
         
-        # CRITICAL FIX: Limit to 500 most recent emails to prevent timeout
+        # Still limit to 500 for safety
         recent_emails = list(account.inbox.filter(
             datetime_received__gte=cutoff_date
-        ).order_by('-datetime_received')[:500])  # ← LIMIT TO 500
+        ).order_by('-datetime_received')[:500])
         
-        logger.info(f"Retrieved {len(recent_emails)} recent emails to scan")
+        logger.info(f"Retrieved {len(recent_emails)} emails from last 24 hours")
         
-        # Look for GD emails with format: 212/BGF DLA/11112025
+        # ✅ IMPROVED: Better GD pattern matching
         gd_emails = []
         email_count = 0
         
@@ -2209,13 +2220,17 @@ def fetch_jeppessen_gd():
                 logger.info(f"Scanned {email_count} emails so far...")
             
             if email.subject:
-                # Match format: FLIGHT_NO/ORIGIN DEST/DDMMYYYY
-                if re.search(r'\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8}', email.subject):
+                # ✅ IMPROVED: More flexible pattern matching
+                # Matches: 212/BGF DLA/11112025 or 212/BGF  DLA/11112025 (extra spaces)
+                # Pattern: DIGITS/LETTERS LETTERS/DIGITS(8)
+                gd_pattern = r'\d{1,4}/[A-Z]{3}\s+[A-Z]{3}/\d{8}'
+                
+                if re.search(gd_pattern, email.subject):
                     if not email.is_read:
                         gd_emails.append(email)
-                        logger.info(f"Found GD email: {email.subject}")
+                        logger.info(f"✓ Found GD email: {email.subject}")
         
-        logger.info(f"Checked {email_count} emails, found {len(gd_emails)} unread GD emails")
+        logger.info(f"Scanned {email_count} emails, found {len(gd_emails)} unread GD emails")
         
         if not gd_emails:
             logger.info("No new GD emails to process")
@@ -2240,8 +2255,8 @@ def fetch_jeppessen_gd():
                         if isinstance(attachment, FileAttachment):
                             logger.info(f"Processing attachment: {attachment.name}")
                             
-                            # Extract GD identifier from subject
-                            gd_match = re.search(r'(\d+/[A-Z]{3}\s+[A-Z]{3}/\d{8})', email.subject)
+                            # ✅ IMPROVED: Extract GD identifier with flexible pattern
+                            gd_match = re.search(r'(\d{1,4}/[A-Z]{3}\s+[A-Z]{3}/\d{8})', email.subject)
                             gd_identifier = gd_match.group(1) if gd_match else email.subject
                             
                             result = process_jeppessen_gd_attachment(
@@ -2287,6 +2302,7 @@ def fetch_jeppessen_gd():
 #     """
 #     Process Jeppessen GD RTF attachment.
 #     Parses crew details from RTF, fetches emails from ERP, gets STD/STA from FlightData.
+#     ✨ NEW: Auto-submits to Flitelink after successful processing
 #     """
 #     from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
 #     from .utils import rtf_to_text
@@ -2411,7 +2427,7 @@ def fetch_jeppessen_gd():
 #             # Delete existing crew
 #             JEPPESSENGDCrew.objects.filter(gd_flight=gd_flight).delete()
             
-#             # ✅ FIXED: Create crew assignments WITHOUT overwriting position
+#             # Create crew assignments WITHOUT overwriting position
 #             for entry in crew_entries:
 #                 is_pic = (entry == pic_crew)
 #                 is_sic = (entry == sic_crew)
@@ -2433,10 +2449,10 @@ def fetch_jeppessen_gd():
 #                     crew_id=entry['crew_id'],
 #                     gd_flight=gd_flight,
 #                     flight=flight_record,
-#                     position=position,  # ✅ Original role
+#                     position=position,
 #                     role=entry.get('role'),
-#                     is_pic=is_pic,  # ✅ PIC flag
-#                     is_sic=is_sic,  # ✅ SIC flag
+#                     is_pic=is_pic,
+#                     is_sic=is_sic,
 #                     email=crew_email or '',
 #                     flight_no=flight_no,
 #                     flight_date=flight_date,
@@ -2470,6 +2486,42 @@ def fetch_jeppessen_gd():
 #         )
         
 #         logger.info(f"✅ Success in {duration:.2f}s - Emails: {emails_found}/{len(crew_entries)}")
+        
+#         # ============================================================================
+#         # AUTO-SUBMIT TO FLITELINK
+#         # ============================================================================
+#         if getattr(settings, 'FLITELINK_AUTO_SUBMIT', True):
+#             # Check if flight can be submitted
+#             if gd_flight.can_submit_to_flitelink:
+#                 logger.info(f"🚀 Queuing flight {gd_flight.flight_no} for Flitelink submission")
+#                 try:
+#                     # Queue for submission with 60-second delay
+#                     submit_flight_to_flitelink.apply_async(
+#                         args=[gd_flight.id],
+#                         countdown=60
+#                     )
+#                     logger.info(f"✓ Flight {gd_flight.flight_no} queued for Flitelink (will submit in 60s)")
+#                 except Exception as e:
+#                     logger.error(f"✗ Error queuing Flitelink submission: {e}", exc_info=True)
+#             else:
+#                 # Log why it can't be submitted
+#                 missing = []
+#                 if not gd_flight.origin_icao:
+#                     missing.append("origin_icao")
+#                 if not gd_flight.destination_icao:
+#                     missing.append("destination_icao")
+#                 if not gd_flight.std_utc:
+#                     missing.append("std_utc")
+#                 if not gd_flight.sta_utc:
+#                     missing.append("sta_utc")
+                
+#                 logger.warning(
+#                     f"⚠️  Flight {gd_flight.flight_no} NOT queued for Flitelink - "
+#                     f"Missing: {', '.join(missing)}"
+#                 )
+#         else:
+#             logger.info("ℹ️  Flitelink auto-submit is disabled")
+        
 #         return True
         
 #     except Exception as e:
@@ -2498,6 +2550,7 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
     Process Jeppessen GD RTF attachment.
     Parses crew details from RTF, fetches emails from ERP, gets STD/STA from FlightData.
     ✨ NEW: Auto-submits to Flitelink after successful processing
+    ✨ IMPROVED: Flexible pattern matching for flight numbers (1-4 digits)
     """
     from .models import JEPPESSENGDFlight, JEPPESSENGDCrew, JEPPESSENGDProcessingLog, JEPPESSENGDCrewDetail
     from .utils import rtf_to_text
@@ -2505,8 +2558,9 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
     start_time = time_module.time()
     
     try:
-        # Parse GD identifier: 212/BGF DLA/11112025
-        match = re.match(r'(\d+)/([A-Z]{3})\s+([A-Z]{3})/(\d{8})', gd_identifier)
+        # ✅ IMPROVED: Parse GD identifier with flexible flight number (1-4 digits)
+        # Matches: 1/ABC XYZ/01012025, 212/BGF DLA/11112025, 9999/KGL DOH/31122025
+        match = re.match(r'(\d{1,4})/([A-Z]{3})\s+([A-Z]{3})/(\d{8})', gd_identifier)
         
         if not match:
             logger.error(f"Could not parse GD identifier: {gd_identifier}")
@@ -2683,7 +2737,7 @@ def process_jeppessen_gd_attachment(attachment, email_subject, gd_identifier):
         logger.info(f"✅ Success in {duration:.2f}s - Emails: {emails_found}/{len(crew_entries)}")
         
         # ============================================================================
-        # AUTO-SUBMIT TO FLITELINK
+        # ✨ AUTO-SUBMIT TO FLITELINK
         # ============================================================================
         if getattr(settings, 'FLITELINK_AUTO_SUBMIT', True):
             # Check if flight can be submitted

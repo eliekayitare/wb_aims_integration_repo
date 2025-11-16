@@ -59,9 +59,7 @@ urlpatterns = [
     path('qatar-apis/details/<int:record_id>/', views.qatar_apis_details, name='qatar_apis_details'),
 
     # # Jeppessen General Declaration
-    # path('jeppessen/', views.jeppessen_dashboard, name='jeppessen_dashboard'),
-    # path('jeppessen/details/<int:flight_id>/', views.jeppessen_flight_details, name='jeppessen_flight_details'),
-
+  
     path('jeppessen/', views.jeppessen_dashboard, name='jeppessen_dashboard'),
     path('jeppessen/details/<int:flight_id>/', views.jeppessen_flight_details, name='jeppessen_flight_details'),
     
