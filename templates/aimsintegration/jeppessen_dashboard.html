@@ -725,7 +725,7 @@
   </div>
 </div>
 
-<script>
+{% comment %} <script>
   // Filter functionality
   document.getElementById('search-input').addEventListener('input', filterTable);
   document.getElementById('date-filter').addEventListener('change', filterTable);
@@ -1030,6 +1030,216 @@
 
   // Auto-refresh page every 60 seconds for live updates
   setTimeout(() => location.reload(), 60000);
-</script>
+</script> {% endcomment %}
+<script>
+  // ✅ CSRF Token Helper
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
 
+  const csrftoken = getCookie('csrftoken');
+
+  // Filter functionality
+  document.getElementById('search-input').addEventListener('input', filterTable);
+  document.getElementById('date-filter').addEventListener('change', filterTable);
+  document.getElementById('flitelink-filter').addEventListener('change', filterTable);
+  document.getElementById('days-filter').addEventListener('change', function() {
+    window.location.href = `?days=${this.value}`;
+  });
+
+  function filterTable() {
+    const searchValue = document.getElementById('search-input').value.toLowerCase();
+    const dateValue = document.getElementById('date-filter').value;
+    const flitelinkValue = document.getElementById('flitelink-filter').value;
+    
+    const rows = document.querySelectorAll('#flight-data tr');
+    
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      const dateMatch = !dateValue || row.cells[0].textContent === dateValue;
+      const searchMatch = !searchValue || text.includes(searchValue);
+      const flitelinkMatch = !flitelinkValue || row.getAttribute('data-flitelink-status') === flitelinkValue;
+      
+      row.style.display = (dateMatch && searchMatch && flitelinkMatch) ? '' : 'none';
+    });
+  }
+
+  // View details function
+  function viewDetails(flightId) {
+    fetch(`/aims/jeppessen/details/${flightId}/`)
+      .then(response => response.json())
+      .then(data => {
+        displayModalContent(data);
+        document.getElementById('crewModal').style.display = 'block';
+      })
+      .catch(error => {
+        console.error('Error fetching details:', error);
+        alert('Error loading crew details');
+      });
+  }
+
+  function displayModalContent(data) {
+    // ... your existing displayModalContent code stays the same ...
+  }
+
+  function closeModal() {
+    document.getElementById('crewModal').style.display = 'none';
+  }
+
+  // ✅ UPDATED: Submit flight with CSRF token
+  function submitFlight(flightId) {
+    if (!confirm('Submit this flight to Flitelink?')) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '⏳ Submitting... <span class="spinner"></span>';
+    
+    fetch(`/aims/jeppessen/flitelink/submit/${flightId}/`, { 
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrftoken,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '📤 Submit';
+        }
+      })
+      .catch(error => {
+        console.error('Fetch error:', error);
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '📤 Submit';
+      });
+  }
+
+  // ✅ UPDATED: Retry with CSRF token
+  function retryFlight(flightId) {
+    if (!confirm('Retry this failed submission?')) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '⏳ Retrying... <span class="spinner"></span>';
+    
+    fetch(`/aims/jeppessen/flitelink/retry/${flightId}/`, { 
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrftoken,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '↩️ Retry';
+        }
+      })
+      .catch(error => {
+        console.error('Fetch error:', error);
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '↩️ Retry';
+      });
+  }
+
+  // ✅ UPDATED: Refresh status with CSRF token
+  function refreshStatus(flightId) {
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '🔄 Checking... <span class="spinner"></span>';
+    
+    fetch(`/aims/jeppessen/flitelink/refresh/${flightId}/`, { 
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrftoken,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '🔄 Check';
+        }
+      })
+      .catch(error => {
+        console.error('Fetch error:', error);
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '🔄 Check';
+      });
+  }
+
+  // ✅ UPDATED: Bulk submit with CSRF token
+  function bulkSubmitFlights() {
+    if (!confirm('Submit all unsubmitted flights from the last 7 days?')) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '📤 Submitting... <span class="spinner"></span>';
+    
+    fetch('/aims/jeppessen/flitelink/bulk-submit/', { 
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrftoken,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert(data.message);
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+          button.disabled = false;
+          button.innerHTML = '📤 Bulk Submit to Flitelink';
+        }
+      })
+      .catch(error => {
+        console.error('Fetch error:', error);
+        alert('Error: ' + error);
+        button.disabled = false;
+        button.innerHTML = '📤 Bulk Submit to Flitelink';
+      });
+  }
+
+  // Close modal on outside click
+  window.onclick = function(event) {
+    const modal = document.getElementById('crewModal');
+    if (event.target === modal) {
+      modal.style.display = 'none';
+    }
+  }
+
+  // Auto-refresh page every 60 seconds for live updates
+  setTimeout(() => location.reload(), 60000);
+</script>
 {% endblock %}
