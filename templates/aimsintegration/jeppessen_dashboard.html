@@ -407,7 +407,7 @@
       <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
       <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
       <li><a href="{% url 'qatar_apis_dashboard' %}">Qatar APIS</a></li>
-      <li><a href="{% url 'jeppessen_dashboard' %}" class="active">General Declaration</a></li>
+      <li><a href="{% url 'jeppessen_dashboard' %}" class="active">Jeppessen Crew</a></li>
     </ul>
   </aside>
 
@@ -449,25 +449,26 @@
       </div>
       
       <!-- ✨ NEW: Flitelink Stats -->
-      <div class="summary-card flitelink-completed">
-        <p>Flitelink Completed</p>
-        <h3>{{ flitelink_completed }}</h3>
-        <p class="subtitle">Successfully synced</p>
+
+      <div class="summary-card">
+        <p>Not Submitted</p>
+        <h3>{{ flitelink_not_submitted }}</h3>
+        <p class="subtitle">Pending submission</p>
       </div>
       <div class="summary-card flitelink-queued">
         <p>Flitelink Queued</p>
         <h3>{{ flitelink_queued }}</h3>
         <p class="subtitle">In progress</p>
       </div>
+      <div class="summary-card flitelink-completed">
+        <p>Flitelink Completed</p>
+        <h3>{{ flitelink_completed }}</h3>
+        <p class="subtitle">Successfully synced</p>
+      </div>
       <div class="summary-card flitelink-failed">
         <p>Flitelink Failed</p>
         <h3>{{ flitelink_failed }}</h3>
         <p class="subtitle">Need attention</p>
-      </div>
-      <div class="summary-card">
-        <p>Not Submitted</p>
-        <h3>{{ flitelink_not_submitted }}</h3>
-        <p class="subtitle">Pending submission</p>
       </div>
       <div class="summary-card">
         <p>Flitelink Success</p>
