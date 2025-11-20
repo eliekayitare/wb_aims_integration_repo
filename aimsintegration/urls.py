@@ -69,4 +69,9 @@ urlpatterns = [
     path('jeppessen/flitelink/refresh/<int:flight_id>/', views.flitelink_refresh_status, name='flitelink_refresh_status'),
     path('jeppessen/flitelink/bulk-submit/', views.flitelink_bulk_submit, name='flitelink_bulk_submit'),
 
+    # Crew transportation urls
+
+    path('crew_transport_dashboard',views.crew_transportation_index,name='crew_transport_dashboard'),
+    path('upload_transport_file/',views.upload_transport_file,name='upload_transport_file'),
+
 ]

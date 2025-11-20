@@ -4428,3 +4428,534 @@ def flitelink_bulk_submit(request):
     except Exception as e:
         logger.error(f"Error in bulk submit: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
+    
+
+
+
+
+
+# =================================================================================
+
+# CREW TRANSPORTATION SYSTEM
+ 
+# ================================================================================== 
+"""
+Django views for Crew Pick-Up Report Processor
+"""
+
+from django.shortcuts import render
+from django.http import FileResponse, JsonResponse, HttpResponse
+from django.views.decorators.http import require_http_methods
+import os
+import tempfile
+from werkzeug.utils import secure_filename
+import pandas as pd
+import sys
+from datetime import datetime
+from lxml import etree
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+import re
+
+
+ALLOWED_EXTENSIONS = ['.xls', '.xlsx', '.xml', '.csv']
+MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
+
+
+class CrewReportProcessor:
+    def __init__(self, input_file, output_dir='outputs'):
+        """Initialize the processor with input file and output directory"""
+        self.input_file = input_file
+        self.output_dir = output_dir
+        
+        # Create output directory if it doesn't exist
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+        
+        # Position codes that indicate crew members (in priority order)
+        self.position_codes = ['CP', 'FO', 'FP', 'SA', 'FA', 'MX', 'CC', 'CA']
+        
+        # Position priority for sorting
+        self.position_priority = {pos: i for i, pos in enumerate(self.position_codes)}
+    
+    def parse_xml_excel(self, file_path):
+        """Parse XML-formatted Excel file"""
+        try:
+            # Read file content
+            with open(file_path, 'r', encoding='iso-8859-1') as f:
+                content = f.read()
+            
+            # Parse XML
+            parser = etree.XMLParser(encoding='iso-8859-1')
+            tree = etree.fromstring(content.encode('iso-8859-1'), parser=parser)
+            
+            # Extract all rows
+            rows = tree.xpath('//ss:Row', namespaces={'ss': 'urn:schemas-microsoft-com:office:spreadsheet'})
+            
+            data = []
+            for row in rows:
+                cells = row.xpath('.//ss:Data', namespaces={'ss': 'urn:schemas-microsoft-com:office:spreadsheet'})
+                row_data = []
+                
+                # Handle sparse data (Excel XML may skip empty cells)
+                current_index = 0
+                for cell_elem in row.xpath('.//ss:Cell', namespaces={'ss': 'urn:schemas-microsoft-com:office:spreadsheet'}):
+                    # Check if cell has an index attribute
+                    if '{urn:schemas-microsoft-com:office:spreadsheet}Index' in cell_elem.attrib:
+                        target_index = int(cell_elem.attrib['{urn:schemas-microsoft-com:office:spreadsheet}Index']) - 1
+                        # Fill empty cells up to target index
+                        while current_index < target_index:
+                            row_data.append('')
+                            current_index += 1
+                    
+                    # Get cell data
+                    data_elem = cell_elem.xpath('.//ss:Data', namespaces={'ss': 'urn:schemas-microsoft-com:office:spreadsheet'})
+                    if data_elem:
+                        row_data.append(data_elem[0].text.strip() if data_elem[0].text else '')
+                    else:
+                        row_data.append('')
+                    current_index += 1
+                
+                # Ensure we have at least 10 columns
+                while len(row_data) < 10:
+                    row_data.append('')
+                
+                data.append(row_data)
+            
+            return data
+            
+        except Exception as e:
+            print(f"Error parsing XML: {e}")
+            # Try reading as regular Excel
+            return self.parse_regular_excel(file_path)
+    
+    def parse_regular_excel(self, file_path):
+        """Parse regular Excel file using pandas"""
+        try:
+            # Try reading with pandas
+            df = pd.read_excel(file_path, header=None)
+            return df.values.tolist()
+        except Exception as e:
+            print(f"Error reading Excel: {e}")
+            return []
+    
+    def extract_date_from_data(self, data):
+        """Extract date from the data"""
+        for row in data:
+            for cell in row:
+                if isinstance(cell, str):
+                    # Look for date patterns DD/MM/YYYY
+                    date_match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', cell)
+                    if date_match:
+                        day = date_match.group(1).zfill(2)
+                        month = date_match.group(2).zfill(2)
+                        year = date_match.group(3)
+                        return f"{day}-{month}-{year}"
+        
+        # If no date found, use current date
+        return datetime.now().strftime("%d-%m-%Y")
+    
+    def find_header_row(self, data):
+        """Find the header row index"""
+        for i, row in enumerate(data):
+            # Check if this row contains expected headers
+            if any('DATE' in str(cell).upper() for cell in row[:2]):
+                return i
+            # Also check for 'Pos' column which is distinctive
+            if 'Pos' in row or 'POS' in [str(cell).upper() for cell in row]:
+                return i
+        return None
+    
+    def extract_flight_number(self, flight_details):
+        """Extract flight number from flight details string"""
+        if not flight_details:
+            return None
+        
+        # Extract flight number (e.g., WB601 from "WB601 dep 06:40")
+        match = re.match(r'([A-Z0-9]+)', flight_details.strip())
+        if match:
+            return match.group(1)
+        return None
+    
+    def process_data(self, data):
+        """Process the data according to specifications"""
+        # Find header row
+        header_idx = self.find_header_row(data)
+        if header_idx is None:
+            print("Warning: Could not find header row, using row 4")
+            header_idx = 4
+        
+        # Determine the column structure based on the number of columns
+        if len(data[header_idx]) >= 10:
+            # Original 10-column format
+            time_idx = 1
+            flight_idx = 4
+            pos_idx = 6
+            name_idx = 8
+        else:
+            # Already processed 4-column format
+            time_idx = 0
+            flight_idx = 1
+            pos_idx = 2
+            name_idx = 3
+        
+        # First, collect all crew data
+        crew_data = []
+        current_time = ''
+        current_flight_details = ''
+        current_flight_number = None
+        
+        for i in range(header_idx + 1, len(data)):
+            row = data[i]
+            
+            # Ensure row has enough columns
+            min_cols = 10 if len(data[header_idx]) >= 10 else 4
+            while len(row) < min_cols:
+                row.append('')
+            
+            # Get values
+            time = str(row[time_idx]).strip() if row[time_idx] and str(row[time_idx]).strip() != 'nan' else ''
+            flight_details = str(row[flight_idx]).strip() if row[flight_idx] and str(row[flight_idx]).strip() != 'nan' else ''
+            pos = str(row[pos_idx]).strip() if row[pos_idx] and str(row[pos_idx]).strip() != 'nan' else ''
+            name = str(row[name_idx]).strip() if row[name_idx] and str(row[name_idx]).strip() != 'nan' else ''
+            
+            # Skip duplicate header rows
+            if (time.lower() == 'time' or 
+                flight_details.lower() == 'flight details' or
+                pos.lower() == 'pos' or
+                name.lower() == 'name'):
+                continue
+            
+            # Update current time and flight if this row has them
+            if time and ':' in time:
+                current_time = time
+            if flight_details:
+                current_flight_details = flight_details
+                current_flight_number = self.extract_flight_number(flight_details)
+            
+            # Check if this row has position code
+            if pos in self.position_codes and name:
+                crew_data.append({
+                    'time': current_time,
+                    'flight_details': current_flight_details,
+                    'flight_number': current_flight_number,
+                    'pos': pos,
+                    'name': name,
+                    'position_priority': self.position_priority.get(pos, 999)
+                })
+        
+        # Group crew by flight number
+        flights_dict = {}
+        for crew in crew_data:
+            flight_num = crew['flight_number']
+            if flight_num:
+                if flight_num not in flights_dict:
+                    flights_dict[flight_num] = []
+                flights_dict[flight_num].append(crew)
+        
+        # Sort crew within each flight by position priority
+        for flight_num in flights_dict:
+            flights_dict[flight_num].sort(key=lambda x: x['position_priority'])
+        
+        # Build final data
+        processed_data = []
+        
+        # Add header row
+        processed_data.append(['Time', 'Flight Details', 'Pos', 'NAME'])
+        
+        # Add flights in order
+        flight_order = sorted(flights_dict.keys(), 
+                            key=lambda x: flights_dict[x][0]['time'] if flights_dict[x] else '')
+        
+        for i, flight_num in enumerate(flight_order):
+            crew_list = flights_dict[flight_num]
+            
+            # Add all crew for this flight
+            for crew in crew_list:
+                processed_data.append([
+                    crew['time'],
+                    crew['flight_details'],
+                    crew['pos'],
+                    crew['name']
+                ])
+            
+            # Add separator row between flights
+            if i < len(flight_order) - 1:
+                processed_data.append(['', '', '', ''])
+        
+        return processed_data
+    
+    def create_excel_report(self, data, report_date):
+        """Create formatted Excel report"""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Crew Report"
+        
+        # Define sky blue fill for colored rows
+        blue_fill = PatternFill(start_color="89cdff", end_color="89cdff", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # 1. Add colored empty row as FIRST row
+        ws.append(['', '', '', ''])
+        for cell in ws[1]:
+            cell.fill = blue_fill
+            cell.border = thin_border
+            cell.font = Font(name='Times New Roman', size=16)
+        
+        # 2. Add title in row 2
+        ws.merge_cells('A2:D2')
+        title_cell = ws['A2']
+        title_cell.value = f'Crew Pick-Up Report {report_date}'
+        title_cell.font = Font(name='Times New Roman', size=16, bold=True)
+        title_cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Process data to show Time and Flight Details only on first row of each flight
+        processed_rows = []
+        current_flight = None
+        last_was_separator = False
+        
+        for i, row_data in enumerate(data):
+            if i == 0:  # Header row
+                processed_rows.append(row_data)
+                last_was_separator = False
+                continue
+            
+            # Skip duplicate header rows
+            is_header = (str(row_data[0]).strip().lower() == 'time' and 
+                        str(row_data[1]).strip().lower() == 'flight details' and
+                        str(row_data[2]).strip().lower() == 'pos' and
+                        str(row_data[3]).strip().lower() == 'name')
+            if is_header:
+                continue
+            
+            # Check if this is a separator row
+            if all(not cell or str(cell).strip() == '' for cell in row_data):
+                if not last_was_separator:
+                    processed_rows.append(row_data)
+                    last_was_separator = True
+                current_flight = None
+                continue
+            
+            last_was_separator = False
+            
+            # Get flight details
+            time_val = str(row_data[0]).strip() if row_data[0] else ''
+            flight_val = str(row_data[1]).strip() if row_data[1] else ''
+            pos_val = str(row_data[2]).strip() if row_data[2] else ''
+            name_val = str(row_data[3]).strip() if row_data[3] else ''
+            
+            # Check if this is a new flight
+            if flight_val and flight_val != current_flight:
+                current_flight = flight_val
+                processed_rows.append([time_val, flight_val, pos_val, name_val])
+            else:
+                processed_rows.append(['', '', pos_val, name_val])
+        
+        # Add all processed rows to worksheet (starting from row 3)
+        for row_data in processed_rows:
+            ws.append(row_data)
+        
+        # 3. Format header row (row 3)
+        for cell in ws[3]:
+            cell.font = Font(name='Times New Roman', size=16, bold=True)
+            cell.fill = blue_fill
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+        
+        # 4. Format data rows
+        for row_idx, row in enumerate(ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=1, max_col=4), start=4):
+            is_separator = all(cell.value is None or str(cell.value).strip() == '' for cell in row)
+            
+            for col_idx, cell in enumerate(row, start=1):
+                if is_separator:
+                    cell.fill = blue_fill
+                    cell.border = thin_border
+                    cell.font = Font(name='Times New Roman', size=16)
+                else:
+                    cell.font = Font(name='Times New Roman', size=16)
+                    
+                    if col_idx == 1 and cell.value:
+                        cell.font = Font(name='Times New Roman', size=16, bold=True)
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    elif col_idx == 3:
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    cell.border = thin_border
+        
+        # 5. Add colored empty row after last data row
+        ws.append(['', '', '', ''])
+        colored_row = ws.max_row
+        for cell in ws[colored_row]:
+            cell.fill = blue_fill
+            cell.border = thin_border
+            cell.font = Font(name='Times New Roman', size=16)
+        
+        # 6. Add warning message
+        ws.append(['DUE TO OPERATIONAL REASONS THIS PICK-UP IS SUBJECT TO CHANGE!!!', '', '', ''])
+        warning_row = ws.max_row
+        ws.merge_cells(f'A{warning_row}:D{warning_row}')
+        warning_cell = ws[f'A{warning_row}']
+        warning_cell.font = Font(name='Times New Roman', size=16, bold=True)
+        warning_cell.alignment = Alignment(horizontal='center', vertical='center')
+        warning_cell.border = thin_border
+        
+        # 7. Add final colored empty row
+        ws.append(['', '', '', ''])
+        final_colored_row = ws.max_row
+        for cell in ws[final_colored_row]:
+            cell.fill = blue_fill
+            cell.border = thin_border
+            cell.font = Font(name='Times New Roman', size=16)
+        
+        # Set column widths
+        ws.column_dimensions['A'].width = 10
+        ws.column_dimensions['B'].width = 30
+        ws.column_dimensions['C'].width = 8
+        ws.column_dimensions['D'].width = 60
+        
+        # Generate filename
+        filename = f'Crew Pick-Up Report {report_date}.xlsx'
+        filepath = os.path.join(self.output_dir, filename)
+        
+        # Save file
+        wb.save(filepath)
+        
+        return filepath
+    
+    def process(self):
+        """Main processing function"""
+        print(f"Processing file: {self.input_file}")
+        
+        # Check if input file exists
+        if not os.path.exists(self.input_file):
+            raise FileNotFoundError(f"Input file not found: {self.input_file}")
+        
+        # Parse the input file
+        print("Parsing input file...")
+        if self.input_file.lower().endswith('.xls') or '<?xml' in open(self.input_file, 'r', encoding='iso-8859-1', errors='ignore').read(100):
+            data = self.parse_xml_excel(self.input_file)
+        else:
+            data = self.parse_regular_excel(self.input_file)
+        
+        if not data:
+            raise ValueError("No data found in input file")
+        
+        print(f"Found {len(data)} rows of data")
+        
+        # Extract date
+        report_date = self.extract_date_from_data(data)
+        print(f"Report date: {report_date}")
+        
+        # Process data
+        print("Processing data...")
+        processed_data = self.process_data(data)
+        print(f"Processed {len(processed_data)} rows")
+        
+        # Create Excel report
+        print("Creating Excel report...")
+        output_file = self.create_excel_report(processed_data, report_date)
+        
+        print(f"Report generated successfully: {output_file}")
+        return output_file
+
+
+def crew_transportation_index(request):
+    """Display the upload form"""
+    return render(request, 'aimsintegration/transportation_index.html')
+
+
+@require_http_methods(["POST"])
+def upload_transport_file(request):
+    """Handle file upload and processing"""
+    temp_input = None
+    temp_output_dir = None
+    
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'No file uploaded'}, status=400)
+        
+        file = request.FILES['file']
+        
+        # Check if file was selected
+        if not file.name:
+            return JsonResponse({'error': 'No file selected'}, status=400)
+        
+        # Check file size
+        if file.size > MAX_FILE_SIZE:
+            return JsonResponse({'error': 'File size exceeds 16MB limit'}, status=400)
+        
+        # Validate file extension
+        filename = secure_filename(file.name)
+        file_ext = os.path.splitext(filename)[1].lower()
+        if file_ext not in ALLOWED_EXTENSIONS:
+            return JsonResponse({
+                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }, status=400)
+        
+        # Save uploaded file to temp directory
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+            for chunk in file.chunks():
+                tmp_file.write(chunk)
+            temp_input = tmp_file.name
+        
+        # Create temp output directory
+        temp_output_dir = tempfile.mkdtemp()
+        
+        # Process the file
+        processor = CrewReportProcessor(temp_input, temp_output_dir)
+        output_file = processor.process()
+        
+        # Read the entire file into memory
+        with open(output_file, 'rb') as f:
+            file_content = f.read()
+        
+        # Create response with the file content
+        from django.http import HttpResponse
+        response = HttpResponse(
+            file_content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(output_file)}"'
+        
+        # Clean up temp files immediately (safe now that file is in memory)
+        try:
+            if temp_input and os.path.exists(temp_input):
+                os.unlink(temp_input)
+        except Exception as e:
+            print(f"Error cleaning up temp input: {e}")
+        
+        try:
+            import shutil
+            if temp_output_dir and os.path.exists(temp_output_dir):
+                shutil.rmtree(temp_output_dir)
+        except Exception as e:
+            print(f"Error cleaning up temp output: {e}")
+        
+        return response
+        
+    except Exception as e:
+        print(f"Upload error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Clean up on error
+        try:
+            if temp_input and os.path.exists(temp_input):
+                os.unlink(temp_input)
+        except Exception as e:
+            print(f"Error cleaning up temp input: {e}")
+        
+        try:
+            import shutil
+            if temp_output_dir and os.path.exists(temp_output_dir):
+                shutil.rmtree(temp_output_dir)
+        except Exception as e:
+            print(f"Error cleaning up temp output: {e}")
+        
+        return JsonResponse({'error': str(e)}, status=500)
