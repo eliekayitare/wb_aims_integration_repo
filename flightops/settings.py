@@ -172,7 +172,8 @@ DATABASES = {
         'PASSWORD': config('MSSQL_DB_PASSWORD'),
         'HOST': config('MSSQL_DB_HOST'),
         'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',  # Make sure you have this ODBC driver installed
+            'driver': 'ODBC Driver 18 for SQL Server',  # Make sure you have this ODBC driver installed
+            'extra_params': 'Encrypt=no;TrustServerCertificate=yes;',
         },
     },
 }
@@ -267,76 +268,76 @@ CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 # Celery Beat Schedule for periodic tasks
 CELERY_BEAT_SCHEDULE = {
     # Airport Data - Runs every 72 hours after initial run
-    'fetch-airport-data-every-72-hours': {
-        'task': 'aimsintegration.tasks.fetch_airport_data',
-        'schedule': crontab(minute='*/75'),  # Every 1 hour 15 minutes
-    },
-    # Flight Schedules - Runs every 10 minutes after initial run
-    'fetch-flight-schedules-every-10-minutes': {
-        'task': 'aimsintegration.tasks.fetch_flight_schedules',
-        'schedule': crontab(minute='*/10'),  # Every 10 minutes
+    # 'fetch-airport-data-every-72-hours': {
+    #     'task': 'aimsintegration.tasks.fetch_airport_data',
+    #     'schedule': crontab(minute='*/75'),  # Every 1 hour 15 minutes
+    # },
+    # # Flight Schedules - Runs every 10 minutes after initial run
+    # 'fetch-flight-schedules-every-10-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_flight_schedules',
+    #     'schedule': crontab(minute='*/10'),  # Every 10 minutes
         
-    },
-    # ACARS Messages - Runs every 3 minutes
-    'fetch-acars-messages-every-3-minutes': {
-        'task': 'aimsintegration.tasks.fetch_acars_messages',
-        'schedule': crontab(minute='*/3'),  # Every 3 minutes
-    }, 
+    # },
+    # # ACARS Messages - Runs every 3 minutes
+    # 'fetch-acars-messages-every-3-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_acars_messages',
+    #     'schedule': crontab(minute='*/3'),  # Every 3 minutes
+    # }, 
 
-    # CARGO Project - Runs every 1 hour 20 minutes
-    'fetch-cargo-data-every-1-hour': {
-        'task': 'aimsintegration.tasks.cargo_fetch_flight_schedules',
-        'schedule': crontab(minute='*/85'),  # Every 1 hour 25 minutes
-    },
+    # # CARGO Project - Runs every 1 hour 20 minutes
+    # 'fetch-cargo-data-every-1-hour': {
+    #     'task': 'aimsintegration.tasks.cargo_fetch_flight_schedules',
+    #     'schedule': crontab(minute='*/85'),  # Every 1 hour 25 minutes
+    # },
 
-    # CPAT Project -Runs every 1 hour 40 minutes
-    'fetch-cpat-data-every-hour': {
-        'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
-        'schedule': crontab(minute='*/100'),  # Every 1 hour 40 minutes
-    },
+    # # CPAT Project -Runs every 1 hour 40 minutes
+    # 'fetch-cpat-data-every-hour': {
+    #     'task': 'aimsintegration.tasks.fetch_and_store_completion_records',
+    #     'schedule': crontab(minute='*/100'),  # Every 1 hour 40 minutes
+    # },
 
-    # Send Notification for expired records - Runs every 1 hour
-    'notify-cpat-expiry-daily': {
-        'task': 'aimsintegration.tasks.send_cpat_expiry_notifications',
-        'schedule': crontab(hour=9, minute=0),  # runs daily at 09:00 Kigali time
-    },
+    # # Send Notification for expired records - Runs every 1 hour
+    # 'notify-cpat-expiry-daily': {
+    #     'task': 'aimsintegration.tasks.send_cpat_expiry_notifications',
+    #     'schedule': crontab(hour=9, minute=0),  # runs daily at 09:00 Kigali time
+    # },
 
-    #FDM Project - Runs every 1 hour
+    # #FDM Project - Runs every 1 hour
 
-     # Flight Schedules - Runs every 10 minutes after initial run
-    'fetch-fdm_flight-schedules-every-15-minutes': {
-        'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
-        'schedule': crontab(minute='*/15'),  # Every 15 minutes
-        'options': {'run_immediately': False}
-    },
+    #  # Flight Schedules - Runs every 10 minutes after initial run
+    # 'fetch-fdm_flight-schedules-every-15-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_fdm_flight_schedules',
+    #     'schedule': crontab(minute='*/15'),  # Every 15 minutes
+    #     'options': {'run_immediately': False}
+    # },
 
-    #Fetch Crew Data - Runs every 15 minutes
-    'fetch-crew-data-every-15-minutes': {
-        'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
-        'schedule': crontab(minute='*/16'),  # Every 16 minutes
-        'options': {'run_immediately': False}
-    },
+    # #Fetch Crew Data - Runs every 15 minutes
+    # 'fetch-crew-data-every-15-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_fdm_crew_data',
+    #     'schedule': crontab(minute='*/16'),  # Every 16 minutes
+    #     'options': {'run_immediately': False}
+    # },
 
-    # UPload FDM Data - runs every 1 hour
-    'upload-fdm-data-every-hour': {
-        'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
-        'schedule': crontab(minute='*/60'),  # Every 1 hour
-        'options': {'run_immediately': False}
+    # # UPload FDM Data - runs every 1 hour
+    # 'upload-fdm-data-every-hour': {
+    #     'task': 'aimsintegration.tasks.hourly_upload_csv_to_fdm',
+    #     'schedule': crontab(minute='*/60'),  # Every 1 hour
+    #     'options': {'run_immediately': False}
         
-    },
+    # },
 
-    # Feed Tableau - Runs every 5 minutes
-    'feed-tableau-every-5-minutes': {
-        'task': 'aimsintegration.tasks.fetch_tableau',
-        'schedule': crontab(minute='*/360'),  # Every 5 minutes
-    },
+    # # Feed Tableau - Runs every 5 minutes
+    # 'feed-tableau-every-5-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_tableau',
+    #     'schedule': crontab(minute='*/360'),  # Every 5 minutes
+    # },
 
-    # Delete old emails - Runs every 1 hour
+    # # Delete old emails - Runs every 1 hour
 
-    'delete-old-emails-every-hour': {
-        'task': 'aimsintegration.tasks.delete_old_emails',
-        'schedule': crontab(minute='*/2'),  # Every hour
-    },
+    # 'delete-old-emails-every-hour': {
+    #     'task': 'aimsintegration.tasks.delete_old_emails',
+    #     'schedule': crontab(minute='*/2'),  # Every hour
+    # },
 
     # # Only keep the campaign checker in CELERY_BEAT (the processing will self-schedule)
     # 'check-dreammiles-campaign-hourly': {
@@ -358,15 +359,15 @@ CELERY_BEAT_SCHEDULE = {
     # },
 
      # Job 97: fetch flight-crew assignments every 10 minutes
-    'fetch-job97-every-10-minutes': {
-        'task': 'aimsintegration.tasks.fetch_job97',
-        'schedule': crontab(minute='*/12'),
-    },
-    # Job 1008: fetch static crew details every 15 minutes
-    'fetch-job1008-every-15-minutes': {
-        'task': 'aimsintegration.tasks.fetch_job1008',
-        'schedule': crontab(minute='*/180'),
-    },
+    # 'fetch-job97-every-10-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_job97',
+    #     'schedule': crontab(minute='*/12'),
+    # },
+    # # Job 1008: fetch static crew details every 15 minutes
+    # 'fetch-job1008-every-15-minutes': {
+    #     'task': 'aimsintegration.tasks.fetch_job1008',
+    #     'schedule': crontab(minute='*/180'),
+    # },
 
 
      'delete-brave_old-emails-every-hour': {
@@ -377,32 +378,32 @@ CELERY_BEAT_SCHEDULE = {
     #JEPPESEN Integration
 
     # Jeppessen GD - Runs every 3 minutes
-    'fetch-jeppessen-gd-every-30-min': {
-        'task': 'aimsintegration.tasks.fetch_jeppessen_gd',
-        'schedule': crontab(minute='*/2'),
-    },
+    # 'fetch-jeppessen-gd-every-30-min': {
+    #     'task': 'aimsintegration.tasks.fetch_jeppessen_gd',
+    #     'schedule': crontab(minute='*/2'),
+    # },
 
     # ============================================================================
     # FLITELINK API SCHEDULES
     # ============================================================================
     
     # Auto-submit new flights every 10 minutes
-    'flitelink-auto-submit': {
-        'task': 'aimsintegration.tasks.auto_submit_recent_flights',
-        'schedule': crontab(minute='*/10'),
-    },
+    # 'flitelink-auto-submit': {
+    #     'task': 'aimsintegration.tasks.auto_submit_recent_flights',
+    #     'schedule': crontab(minute='*/10'),
+    # },
     
-    # Check status every 5 minutes
-    'flitelink-check-status': {
-        'task': 'aimsintegration.tasks.check_flitelink_status',
-        'schedule': crontab(minute='*/5'),
-    },
+    # # Check status every 5 minutes
+    # 'flitelink-check-status': {
+    #     'task': 'aimsintegration.tasks.check_flitelink_status',
+    #     'schedule': crontab(minute='*/5'),
+    # },
     
-    # Retry failed submissions every 30 minutes
-    'flitelink-retry-failed': {
-        'task': 'aimsintegration.tasks.retry_failed_submissions',
-        'schedule': crontab(minute='*/3'),
-    },
+    # # Retry failed submissions every 30 minutes
+    # 'flitelink-retry-failed': {
+    #     'task': 'aimsintegration.tasks.retry_failed_submissions',
+    #     'schedule': crontab(minute='*/3'),
+    # },
 
 
 }

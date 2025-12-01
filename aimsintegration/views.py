@@ -158,29 +158,23 @@ def todays_completion_records_view(request):
 
     if selected_date:
         try:
-            d  = datetime.strptime(selected_date, "%Y-%m-%d").date()
-            qs = qs.filter(completion_date=d)
+           d  = datetime.strptime(selected_date, "%Y-%m-%d").date()
+           qs = qs.filter(completion_date=d)
         except ValueError:
             qs = qs.none()
 
-    if query:
-        qs = (
-            qs.filter(employee_id__icontains=query) |
-            qs.filter(employee_email__icontains=query) |
-            qs.filter(course_code__icontains=query)
-        )
 
-    qs = qs.order_by("completion_date")
+    qs = qs.order_by("-completion_date")
 
     # 2) Paginate
     paginator   = Paginator(qs, 10)
     page_number = request.GET.get("page", 1)
     try:
-        page_obj = paginator.page(page_number)
+       page_obj = paginator.page(page_number)
     except PageNotAnInteger:
-        page_obj = paginator.page(1)
+       page_obj = paginator.page(1)
     except EmptyPage:
-        page_obj = paginator.page(paginator.num_pages)
+         page_obj = paginator.page(paginator.num_pages)
 
     # 3) AJAX → JSON for just this page
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
@@ -207,7 +201,6 @@ def todays_completion_records_view(request):
     for rec in page_obj:
         comp_str = rec.completion_date.strftime("%Y-%m-%d") if rec.completion_date else ""
         rec.expiry_date     = calculate_expiry_date(comp_str, rec.course_code)
-        rec.validity_period = VALIDITY_PERIODS.get(rec.course_code, "--")
         enriched.append(rec)
 
     display_pages = get_display_pages(page_obj, num_links=2)
@@ -221,7 +214,7 @@ def todays_completion_records_view(request):
         "selected_date": selected_date,
     })
 
-
+ 
 
 #FDM
 
