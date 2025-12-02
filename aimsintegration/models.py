@@ -878,6 +878,45 @@ class JEPPESSENGDProcessingLog(models.Model):
     
     def __str__(self):
         return f"GD Processing {self.status} at {self.processed_at} ({self.total_crew} crew)"
+
+# =============================================================================================
+
+# Crew Documents Backup/Archiving System
+
+# =============================================================================================
+class Backup(models.Model):
+    name = models.CharField(max_length=255)
+    backup_type = models.CharField(max_length=50, default="weekly")
+    backup_date = models.DateField(auto_now_add=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField(null=True, blank=True)
+    duration_minutes = models.FloatField(null=True, blank=True)
+    status = models.CharField(max_length=50, default="running")   # running, success, failed
+    message = models.TextField(blank=True)
+    backup_size = models.FloatField(null=True, blank=True)
     
+    class Meta:
+        db_table = 'backup'
+        ordering = ['-backup_date']
 
+    def __str__(self):
+        return f"{self.name} - {self.backup_date}"
 
+class CrewDocumentsArchive(models.Model):
+    #  wb _ number is a number
+    wb_number = models.IntegerField(unique=True)
+    crew_name = models.CharField(max_length=255)
+    date_of_leaving = models.DateField()
+    position = models.CharField(max_length=255)
+    archive_date = models.DateField()
+    archived = models.BooleanField(default=False)
+    archive_path = models.CharField(null=True, blank=True, max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'crew_documents_archive'
+        ordering = ['-date_of_leaving']
+
+    def __str__(self):
+        return f"{self.name} - {self.date_of_leaving}"

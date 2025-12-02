@@ -1,0 +1,15 @@
+# Exclude backup files from Docker build
+media/crew_documents/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.sqlite3
+*.db
+.git/
+.gitignore
+.env
+.venv/
+venv/
+*.log
+.DS_Store
