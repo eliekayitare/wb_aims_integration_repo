@@ -3265,12 +3265,9 @@ def send_backup_complete_email(backup, type, size):
             ),
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
-                'eric.turatsinze@rwandair.com',
-                # 'saif.zawahreh@rwandair.com',
-                # 'training&records@rwandair.com',
-                # settings.FIRST_EMAIL_RECEIVER,
-                # settings.SECOND_EMAIL_RECEIVER,
-                # settings.THIRD_EMAIL_RECEIVER,
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
+                settings.FIFTH_EMAIL_RECEIVER,
             ],
             fail_silently=False,
         )
@@ -3304,12 +3301,9 @@ def send_backup_failed_email(backup, type):
             ),
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
-                'eric.turatsinze@rwandair.com',
-                # 'saif.zawahreh@rwandair.com',
-                # 'training&records@rwandair.com',
-                # settings.FIRST_EMAIL_RECEIVER,
-                # settings.SECOND_EMAIL_RECEIVER,
-                # settings.THIRD_EMAIL_RECEIVER,
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
+                settings.FIFTH_EMAIL_RECEIVER,
             ],
             fail_silently=False,
         )
@@ -3549,12 +3543,9 @@ def send_archive_complete_email(archive):
             body=text_content,
             from_email=settings.EMAIL_HOST_USER,
             to=[
-                'eric.turatsinze@rwandair.com',
-                # 'saif.zawahreh@rwandair.com',
-                # 'training&records@rwandair.com',
-                # settings.FIRST_EMAIL_RECEIVER,
-                # settings.SECOND_EMAIL_RECEIVER,
-                # settings.THIRD_EMAIL_RECEIVER,
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
+                settings.FIFTH_EMAIL_RECEIVER,
             ]
         )
         

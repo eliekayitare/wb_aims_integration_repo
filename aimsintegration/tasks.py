@@ -2674,10 +2674,10 @@ def download_crew_documents_from_aims(folder):
 
     backup_id = backup.id
 
-    aims_host = settings.AIMS_SERVER_ADDRESS
+    aims_host = settings.AIMS_SERVER_ADDRESS_DOCS
     aims_port = int(settings.AIMS_PORT)
-    aims_username = settings.AIMS_SERVER_USER
-    aims_password = settings.AIMS_SERVER_PASSWORD
+    aims_username = settings.AIMS_SERVER_USER_DOCS
+    aims_password = settings.AIMS_SERVER_PASSWORD_DOCS
     local_destination_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, folder, backup_name)
     remote_folder_path = settings.AIMS_SERVER_CREW_DOCUMENTS_PATH
 
