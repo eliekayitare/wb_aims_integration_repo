@@ -18,10 +18,10 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks(['aimsintegration'])  # Add other app names in this list if needed
 
 # Initial tasks to run once at startup
-# @app.on_after_configure.connect
-# def setup_initial_tasks(sender, **kwargs):
-#     # Run fetch_airport_data first; it will trigger fetch_flight_schedules automatically
-#     sender.send_task('aimsintegration.tasks.fetch_airport_data')
+@app.on_after_configure.connect
+def setup_initial_tasks(sender, **kwargs):
+    # Run fetch_airport_data first; it will trigger fetch_flight_schedules automatically
+    sender.send_task('aimsintegration.tasks.fetch_airport_data')
 
 @app.task(bind=True)
 def debug_task(self):
