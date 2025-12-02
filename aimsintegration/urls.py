@@ -10,6 +10,14 @@ urlpatterns = [
     #FDM Project
     path('fdm_dashboard/', views.fdm_dashboard_view, name='fdm_dashboard'),
     path('get_crew_details/', views.get_crew_details, name='get_crew_details'),
+    path('backup/', views.backup_view, name='backup'),
+    path('backup/<str:folder_name>/', views.backup_folder_view, name='backup_folder_view'),
+    path('preview/<path:file_path>/', views.preview_file, name='preview_file'),
+    path('download-zip/<path:folder_name>/', views.download_folder_zip, name='download_folder_zip'),
+    path('archive-crew/<path:wb_number>/', views.archive_crew_documents_by_wb, name='archive_crew_folder'),
+    path('archive/', views.archive_view, name='archive'),
+    path('archives/', views.archive_folder_view, name='archives'),
+    path('archives/<str:folder_name>/', views.archive_single_folder_view, name='archive_single_folder_view'),
 
     
     # Crew Allowance project URLs

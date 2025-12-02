@@ -1,0 +1,573 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+<style>
+  /* Modal styling */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding-top: 30px;
+    transition: opacity 0.3s ease;
+  }
+  .modal-content {
+    background-color: #fff;
+    margin: auto;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 50vw;
+    position: relative;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    max-height: 80%;
+    min-height: 70vh;
+    overflow: hidden;
+  }
+  .modal-header {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+    position: relative;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+    text-align: center;
+  }
+  .modal-body {
+    font-size: 16px;
+    color: #555;
+    overflow-y: auto;
+    max-height: calc(100% - 50px);
+    padding: 10px 0;
+  }
+  .close {
+    color: #aaa;
+    font-size: 30px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+  }
+  .close:hover,
+  .close:focus {
+    color: #000;
+    text-decoration: none;
+  }
+
+  /* Add this to your existing CSS */
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.modal-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 5px;
+  transition: all 0.3s ease;
+  min-width: 140px;
+}
+
+.email-btn {
+  background-color: #28a745 !important;
+}
+
+.email-btn:hover {
+  background-color: #218838 !important;
+}
+
+.modal-btn:disabled {
+  background-color: #6c757d !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Loading state for buttons */
+.modal-btn.loading {
+  position: relative;
+  color: transparent !important;
+}
+
+.modal-btn.loading::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-left: -8px;
+  margin-top: -8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 1s linear infinite;
+}
+
+  
+.search-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px 0px 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    color: #333;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.search-input::placeholder {
+    color: #c4c4c4;
+}
+
+.search-input:focus {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.search-icon {
+    position: absolute;
+    right: 0px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.search-icon:hover {
+    opacity: 0.7;
+}
+
+.search-icon svg {
+    width: 100%;
+    height: 100%;
+}
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  .modal-content {
+    background-color: #fefefe;
+    margin: 3% auto;
+    padding: 0;
+    border: 1px solid #888;
+    width: 90%;
+    max-width: 1200px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    animation: slideDown 0.3s;
+  }
+  
+  @keyframes slideDown {
+    from {
+      transform: translateY(-50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .icon {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    filter: grayscale(1) brightness(2); /* grey by default */
+    transition: 0.2s ease;
+    margin: 0px 4px;
+  }
+
+  .icon.active {
+    filter: none; /* remove greyscale */
+  }
+
+  .folders.grid-view {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    height: 60vh;
+    padding: 40px 20px;
+    margin-top: 20px;
+    border-radius: 10px;
+    background: white;
+    overflow-y: auto;
+  }
+
+  .folders.grid-view .folder {
+    padding: 15px 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+    margin: 10px;
+    cursor: pointer;
+    border: 1px solid #f7f7f7;
+    cursor: pointer;
+    height: min-content;
+    width: 9rem;
+    overflow: hidden;
+  }
+
+  .folders.grid-view .folder-icon {
+    height: 60px;
+    width: 60px;
+  }
+
+  .folders.grid-view .file-name{
+    display: block;
+    font-size: 13px;
+    white-space: nowrap;        /* Prevent text from wrapping to multiple lines */
+    overflow: hidden;           /* Hide overflowed text */
+    text-overflow: ellipsis;
+    margin: 5px 0px;
+  }
+
+  .folders.grid-view .file-date{
+    color:#9f9f9f;
+    font-size: 12px;
+    margin-left: 10px;
+  }
+
+  .folders.list-view {
+    display: flex;
+    flex-direction: column;
+    padding-top: 8px;
+    margin-top: 20px;
+    background: white;
+    overflow-y: auto;
+    height: 60vh;
+  }
+  
+  .folders.list-view .folder {
+    display: flex;
+    align-items: center;
+    justify-content: start;
+    padding: 6px 100px 6px 10px;
+    align-items: center;
+    cursor: pointer;
+    border-bottom: 1px solid #e9e9e9;
+  }
+
+  .folders.list-view .folder-icon {
+    height: 20px;
+    width: 15px;
+    margin: 0px 10px 0px 5px;
+  }
+  .folders.list-view .file-name{
+    flex-grow: 1;
+    max-height: fit-content;
+    padding: 2px 0px;
+  }
+
+  .folders.list-view .file-date{
+    padding-left: 50px;
+    color:#9f9f9f;
+    font-size: 12px;
+    margin-left: 10px;
+  }
+
+  .download-btn {
+    background: white;
+    border: 1px solid #c4c4c4;
+    border-radius: 10px;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <ul>
+      <li><a href="{% url 'dashboard' %}">ACARS</a></li>
+      <li><a href="{% url 'cpat_completion_records' %}">CPAT</a></li>
+      <li><a href="{% url 'fdm_dashboard' %}">FDM</a></li>
+      <li><a href="{% url 'crew_allowance_list' %}">WB-CAS</a></li>
+      <li><a href="https://10ay.online.tableau.com/#/site/rwandairanalytics/views/On-TimePerformance/ExecutiveSummary?:iid=3" target="_blank">OTP</a></li>
+      <li><a href="{% url 'qatar_apis_dashboard' %}" class="active">Qatar APIS</a></li>
+      <li><a href="{% url 'jeppessen_dashboard' %}" class="active">Jeppessen Crew</a></li>
+      <li><a href="{% url 'backup' %}" class="active">Crew Docs Backup</a></li>
+      <li><a href="{% url 'archive' %}" class="active">Crew Docs Archive</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div style="margin: 10px 0px -2px 0px; display: flex; align-items: center; justify-content: space-between;">
+        <h1 style="font-size: large; color: #464255;">Crew Document Archive</h1>
+      <div style="display: flex; align-items: center; border-radius: 10px; width: 350px;">
+        <div style="width: 100%; margin-right: 30px; height: 35px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+           {% include 'components/search_input.html' with input_id="backupSearch" handler_function="searchBackupFiles()" value=q placeholder="Search files..." %}
+         </div>
+        <img src="{% static 'icons/rows.svg' %}" alt="List View" id="list-view" class="icon list-icon active">
+        <img src="{% static 'icons/grid.svg' %}" alt="Grid View" id="grid-view"  class="icon grid-icon">
+      </div>
+    </div>
+    <div id="folders" class="folders grid-view">
+      {% for file in files %}
+        <div class="folder" onclick="openFolder('{{file.name}}')" >
+          <img src="{% static 'images/' %}{{ file.extension }}.png" alt="Folder Icon" class="folder-icon">
+          <span class="file-name">{{ file.name }}</span>
+          <div class="flex align-items: center; justify-content: space-between;">
+            <span class="file-size" style="color:#9f9f9f; font-size: 11px; margin-right: 10px;">{{ file.size }}</span>
+            <span class="file-date">{{ file.date }}</span>
+          </div>
+        </div>
+      {% empty %}
+      <div style="border-radius: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 60vh;">
+        <img style="width: 140px; height: 150px;" src="{% static 'images/blank.png' %}" alt="Empty" >
+        <p>Empty Folder</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal for File Preview -->
+<div id="filePreviewModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Document Title</h2>
+      <span class="close" onclick="closeModal()">&times;</span>
+    </div>
+    <div class="modal-body" id="modal-body-content">
+      <!-- Content will be loaded dynamically -->
+    </div>
+  </div>
+</div>
+
+<script>
+
+  function openFolder(folder_name) {
+    window.location.href = `/aims/archives/${folder_name}/`;
+  }
+  // document.getElementById('search-input').addEventListener('input', searchBackupFiles);
+  const listBtn = document.getElementById("list-view");
+
+  document.addEventListener("DOMContentLoaded", function () {
+  const gridBtn = document.getElementById("grid-view");
+  const listBtn = document.getElementById("list-view");
+  const folderContainer = document.getElementById("folders");
+
+  gridBtn.addEventListener("click", () => {
+    folderContainer.classList.remove("list-view");
+    folderContainer.classList.add("grid-view");
+    gridBtn.classList.add("active");
+    listBtn.classList.remove("active");
+  });
+
+  listBtn.addEventListener("click", () => {
+    folderContainer.classList.remove("grid-view");
+    folderContainer.classList.add("list-view");
+    listBtn.classList.add("active");
+    gridBtn.classList.remove("active");
+  });
+});
+
+  document.querySelectorAll('.icon').forEach(icon => {
+  icon.addEventListener('click', () => {
+    document.querySelectorAll('.icon').forEach(i => i.classList.remove('active'));
+    icon.classList.add('active');
+    });
+  });
+
+  function searchBackupFiles() {
+    const searchInput = document.getElementById('backupSearch');
+    const searchQuery = searchInput.value.toLowerCase();
+    console.log(" search query =="+searchQuery);
+
+    const url = new URL(window.location);
+    if(searchQuery ) {
+      url.searchParams.set("q", searchQuery);
+    } else {
+      url.searchParams.delete("q");
+    }
+    window.location.replace(url);
+  }
+
+  async function downloadBackupFiles(files) {
+    // Get the backup type from the current page
+    const backupType = "{{ backup_type }}";
+    const folderName = "{{ folder_name }}";
+
+    // get the search query from the URL
+    const url = new URL(window.location);
+    const searchQuery = url.searchParams.get("q");
+    
+    // Construct the download URL
+    const downloadUrl = `/aims/download-zip/${folderName}/?type=${backupType}${searchQuery ? `&q=${searchQuery}` : ''}`;
+    
+    console.log("download url =", downloadUrl);
+    // Create a temporary anchor element and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = ''; // This will use the filename from Content-Disposition header
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  async function archiveCrewDocuments() {
+    try {
+      const url = new URL(window.location);
+      const searchQuery = url.searchParams.get("q");
+            const response = await fetch(`/aims/archive-crew/${searchQuery}/`, {
+                method: "GET",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                }
+            });
+
+            if (!response.ok) {
+              console.log("response  " , response);
+                alert("Failed to archive files");
+                return;
+            }
+
+            const data = await response.json();
+
+            console.log("Archived:", data);
+            alert(`Archived ${data.count} files for ${wbNumber}`);
+
+        } catch (error) {
+            console.error(error);
+            alert("Network or server error occurred.");
+        }
+  }
+
+  function openFile(folder_name, fileName, extension, backup_type, filePath) {
+    if(extension == "folder") {
+      window.location.href = `/aims/backup/${folder_name}/?type=${backup_type}`;
+    } else {
+      console.log("Pathhhhh ", filePath);
+      // window.open(filePath, "_blank");
+    //   const modal = document.getElementById("filePreviewModal");
+    // const modalBody = document.getElementById("modal-body-content");
+    // const modalTitle = document.querySelector(".modal-header h2");
+    
+    // // Set the title
+    // modalTitle.textContent = fileName;
+    // // Clear previous content
+    // modalBody.innerHTML = '<div class="loader">Loading preview...</div>';
+    
+    // // Show modal
+    // modal.style.display = "block";
+
+    
+    // console.log("Pathhhhh ", filePath);
+    // // Handle different file types
+    // if (extension === 'pdf') {
+    //     previewPDF('/media/crew_documents/monthly/18NOV2025/CA CRJ Training/857_CRJ-compressed.pdf', modalBody);
+    // } else if (['doc', 'docx'].includes(extension)) {
+    //     previewWord(filePath, modalBody, fileName);
+    // } else if (['xls', 'xlsx'].includes(extension)) {
+    //     previewExcel(filePath, modalBody, fileName);
+    // } else if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
+    //     previewImage(filePath, modalBody);
+    // } else {
+    //     modalBody.innerHTML = `
+    //         <div class="preview-unavailable">
+    //             <p>Preview not available for this file type.</p>
+    //             <a href="${filePath}" download="${fileName}" class="download-btn">
+    //                 Download File
+    //             </a>
+    //         </div>
+    //     `;
+    // }
+    }
+  }
+
+    function previewPDF(filePath, container) {
+      container.innerHTML = `
+          <iframe 
+              src="${filePath}" 
+              style="width: 80%; height: 30vh; border: none; background: cyan; overflow-y: scroll;"
+              type="application/pdf">
+          </iframe>
+          <p style="text-align: center; margin-top: 10px;">
+              <a href="${filePath}" download>Download PDF</a>
+          </p>
+      `;
+  }
+
+  function previewWord(filePath, container, fileName) {
+      // Option 1: Use Microsoft Office Online Viewer
+      const officeUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(filePath)}`;
+      
+      container.innerHTML = `
+          <iframe 
+              src="${officeUrl}" 
+              style="width: 100%; height: 70vh; border: none;">
+          </iframe>
+          <p style="text-align: center; margin-top: 10px;">
+              <a href="${filePath}" download="${fileName}">Download Word Document</a>
+          </p>
+      `;
+      
+      // Option 2: Use Google Docs Viewer (alternative)
+      // const googleUrl = `https://docs.google.com/gview?url=${encodeURIComponent(filePath)}&embedded=true`;
+  }
+
+  function previewExcel(filePath, container, fileName) {
+      // Use Microsoft Office Online Viewer
+      const officeUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(filePath)}`;
+      
+      container.innerHTML = `
+          <iframe 
+              src="${officeUrl}" 
+              style="width: 100%; height: 70vh; border: none;">
+          </iframe>
+          <p style="text-align: center; margin-top: 10px;">
+              <a href="${filePath}" download="${fileName}">Download Excel File</a>
+          </p>
+      `;
+  }
+
+  function previewImage(filePath, container) {
+      container.innerHTML = `
+          <img 
+              src="${filePath}" 
+              style="max-width: 100%; height: auto; display: block; margin: 0 auto;"
+              alt="Image preview">
+      `;
+  }
+
+  function closeModal() {
+    document.getElementById('filePreviewModal').style.display = 'none';
+  }
+
+  
+
+  // Close modal when clicking outside
+  window.onclick = function(event) {
+    const modal = document.getElementById('filePreviewModal');
+    if (event.target === modal) {
+      modal.style.display = 'none';
+    }
+  }
+</script>
+
+{% endblock %}

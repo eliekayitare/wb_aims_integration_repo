@@ -125,6 +125,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'aimsintegration.middleware.ErrorHandlingMiddleware',
+    'aimsintegration.middleware.MediaFileMiddleware',
 ]
 
 ROOT_URLCONF = 'flightops.urls'
@@ -239,6 +240,8 @@ AIMS_SERVER_ADDRESS = config('AIMS_SERVER_ADDRESS')
 AIMS_SERVER_USER= config('AIMS_SERVER_USER')
 AIMS_SERVER_PASSWORD= config('AIMS_SERVER_PASSWORD')
 AIMS_SERVER_DESTINATION_PATH= config('AIMS_SERVER_DESTINATION_PATH')
+AIMS_SERVER_CREW_DOCUMENTS_PATH = config('AIMS_SERVER_CREW_DOCUMENTS_PATH')
+BACKUP_CREW_DOCUMENTS_PATH = os.path.join(BASE_DIR, config('BACKUP_CREW_DOCUMENTS_PATH'))
 AIMS_PORT= config('AIMS_PORT')
 
 
@@ -404,6 +407,26 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/3'),
     },
 
+    # ============================================================================
+    # CREW DOCUMENT SCHEDULES
+    # ============================================================================
+
+    # Crew Documents Backup - Runs every 1:30 hours
+    'backup-crew-documents-every-month': {
+        'task': 'aimsintegration.tasks.monthly_crew_documents_backup_task',
+        'schedule': crontab(hour=12, minute=10),  # Every 90 minutes,
+        # 'schedule': crontab(hour=3, minute=22),
+        # 'options': {'run_immediately': True}
+    },
+
+    # Crew Documents Backup - Runs every 1:30 hours
+    'backup-crew-documents-every-week': {
+        'task': 'aimsintegration.tasks.weekly_crew_documents_backup_task',
+        # 'schedule': crontab(minute='*/5'),  # Every 90 minutes,
+        'schedule': crontab(day_of_week=6, hour=22, minute=10),
+        # 'options': {'run_immediately': True}
+    },
+
 
 }
 
@@ -452,6 +475,10 @@ STATICFILES_FINDERS = [
 # Directory where static files are stored for the project
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# X_FRAME_OPTIONS = 'ALLOWALL'
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+
 
 # In your settings.py, add:
 DATA_DIR = os.path.join(BASE_DIR, 'data')

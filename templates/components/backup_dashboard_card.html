@@ -1,0 +1,15 @@
+{% load static %}
+
+<div class="dashboard-card">
+  <img
+    src="{% static 'images/' %}{{ icon }}"
+    alt="{{ title }}"
+    style="width: 70px; height: 70px;"
+  />
+  <div style="margin-left: 20px;">
+    <span style="display: block; font-weight: bold; font-size: 22px; margin-bottom: 10px; color: #464255; text-align: left;">
+      {{ value }}
+    </span>
+    <span style="color: #464255;">{{ title }}</span>
+  </div>
+</div>
