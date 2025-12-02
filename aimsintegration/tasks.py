@@ -2695,7 +2695,7 @@ def download_crew_documents_from_aims(folder):
 
             if stat.S_ISDIR(item.st_mode):
                 # Recurse into subdirectory
-                _recursive_download(sftp, remote_item, local_item)
+                _recursive_download(sftp, remote_item, local_item, check_file_already_exist)
             else:
                 # Check if file already exists
                 if check_file_already_exist and os.path.exists(local_item):
