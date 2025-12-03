@@ -435,14 +435,14 @@ CELERY_BEAT_SCHEDULE = {
     'backup-crew-documents-every-month': {
         'task': 'aimsintegration.tasks.fetch_crew_who_left',
         # 'schedule': crontab(day_of_month='1', hour=0, minute=10),  # Every 90 minutes,
-        'schedule': crontab(hour=6, minute=50),
+        'schedule': crontab(hour=9, minute=00),
         # 'options': {'run_immediately': True}
     },
 
     # Archive Crew Documents for crew That left WB 24 months ago, runs every day
     'backup-crew-documents-every-month': {
         'task': 'aimsintegration.tasks.archive_crew_who_left',
-        'schedule': crontab(hour=6, minute=53),
+        'schedule': crontab(hour=9, minute=00),
         # 'options': {'run_immediately': True}
     },
 

@@ -173,7 +173,7 @@ def todays_completion_records_view(request):
             qs.filter(course_code__icontains=query)
         )
 
-    qs = qs.order_by("completion_date")
+    qs = qs.order_by("-completion_date")
 
     # 2) Paginate
     paginator   = Paginator(qs, 10)
