@@ -2803,7 +2803,7 @@ def fetch_crew_who_left():
             cursor.execute(query)
             rows = cursor.fetchall()
 
-        logger.info("Fetching all")
+        logger.info("================= Fetching all =========================")
 
         for no_, first_name, last_name, job_title, date_of_leaving in rows:
             CrewDocumentsArchive.objects.create(
@@ -2815,7 +2815,7 @@ def fetch_crew_who_left():
                 archive_date=date_of_leaving + relativedelta(months=24),
             )
 
-        logger.info("Done Fetching all")
+        logger.info("================ Done Fetching all =========================")
     # If There are records in the database, fetch all crew who are not in the database
     else:
         wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
@@ -2828,6 +2828,7 @@ def fetch_crew_who_left():
         with connections['mssql'].cursor() as cursor:
             cursor.execute(query, wb_formatted_ids)
             rows = cursor.fetchall()
+        logger.info("================= 2  Fetching new crew who left =========================")
 
         for no_, first_name, last_name, job_title, date_of_leaving in rows:
             CrewDocumentsArchive.objects.create(
@@ -2838,6 +2839,7 @@ def fetch_crew_who_left():
                 archive_path=f"{int(no_[2:])}",
                 archive_date=(date_of_leaving + relativedelta(months=24)).strftime('%Y-%m-%d'),
             )
+        logger.info("================ 2 Done Fetching new crew who left =========================")
 
 from .utils import archive_crew_documents_by_wb, send_archive_complete_email
 import json
@@ -2848,7 +2850,7 @@ def archive_crew_who_left():
     # 0) Get crew who left and the archive date is before today
     crew_who_left_earlier = CrewDocumentsArchive.objects.filter(archive_date__lt=timezone.now().date(), archived=False).all()
     count = 1
-    logger.info("Crew who left earlier: %d", len(crew_who_left_earlier))
+    logger.info("================================== Crew who left earlier: %d ==================================", len(crew_who_left_earlier))
     for crew in crew_who_left_earlier:
         response = archive_crew_documents_by_wb(f"{int(crew.wb_number):04d}", wrapper_folder="Initial")
         data = json.loads(response.content)
