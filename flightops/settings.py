@@ -418,7 +418,7 @@ CELERY_BEAT_SCHEDULE = {
     # Crew Documents Backup - Runs every 1:30 hours
     'backup-crew-documents-every-month': {
         'task': 'aimsintegration.tasks.monthly_crew_documents_backup_task',
-        'schedule': crontab(hour=22, minute=19),  # Every 90 minutes,
+        'schedule': crontab(day_of_month='1', hour=0, minute=10),  # Every 90 minutes,
         # 'schedule': crontab(hour=3, minute=22),
         # 'options': {'run_immediately': True}
     },
@@ -428,6 +428,21 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'aimsintegration.tasks.weekly_crew_documents_backup_task',
         # 'schedule': crontab(minute='*/5'),  # Every 90 minutes,
         'schedule': crontab(day_of_week=6, hour=22, minute=10),
+        # 'options': {'run_immediately': True}
+    },
+
+    # Get Crew That left WB, runs every month
+    'backup-crew-documents-every-month': {
+        'task': 'aimsintegration.tasks.fetch_crew_who_left',
+        # 'schedule': crontab(day_of_month='1', hour=0, minute=10),  # Every 90 minutes,
+        'schedule': crontab(hour=6, minute=37),
+        # 'options': {'run_immediately': True}
+    },
+
+    # Archive Crew Documents for crew That left WB 24 months ago, runs every day
+    'backup-crew-documents-every-month': {
+        'task': 'aimsintegration.tasks.archive_crew_who_left',
+        'schedule': crontab(hour=6, minute=40),
         # 'options': {'run_immediately': True}
     },
 
