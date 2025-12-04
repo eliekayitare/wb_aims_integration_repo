@@ -2788,6 +2788,8 @@ def download_crew_documents_from_aims(folder):
 # CREW DOCUMENTS ARCHIVE
 # ============================================================================
 from .models import CrewDocumentsArchive
+
+@shared_task()
 def fetch_crew_who_left():
     all_crew_who_left = CrewDocumentsArchive.objects.all()
     crew_ids = [crew.wb_number for crew in all_crew_who_left]
@@ -2844,6 +2846,7 @@ def fetch_crew_who_left():
 from .utils import archive_crew_documents_by_wb, send_archive_complete_email
 import json
 
+@shared_task()
 def archive_crew_who_left():
     archived_crew = []
 

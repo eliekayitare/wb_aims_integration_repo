@@ -8,36 +8,36 @@
   .modal {
     display: none;
     position: fixed;
-    z-index: 999;
+    z-index: 9999;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
     background-color: rgba(0, 0, 0, 0.5);
-    padding-top: 30px;
+    padding-top: 20px;
     transition: opacity 0.3s ease;
   }
   .modal-content {
-    background-color: #fff;
     margin: auto;
     padding: 20px;
     border-radius: 8px;
-    max-width: 50vw;
+    width: 100%;
     position: relative;
     box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-    max-height: 80%;
-    min-height: 70vh;
+    max-height: 90vh;
+    min-height: 80vh;
     overflow: hidden;
   }
   .modal-header {
-    font-size: 20px;
+    font-size: 10px;
     font-weight: bold;
-    margin-bottom: 15px;
     color: #333;
-    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     border-bottom: 1px solid #ddd;
-    padding-bottom: 10px;
+    padding: 10px;
     text-align: center;
   }
   .modal-body {
@@ -45,16 +45,14 @@
     color: #555;
     overflow-y: auto;
     max-height: calc(100% - 50px);
-    padding: 10px 0;
   }
   .close {
     color: #aaa;
     font-size: 30px;
     font-weight: bold;
-    position: absolute;
-    top: 10px;
     right: 10px;
     cursor: pointer;
+    margin-right: 10px;
   }
   .close:hover,
   .close:focus {
@@ -441,41 +439,39 @@
     if(extension == "folder") {
       window.location.href = `/aims/archives/${folder_name}`;
     } else {
-      console.log("Pathhhhh ", filePath);
       // window.open(filePath, "_blank");
-    //   const modal = document.getElementById("filePreviewModal");
-    // const modalBody = document.getElementById("modal-body-content");
-    // const modalTitle = document.querySelector(".modal-header h2");
-    
-    // // Set the title
-    // modalTitle.textContent = fileName;
-    // // Clear previous content
-    // modalBody.innerHTML = '<div class="loader">Loading preview...</div>';
-    
-    // // Show modal
-    // modal.style.display = "block";
+      const modal = document.getElementById("filePreviewModal");
+      const modalBody = document.getElementById("modal-body-content");
+      const modalTitle = document.querySelector(".modal-header h2");
+      
+      // Set the title
+      modalTitle.textContent = fileName;
+      // Clear previous content
+      modalBody.innerHTML = '<div class="loader">Loading preview...</div>';
+      
+      // Show modal
+      modal.style.display = "block";
 
-    
-    // console.log("Pathhhhh ", filePath);
-    // // Handle different file types
-    // if (extension === 'pdf') {
-    //     previewPDF('/media/crew_documents/monthly/18NOV2025/CA CRJ Training/857_CRJ-compressed.pdf', modalBody);
-    // } else if (['doc', 'docx'].includes(extension)) {
-    //     previewWord(filePath, modalBody, fileName);
-    // } else if (['xls', 'xlsx'].includes(extension)) {
-    //     previewExcel(filePath, modalBody, fileName);
-    // } else if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
-    //     previewImage(filePath, modalBody);
-    // } else {
-    //     modalBody.innerHTML = `
-    //         <div class="preview-unavailable">
-    //             <p>Preview not available for this file type.</p>
-    //             <a href="${filePath}" download="${fileName}" class="download-btn">
-    //                 Download File
-    //             </a>
-    //         </div>
-    //     `;
-    // }
+      // Handle different file types
+      if (extension === 'pdf') {
+        //\media\crew_documents\monthly\26NOV2025\B737 Training - CA\40_B737-compressed.pdf
+          previewPDF(`/${filePath}`, modalBody);
+      } else if (['doc', 'docx'].includes(extension)) {
+          previewWord(`/${filePath}`, modalBody, fileName);
+      } else if (['xls', 'xlsx'].includes(extension)) {
+          previewExcel(`/${filePath}`, modalBody, fileName);
+      } else if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
+          previewImage(`/${filePath}`, modalBody);
+      } else {
+          modalBody.innerHTML = `
+              <div class="preview-unavailable">
+                  <p>Preview not available for this file type.</p>
+                  <a href="${filePath}" download="${fileName}" class="download-btn">
+                      Download File
+                  </a>
+              </div>
+          `;
+      }
     }
   }
 
@@ -483,12 +479,9 @@
       container.innerHTML = `
           <iframe 
               src="${filePath}" 
-              style="width: 80%; height: 30vh; border: none; background: cyan; overflow-y: scroll;"
+              style="width: 100%; height: 70vh; border: none; overflow-y: scroll;"
               type="application/pdf">
           </iframe>
-          <p style="text-align: center; margin-top: 10px;">
-              <a href="${filePath}" download>Download PDF</a>
-          </p>
       `;
   }
 
