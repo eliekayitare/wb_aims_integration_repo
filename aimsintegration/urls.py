@@ -14,6 +14,7 @@ urlpatterns = [
     path('backup/<str:folder_name>/', views.backup_folder_view, name='backup_folder_view'),
     path('preview/<path:file_path>/', views.preview_file, name='preview_file'),
     path('download-zip/<path:folder_name>/', views.download_folder_zip, name='download_folder_zip'),
+    path('download-one/<path:file_path>/', views.download_one_file, name='download_one_file'),
     path('archive-crew/<path:wb_number>/', views.archive_crew_documents_by_wb, name='archive_crew_folder'),
     path('archive/', views.archive_view, name='archive'),
     path('archives/', views.archive_folder_view, name='archives'),

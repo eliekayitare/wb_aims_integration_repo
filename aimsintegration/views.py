@@ -5022,30 +5022,30 @@ def backup_view(request):
     files = []
     total_size = 0
 
-    backups = Backup.objects.filter(backup_type=backup_type, status="success")
+    # backups = Backup.objects.filter(backup_type=backup_type, status="success")
 
-    for backup in backups:
-        files.append({
-            'name': backup.name,
-            # Static URL to access the file from template
-            'url': f'/media/crew_documents/{backup_type}/{backup.name}',
-            'log': f'Run: {backup.start_time.strftime("%Y-%m-%d %H:%M:%S")}, for {backup.duration_minutes} minutes',
-            'size': format_file_size(backup.backup_size),
-            'date': backup.backup_date.strftime('%Y-%m-%d')
-        })
-        total_size += backup.backup_size or 0
+    # for backup in backups:
+    #     files.append({
+    #         'name': backup.name,
+    #         # Static URL to access the file from template
+    #         'url': f'/media/crew_documents/{backup_type}/{backup.name}',
+    #         'log': f'Run: {backup.start_time.strftime("%Y-%m-%d %H:%M:%S")}, for {backup.duration_minutes} minutes',
+    #         'size': format_file_size(backup.backup_size),
+    #         'date': backup.backup_date.strftime('%Y-%m-%d')
+    #     })
+    #     total_size += backup.backup_size or 0
 
-    # if os.path.exists(folder_path):
-    #     all_items = os.listdir(folder_path)
-    #     for filename in all_items:
-    #         file_path = os.path.join(folder_path, filename)
-    #         files.append({
-    #             'name': filename,
-    #             'url': f'/media/crew_documents/{backup_type}/{filename}',
-    #             'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
-    #             'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
-    #         })
-    #         total_size += get_directory_size(file_path)
+    if os.path.exists(folder_path):
+        all_items = os.listdir(folder_path)
+        for filename in all_items:
+            file_path = os.path.join(folder_path, filename)
+            files.append({
+                'name': filename,
+                'url': f'/media/crew_documents/{backup_type}/{filename}',
+                'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
+                'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+            })
+            total_size += get_directory_size(file_path)
 
     last_successful_monthly_backup = Backup.objects.filter(backup_type="monthly", status="success").order_by('-backup_date').first()
     last_successful_weekly_backup = Backup.objects.filter(backup_type="weekly", status="success").order_by('-backup_date').first()
@@ -5080,7 +5080,7 @@ def backup_folder_view(request, folder_name):
             item = {
                 'name': filename,
                 # Static URL to access the file from template
-                'url': os.path.join('media', 'crew_documents', backup_type, *folders),
+                'url': '/'.join(['media', 'crew_documents', backup_type, *folders, filename]),
                 'extension': filename.split('.')[-1] if '.' in filename else 'folder',
                 'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
                 'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
@@ -5099,7 +5099,7 @@ def backup_folder_view(request, folder_name):
                             searched.append({
                                 'name': flname,
                                 # Static URL to access the file from template
-                                'url': f'/crew/aimsintegration/files/{flname}',
+                                'url': '/'.join(['','media', 'crew_documents', backup_type, *folders, os.path.relpath(full_path, folder_path)]),
                                 'extension': flname.split('.')[-1] if '.' in flname else 'folder',
                                 'size': '' if os.path.isdir(full_path) else format_file_size(get_directory_size(full_path)),
                                 'date': datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d')
@@ -5155,12 +5155,15 @@ def download_folder_zip(request, folder_name):
     backup_type = request.GET.get("type", "").lower().strip()
     folders = folder_name.split("&&")
     folder_path = os.path.join(settings.BASE_DIR, 'media', 'crew_documents', backup_type, *folders)
-    
+
+    print("folder_path:", folder_path, " folders:", folders)
     if not os.path.exists(folder_path):
         raise Http404("Folder not found")
     
     # Get search query
     q = request.GET.get("q", "").lower().strip()
+
+    print(" q: ", q)
     
     # Create a BytesIO buffer to hold the ZIP file in memory
     buffer = BytesIO()
@@ -5214,6 +5217,20 @@ def download_folder_zip(request, folder_name):
     
     response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
     
+    return response
+
+def download_one_file(request, file_path):
+    """Download a single file"""
+    full_path = os.path.join(settings.BASE_DIR, file_path)
+
+    if not os.path.exists(full_path):
+        raise Http404("File not found")
+
+    with open(full_path, 'rb') as f:
+        file_data = f.read()
+
+    response = HttpResponse(file_data, content_type='application/octet-stream')
+    response['Content-Disposition'] = f'attachment; filename="{os.path.basename(full_path)}"'
     return response
 
 import os
@@ -5368,7 +5385,7 @@ def archive_single_folder_view(request, folder_name):
             file_path = os.path.join(folder_path, filename)
             files.append({
                 'name': filename,
-                'url': f'/media/crew_documents/archive/{filename}',
+                'url': '/'.join(['media', 'crew_documents', 'archive', *folders, filename]),
                 'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
                 'extension': filename.split('.')[-1] if '.' in filename else 'folder',
                 'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')

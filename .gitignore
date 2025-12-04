@@ -23,3 +23,5 @@ celerybeat-schedule
 
 staticfiles/
 
+qatar_apis/
+
