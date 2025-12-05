@@ -18,11 +18,13 @@ media/
 # Docker-related files
 docker-compose.override.yml
 
-# Ignore celery beat schedule files
-celerybeat-schedule.*
+# Ignore celery beat schedule file
+celerybeat-schedule
 
 staticfiles/
 
 # Ignore Qatar APIs temp folder
 qatar_apis/
 
+# Ignore celery beat schedule files
+celerybeat-schedule.*
