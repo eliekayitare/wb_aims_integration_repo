@@ -3215,3 +3215,346 @@ def send_validation_error_email(validation_errors, direction, date):
         logger.info("Validation error email sent successfully")
     except Exception as e:
         logger.error(f"Failed to send validation error email: {e}")
+
+import math
+import pytz
+
+def format_file_size(size_bytes):
+    if size_bytes is None:
+        return "N/A"
+
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 ** 2:
+        return f"{math.ceil(size_bytes / 1024)} KB"
+    elif size_bytes < 1024 ** 3:
+        return f"{math.ceil(size_bytes / (1024 ** 2))} MB"
+    else:
+        return f"{math.ceil(size_bytes / (1024 ** 3))} GB"
+def to_local(dt):
+    # Convert timezone-aware UTC datetime to Africa/Kigali (GMT+2)
+    local_tz = pytz.timezone('Africa/Kigali')
+    return dt.astimezone(local_tz)
+
+def format_dt(dt):
+    local_dt = to_local(dt)
+    return local_dt.strftime("%Y-%m-%d %H:%M")   # up to minutes
+def send_backup_complete_email(backup, type, size):
+    """
+    Send email notification about validation errors that prevent file generation.
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)    
+    
+    try:
+        send_mail(
+            subject=f"Backup Complete - {backup.backup_date}",
+            message=(
+                f"Dear Team,\n\n"
+                f"The Crew Documents Backup process has completed successfully.\n\n"
+                f"Backup Details:\n"
+                f"Backup size: {size}\n"
+                f"Date: {backup.backup_date}\n"
+                f"Start DateTime: {format_dt(backup.start_time)}\n"
+                f"End DateTime: {format_dt(backup.end_time)}\n"
+                f"Duration: {backup.duration_minutes} minutes \n\n"
+                f"Regards,\nWBHUB System"
+            ),
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
+                settings.FIFTH_EMAIL_RECEIVER,
+            ],
+            fail_silently=False,
+        )
+        logger.info("Backup complete email sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send backup complete email: {e}")
+
+def send_backup_failed_email(backup, type):
+    """
+    Send email notification about validation errors that prevent file generation.
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        send_mail(
+            subject=f"Backup Failed - {backup.backup_date}",
+            message=(
+                f"Dear Team,\n\n"
+                f"The Crew Documents Backup process has failed.\n\n"
+                f"Backup Details:\n\n"
+                f"Date: {backup.backup_date}\n"
+                f"Start DateTime: {format_dt(backup.start_time)}\n"
+                f"End DateTime: {format_dt(backup.end_time)}\n"
+                f"Duration: {backup.duration_minutes} minutes \n"
+                f"Error Message: {backup.message} minutes \n"
+                f"Regards,\nWBHUB System"
+            ),
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
+                settings.FIFTH_EMAIL_RECEIVER,
+            ],
+            fail_silently=False,
+        )
+        logger.info("Backup fail email sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send backup complete email: {e}")
+
+import os
+import shutil
+from django.http import JsonResponse, Http404
+from django.conf import settings
+
+# def archive_many_crew_documents_by_wb(crew):
+#     """
+#     Archive crew documents for multiple crew members.
+#     Expects 'crew' to be a list of wb_number strings.
+#     """
+#     try:
+#         today_str = datetime.utcnow().strftime('%Y%m%d')
+
+#         source_root = os.path.join(
+#             settings.BASE_DIR, 
+#             "media", 
+#             "crew_documents", 
+#             "weekly", 
+#             "Crew Documents"
+#         )
+
+#         # Destination archive folder
+#         archive_root = os.path.join(
+#             settings.BASE_DIR,
+#             "media",
+#             "crew_documents",
+#             "archive",
+#             f"Before {today_str}"
+#         )
+
+#         # Ensure destination exists
+#         os.makedirs(archive_root, exist_ok=True)
+
+#         for staff in crew:
+#             search_term = staff.id
+
+#         if not os.path.exists(source_root):
+#             raise Http404("Source folder not found")
+#         results = {}
+
+#         for wb_number in crew:
+#             result = archive_crew_documents_by_wb(wb_number)
+#             results[wb_number] = result.json()
+
+#         return JsonResponse(results)
+
+#     except Exception as e:
+#         return JsonResponse({'error': str(e)}, status=500)
+
+def archive_crew_documents_by_wb(wb_number, wrapper_folder = None):
+    """
+    Archive crew documents that match a given wb_number.
+    Instead of zipping, we copy matching files to:
+    media/crew_documents/archive/<wb_number>/
+    """
+
+    try:
+        source_root = os.path.join(
+            settings.BASE_DIR, 
+            "media", 
+            "crew_documents", 
+            "weekly", 
+            "Crew Documents"
+        )
+
+        if not os.path.exists(source_root):
+            raise Http404("Source folder not found")
+
+        # wb_number is the search text
+        search_term = wb_number.lower().strip()
+
+        # Destination archive folder
+        if wrapper_folder:
+            archive_root = os.path.join(
+                settings.BASE_DIR,
+                "media",
+                "crew_documents",
+                "archive",
+                wrapper_folder,
+                wb_number
+            )
+        else:
+            archive_root = os.path.join(
+                settings.BASE_DIR,
+                "media",
+                "crew_documents",
+                "archive",
+                wb_number
+            )
+    
+
+        # Ensure destination exists
+        os.makedirs(archive_root, exist_ok=True)
+
+        # Track copied files for reporting
+        copied_files = []
+
+        # Walk through documents folder
+        for dirpath, dirnames, filenames in os.walk(source_root):
+            for filename in filenames:
+                if search_term in filename.lower():
+
+                    src_file = os.path.join(dirpath, filename)
+
+                    # Copy only to the main archive folder (FLAT)
+                    dest_file = os.path.join(archive_root, filename)
+    
+                    shutil.copy2(src_file, dest_file)
+
+                    copied_files.append(dest_file)
+
+        return JsonResponse({
+            "status": "success",
+            "archived_to": archive_root,
+            "files_copied": copied_files,
+            "count": len(copied_files),
+        })
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)})
+
+def send_archive_complete_email(archive):
+    """
+    Send email notification about validation errors that prevent file generation.
+    """
+    from django.core.mail import send_mail
+    from django.core.mail import EmailMultiAlternatives
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)    
+    
+    try:
+        subject = f"Crew Documents Archived Successfully"
+        
+        # Plain text version (fallback)
+        text_content = (
+            f"Dear Team,\n\n"
+            f"Crew Documents for {archive.crew_name} who left was archived successfully.\n\n"
+        )
+        
+        # HTML version with table
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20px 0;
+                }}
+                th {{
+                    background-color: #d4d4d4;
+                    color: black;
+                    padding: 6px 12px;
+                    text-align: left;
+                    font-weight: bold;
+                }}
+                td {{
+                    padding: 6px 12px;
+                    border: 1px solid #ddd;
+                }}
+                tr:nth-child(even) {{
+                    background-color: #f9f9f9;
+                }}
+                .footer {{
+                    margin-top: 20px;
+                    padding-top: 20px;
+                    border-top: 1px solid #ddd;
+                }}
+                .link {{
+                    color: #007bff;
+                    text-decoration: none;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <p>Dear Team,</p>
+                
+                <p>Crew Documents for {archive.crew_name} who left were archived successfully</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>WB No.</th>
+                            <th>Crew name</th>
+                            <th>Exit date</th>
+                            <th>Archive date</th>
+                            <th>Link to archive</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>WB{archive.wb_number}</td>
+                            <td>{archive.crew_name}</td>
+                            <td>{archive.date_of_leaving}</td>
+                            <td>{archive.archive_date}</td>
+                            <td>
+                                <a href="https://wbhub.rwandair.com/aims/archives/{archive.wb_number}" class="link">Soft copy link</a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <p>Also, Training and records team will share the hard copy.</p>
+                
+                <div class="footer">
+                    <p>Regards,<br>WBHUB System</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Create email with both plain text and HTML versions
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=text_content,
+            from_email=settings.EMAIL_HOST_USER,
+            to=[
+                settings.FIRST_EMAIL_RECEIVER,
+                settings.THIRD_EMAIL_RECEIVER,
+                settings.FIFTH_EMAIL_RECEIVER,
+            ]
+        )
+        
+        # Attach HTML version
+        email.attach_alternative(html_content, "text/html")
+        
+        # Send email
+        email.send(fail_silently=False)
+        
+        logger.info("Archive complete email sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send archive complete email: {e}")

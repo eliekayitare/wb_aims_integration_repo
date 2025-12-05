@@ -1,10 +1,13 @@
 
+import os
+import math
 from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FlightData,FdmFlightData
 from datetime import date, datetime
 from .models import *
 from django.contrib.auth.decorators import login_required
+from .utils import format_file_size
 
 @login_required(login_url='login')
 def dashboard_view(request):
@@ -170,7 +173,7 @@ def todays_completion_records_view(request):
             qs.filter(course_code__icontains=query)
         )
 
-    qs = qs.order_by("completion_date")
+    qs = qs.order_by("-completion_date")
 
     # 2) Paginate
     paginator   = Paginator(qs, 10)
@@ -6594,3 +6597,440 @@ def upload_transport_file(request):
             print(f"Error cleaning up temp output: {e}")
         
         return JsonResponse({'error': str(e)}, status=500)
+
+def get_directory_size(path):
+    """Get total size of a directory and all its contents in bytes"""
+    total_size = 0
+    
+    # Check if it's a file
+    if os.path.isfile(path):
+        return os.path.getsize(path)
+    
+    # If it's a directory, walk through it
+    for dirpath, dirnames, filenames in os.walk(path):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            # Skip if it's a symbolic link to avoid counting twice
+            if not os.path.islink(filepath):
+                try:
+                    total_size += os.path.getsize(filepath)
+                except (OSError, FileNotFoundError):
+                    # Handle permission errors or files that disappeared
+                    pass
+    
+    return total_size
+
+def format_time_since(backup):
+    """Return human-readable time since backup."""
+    if not backup:
+        return "N/A"
+
+    # Convert date to datetime for comparison
+    if isinstance(backup.backup_date, date) and not isinstance(backup.backup_date, datetime):
+        backup_datetime = datetime.combine(backup.backup_date, datetime.min.time())
+        backup_datetime = timezone.make_aware(backup_datetime, timezone.get_current_timezone())
+    else:
+        backup_datetime = backup.backup_date
+
+    delta = timezone.now() - backup_datetime
+
+    if delta.days >= 1:
+        return f"{delta.days} Days"
+
+    hours = delta.seconds // 3600
+    if hours >= 1:
+        return f"{hours} Hours"
+
+    minutes = delta.seconds // 60
+    if minutes >= 1:
+        return f"{minutes} Minutes"
+
+    return "Just now"
+
+
+def backup_view(request):
+    # Path to your static folder's subdirectory
+    backup_type = request.GET.get("type", "monthly").lower().strip()
+    folder_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, backup_type)
+
+    # Get all files in the folder
+    files = []
+    total_size = 0
+
+    # backups = Backup.objects.filter(backup_type=backup_type, status="success")
+
+    # for backup in backups:
+    #     files.append({
+    #         'name': backup.name,
+    #         # Static URL to access the file from template
+    #         'url': f'/media/crew_documents/{backup_type}/{backup.name}',
+    #         'log': f'Run: {backup.start_time.strftime("%Y-%m-%d %H:%M:%S")}, for {backup.duration_minutes} minutes',
+    #         'size': format_file_size(backup.backup_size),
+    #         'date': backup.backup_date.strftime('%Y-%m-%d')
+    #     })
+    #     total_size += backup.backup_size or 0
+
+    if os.path.exists(folder_path):
+        all_items = os.listdir(folder_path)
+        for filename in all_items:
+            file_path = os.path.join(folder_path, filename)
+            files.append({
+                'name': filename,
+                'url': f'/media/crew_documents/{backup_type}/{filename}',
+                'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
+                'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+            })
+            total_size += get_directory_size(file_path)
+
+    last_successful_monthly_backup = Backup.objects.filter(backup_type="monthly", status="success").order_by('-backup_date').first()
+    last_successful_weekly_backup = Backup.objects.filter(backup_type="weekly", status="success").order_by('-backup_date').first()
+    time_since_monthly_backup = format_time_since(last_successful_monthly_backup)
+    time_since_weekly_backup = format_time_since(last_successful_weekly_backup)
+
+    context = {
+        'files': files,
+        'backup_size': format_file_size(total_size),
+        "backup_type": backup_type,
+        "time_since_monthly_backup": time_since_monthly_backup,
+        "time_since_weekly_backup": time_since_weekly_backup,
+    }
+    return render(request, 'aimsintegration/backup.html', context)
+
+def backup_folder_view(request, folder_name):
+    # Path to your static folder's subdirectory
+    backup_type = request.GET.get("type", "").lower().strip()
+    folders = folder_name.split("&&")
+    folder_path = os.path.join(settings.BASE_DIR, 'media', 'crew_documents', backup_type, *folders)
+
+    # Get all files in the folder
+    files = []
+    searched = []
+
+    q = request.GET.get("q", "").lower().strip()
+
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            # if os.path.isfile(file_path):
+            item = {
+                'name': filename,
+                # Static URL to access the file from template
+                'url': '/'.join(['media', 'crew_documents', backup_type, *folders, filename]),
+                'extension': filename.split('.')[-1] if '.' in filename else 'folder',
+                'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
+                'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+            }
+            files.append(item)
+
+            # if q:
+            #     if q in filename.lower():
+            #         searched.append(item)
+            
+            if q:
+                for dirpath, dirnames, filenames in os.walk(file_path):
+                    for flname in filenames:
+                        if q in flname.lower():
+                            full_path = os.path.join(dirpath, flname)
+                            searched.append({
+                                'name': flname,
+                                # Static URL to access the file from template
+                                'url': '/'.join(['','media', 'crew_documents', backup_type, *folders, os.path.relpath(full_path, folder_path)]),
+                                'extension': flname.split('.')[-1] if '.' in flname else 'folder',
+                                'size': '' if os.path.isdir(full_path) else format_file_size(get_directory_size(full_path)),
+                                'date': datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d')
+                            })
+
+    context = {
+        'files': searched if q else files,
+        'folder_name': folder_name,
+        'display_folder_name': folder_name.replace("&&", " > "),
+        'q': q or '',
+        "backup_type": backup_type
+    }
+    return render(request, 'aimsintegration/backup_folder_view.html', context)
+
+
+from django.views.decorators.http import require_http_methods
+@require_http_methods(["GET"])
+def preview_file(request, file_path):
+    """
+    Returns file preview based on file type
+    """
+    try:
+        # Ensure the file exists and is within your allowed directory
+        full_path = Path(file_path)
+        
+        if not full_path.exists():
+            return JsonResponse({'error': 'File not found'}, status=404)
+        
+        file_extension = full_path.suffix.lower()
+        
+        # For PDFs, return the file directly
+        if file_extension == '.pdf':
+            return FileResponse(
+                open(full_path, 'rb'),
+                content_type='application/pdf'
+            )
+        
+        # For other files, return file info
+        return JsonResponse({
+            'file_name': full_path.name,
+            'file_type': file_extension,
+            'file_url': request.build_absolute_uri(f'/media/documents/{full_path.name}')
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+from io import BytesIO
+import zipfile
+
+def download_folder_zip(request, folder_name):
+    """Download all files in a folder as a ZIP file (or only searched files if q parameter exists)"""
+    backup_type = request.GET.get("type", "").lower().strip()
+    folders = folder_name.split("&&")
+    folder_path = os.path.join(settings.BASE_DIR, 'media', 'crew_documents', backup_type, *folders)
+
+    print("folder_path:", folder_path, " folders:", folders)
+    if not os.path.exists(folder_path):
+        raise Http404("Folder not found")
+    
+    # Get search query
+    q = request.GET.get("q", "").lower().strip()
+
+    print(" q: ", q)
+    
+    # Create a BytesIO buffer to hold the ZIP file in memory
+    buffer = BytesIO()
+
+    wrap_inside_folder = (backup_type == "archive")
+    zip_root = folder_name if wrap_inside_folder else ""
+    
+    # Create a ZIP file
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        if q:
+            # When there's a search query, only include matching files
+            for filename in os.listdir(folder_path):
+                file_path = os.path.join(folder_path, filename)
+                
+                # Walk through the directory tree
+                for dirpath, dirnames, filenames in os.walk(file_path):
+                    for flname in filenames:
+                        # Only include files that match the search query
+                        if q in flname.lower():
+                            full_path = os.path.join(dirpath, flname)
+                            # Calculate the archive name (relative path from folder_path)
+                            arcname = os.path.relpath(full_path, folder_path)
+                            zip_file.write(full_path, arcname)
+        else:
+            # No search query - download all files in the folder
+            for root, dirs, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, folder_path)
+                    
+                    # Calculate the archive name (relative path from folder_path)
+                    # Wrap inside root folder if needed
+                    if wrap_inside_folder:
+                        arcname = os.path.join(zip_root, relative_path)
+                    else:
+                        arcname = relative_path
+                    print("file_path:", file_path, " archive_name:", arcname)
+                    zip_file.write(file_path, arcname)
+    
+    # Reset buffer position to the beginning
+    buffer.seek(0)
+    
+    # Create the HTTP response with ZIP file
+    response = HttpResponse(buffer.getvalue(), content_type='application/zip')
+    
+    # Set the filename based on whether it's a search or full folder download
+    if q:
+        zip_filename = f"{folders[-1]}_{q}.zip" if folders else f"{q}.zip"
+    else:
+        zip_filename = f"{folders[-1]}.zip" if folders else "backup.zip"
+    
+    response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
+    
+    return response
+
+def download_one_file(request, file_path):
+    """Download a single file"""
+    full_path = os.path.join(settings.BASE_DIR, file_path)
+
+    if not os.path.exists(full_path):
+        raise Http404("File not found")
+
+    with open(full_path, 'rb') as f:
+        file_data = f.read()
+
+    response = HttpResponse(file_data, content_type='application/octet-stream')
+    response['Content-Disposition'] = f'attachment; filename="{os.path.basename(full_path)}"'
+    return response
+
+import os
+import shutil
+from django.http import JsonResponse, Http404
+from django.conf import settings
+
+
+def archive_crew_documents_by_wb(request, wb_number):
+    """
+    Archive crew documents that match a given wb_number.
+    Instead of zipping, we copy matching files to:
+    media/crew_documents/archive/<wb_number>/
+    """
+
+    source_root = os.path.join(
+        settings.BASE_DIR, 
+        "media", 
+        "crew_documents", 
+        "weekly", 
+        "Crew Documents"
+    )
+
+    if not os.path.exists(source_root):
+        raise Http404("Source folder not found")
+
+    # wb_number is the search text
+    search_term = wb_number.lower().strip()
+
+    # Destination archive folder
+    archive_root = os.path.join(
+        settings.BASE_DIR,
+        "media",
+        "crew_documents",
+        "archive",
+        wb_number
+    )
+
+    # Ensure destination exists
+    os.makedirs(archive_root, exist_ok=True)
+
+    # Track copied files for reporting
+    copied_files = []
+
+    # Walk through documents folder
+    for dirpath, dirnames, filenames in os.walk(source_root):
+        for filename in filenames:
+            if search_term in filename.lower():
+
+                src_file = os.path.join(dirpath, filename)
+
+                # Keep relative directory structure
+                relative_path = os.path.relpath(dirpath, source_root)
+                dest_dir = os.path.join(archive_root, relative_path)
+
+                os.makedirs(dest_dir, exist_ok=True)
+
+                dest_file = os.path.join(dest_dir, filename)
+                shutil.copy2(src_file, dest_file)
+
+                copied_files.append(dest_file)
+
+    return JsonResponse({
+        "status": "success",
+        "archived_to": archive_root,
+        "files_copied": copied_files,
+        "count": len(copied_files),
+    })
+
+def archive_view(request):
+    left_crew_members = []
+
+    # Get 10 records of crews, sorted by date of leaving
+    left_crew_members = []
+
+    # Get 10 records of crews, sorted by date of leaving
+    query = request.GET.get('query', '').strip()
+    sort = request.GET.get('sort', 'desc').strip()
+    sorting = '-date_of_leaving' if sort == 'desc' else 'date_of_leaving'
+    queryset = CrewDocumentsArchive.objects.order_by(sorting)
+
+    # if there is query, return all the matched records, ignore pagination
+    if query:
+        queryset = CrewDocumentsArchive.objects.filter(
+            Q(wb_number__icontains=query) |
+            Q(crew_name__icontains=query) |
+            Q(position__icontains=query)
+        ).order_by(sorting)
+
+    paginator = Paginator(queryset, 10)  # 10 per page
+
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+   
+    # add 24 months on exit date and put it on a field called, archive date
+    for record in list(page_obj.object_list.values()):
+        left_crew_members.append({
+            'id': record['wb_number'],
+            'wb_number': f"WB{int(record['wb_number']):04d}",
+            'crew_name': record['crew_name'],
+            'exit_date': record['date_of_leaving'].strftime('%Y-%m-%d'),
+            'position': record['position'],
+            'archive_date': record['archive_date'].strftime('%Y-%m-%d') if record['archive_date'] else '--',
+            'archived': record['archived'],
+            'archive_path': record['archive_path'],
+        })
+
+    context = {
+        "page": page_obj.number,
+        "pages": paginator.num_pages,
+        "left_crew_members": left_crew_members,
+        "query": query or '',
+        "sort": sort,
+    }
+    return render(request, 'aimsintegration/archive.html', context)
+
+def archive_folder_view(request):
+    folder_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, 'archive')
+    files=[]
+
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            files.append({
+                'name': filename,
+                'url': f'/media/crew_documents/archive/{filename}',
+                'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
+                'extension': filename.split('.')[-1] if '.' in filename else 'folder',
+                'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+            })
+            # total_size += get_directory_size(file_path)
+
+    context = {
+        "files": files
+    }
+    return render(request, 'aimsintegration/archives_view.html', context)
+
+def archive_single_folder_view(request, folder_name):
+    folders = folder_name.split("&&")
+    folder_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, 'archive', *folders)
+    files=[]
+
+    wb_number = folders[-1] if len(folders) > 0 else ''
+    is_number = wb_number.isdigit()
+    if is_number:
+        crew = CrewDocumentsArchive.objects.filter(wb_number=wb_number).first()
+    else:
+        crew = None
+
+    if os.path.exists(folder_path):
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            files.append({
+                'name': filename,
+                'url': '/'.join(['media', 'crew_documents', 'archive', *folders, filename]),
+                'size': '' if os.path.isdir(file_path) else format_file_size(get_directory_size(file_path)),
+                'extension': filename.split('.')[-1] if '.' in filename else 'folder',
+                'date': datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+            })
+            # total_size += get_directory_size(file_path)
+
+    context = {
+        "files": files,
+        'folder_name': folder_name,
+        'crew': crew.crew_name if crew else 'Initial Archive',
+        'archive_date': crew.archive_date.strftime('%Y-%m-%d') if crew else datetime.fromtimestamp(os.path.getmtime(folder_path)).strftime('%Y-%m-%d'),
+    }
+    return render(request, 'aimsintegration/archives_folder_view.html', context)

@@ -7,6 +7,7 @@ from .utils import process_email_attachment, process_airport_file, process_fligh
 import logging
 from django.conf import settings
 from datetime import datetime
+import stat
 
 logger = logging.getLogger(__name__)
 
@@ -2607,6 +2608,288 @@ def parse_jeppessen_gd_crew_full(lines):
             i += 1
     
     return crew_entries
+# ============================================================================
+# CREW DOCUMENTS BACKUP FROM AIMS
+# ============================================================================
+
+from .models import Backup
+from datetime import datetime
+from django.db import connection, transaction
+import math
+
+def get_directory_size(path):
+    """Get total size of a directory and all its contents in bytes"""
+    total_size = 0
+    
+    # Check if it's a file
+    if os.path.isfile(path):
+        return os.path.getsize(path)
+    
+    # If it's a directory, walk through it
+    for dirpath, dirnames, filenames in os.walk(path):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            # Skip if it's a symbolic link to avoid counting twice
+            if not os.path.islink(filepath):
+                try:
+                    total_size += os.path.getsize(filepath)
+                except (OSError, FileNotFoundError):
+                    # Handle permission errors or files that disappeared
+                    pass
+    
+    return total_size
+
+from .utils import send_backup_complete_email, send_backup_failed_email, format_file_size
+
+@shared_task()
+def monthly_crew_documents_backup_task():
+    download_crew_documents_from_aims('monthly')
+
+@shared_task()
+def weekly_crew_documents_backup_task():
+    download_crew_documents_from_aims('weekly')
+
+def download_crew_documents_from_aims(folder):
+    logger.info(f"================== Starting {folder} backup task ==================")
+    # Server credentials
+    today_str = datetime.now().strftime("%d%b%Y").upper()
+    start_time = django_timezone.now()
+    backup_folder_existed = False
+    backup_name = today_str if folder == 'monthly' else 'Crew Documents'
+
+    # check if backup already exists, looking by name and backup type
+    backup_exists = Backup.objects.filter(name=backup_name, backup_type=folder).exists()
+    if backup_exists:
+        logger.info(f"{folder} Backup for {today_str} already exists. Skipping.")
+        backup = Backup.objects.filter(name=backup_name, backup_type=folder).first()
+        backup_folder_existed = True
+    else :
+        backup = Backup.objects.create(
+            name=today_str,
+            start_time=start_time,
+            backup_type=folder,
+            backup_date=datetime.now().date(),
+            status="running"
+        )
+
+    backup_id = backup.id
+
+    aims_host = settings.AIMS_SERVER_ADDRESS_DOCS
+    aims_port = int(settings.AIMS_PORT)
+    aims_username = settings.AIMS_SERVER_USER_DOCS
+    aims_password = settings.AIMS_SERVER_PASSWORD_DOCS
+    local_destination_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, folder, backup_name)
+    remote_folder_path = settings.AIMS_SERVER_CREW_DOCUMENTS_PATH
+
+    # Retry configuration
+    attempts = 10  # Number of retries
+    delay = 5  # Delay in seconds between retries
+
+
+    def _recursive_download(sftp, remote_path, local_path, check_file_already_exist):
+        """Recursively download folder contents"""
+        os.makedirs(local_path, exist_ok=True)
+        for item in sftp.listdir_attr(remote_path):
+            remote_item = os.path.join(remote_path, item.filename)
+            local_item = os.path.join(local_path, item.filename)
+
+            if stat.S_ISDIR(item.st_mode):
+                # Recurse into subdirectory
+                _recursive_download(sftp, remote_item, local_item, check_file_already_exist)
+            else:
+                # Check if file already exists
+                if check_file_already_exist and os.path.exists(local_item):
+                    logger.info(f"File already exists: {local_item}")
+                    continue
+                # Download file
+                logger.info(f"Downloading: {remote_item} -> {local_item}")
+                sftp.get(remote_item, local_item)
+
+    try:
+        for attempt in range(attempts):
+            try:
+                # Create transport and SFTP session
+                transport = paramiko.Transport((aims_host, aims_port))
+                transport.connect(username=aims_username, password=aims_password)
+                sftp = paramiko.SFTPClient.from_transport(transport)
+
+
+                logger.info(f"Starting recursive download from {remote_folder_path} to {local_destination_path}")
+                _recursive_download(sftp, remote_folder_path, local_destination_path, True)
+                # _recursive_download(sftp, remote_folder_path, local_destination_path, backup_folder_existed or attempt != 0)
+                logger.info(f"Successfully downloaded folder {remote_folder_path}")
+
+                end_time = django_timezone.now()
+                duration = end_time - start_time
+                duration_minutes = (end_time - start_time).total_seconds() / 60
+                minutes = math.floor(duration_minutes)
+                logger.info(f"=== Backup finished at: {end_time.strftime('%Y-%m-%d %H:%M:%S')} ===")
+                logger.info(f"=== Total duration: {duration} ({minutes:.2f} minutes) ===")
+
+                size = get_directory_size(local_destination_path)
+                backup.end_time = end_time
+                backup.duration_minutes = minutes
+                backup.status = "success"
+                backup.message = "Backup completed successfully"
+                backup.backup_size = size
+                backup.save()
+                logger.info(f"Successfully saved backup record")
+
+                send_backup_complete_email(backup, folder, format_file_size(size))
+
+                sftp.close()
+                transport.close()
+                break  # Success, break out of retry loop
+
+            except (SSHException, NoValidConnectionsError) as e:
+                logger.error(f"SFTP error on attempt {attempt + 1}: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Failed on attempt {attempt + 1}: {e}", exc_info=True)
+
+            # Retry logic
+            if attempt < attempts - 1:
+                logger.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                end_time = django_timezone.now()
+                duration = end_time - start_time
+                logger.info(f"=== Total duration before failure: {duration} ({duration.total_seconds():.2f} seconds) ===")
+                logger.error(f"Failed to download folder after {attempts} attempts.")
+
+                duration_minutes = (end_time - start_time).total_seconds() / 60
+                minutes = math.floor(duration_minutes)
+                backup.end_time = end_time
+                backup.duration_minutes = minutes
+                backup.status = "failed"
+                backup.message = "Failed to download folder after {attempts} attempts."
+                backup.save()
+                logger.info(f"Error saved backup record")
+
+                send_backup_failed_email(backup, folder)
+
+    except Exception as e:
+        end_time = django_timezone.now()
+        duration = end_time - start_time
+
+        duration_minutes = (end_time - start_time).total_seconds() / 60
+        minutes = math.floor(duration_minutes)
+        backup.end_time = end_time
+        backup.duration_minutes = minutes
+        backup.status = "failed"
+        backup.message = f"Unexpected error during download: {e}"
+        logger.info(f"Error savv saved backup record")
+        backup.save()
+        send_backup_failed_email(backup, folder)
+        logger.error(f"Unexpected error during download: {e}", exc_info=True)
+        logger.info(f"=== Total duration before failure: {duration} ({duration.total_seconds():.2f} seconds) ===")
+
+
+# ============================================================================
+# CREW DOCUMENTS ARCHIVE
+# ============================================================================
+from .models import CrewDocumentsArchive
+
+@shared_task()
+def fetch_crew_who_left():
+    all_crew_who_left = CrewDocumentsArchive.objects.all()
+    crew_ids = [crew.wb_number for crew in all_crew_who_left]
+
+    # If There are no records in the database, fetch all crew who left
+    if len(crew_ids) == 0:
+        query = f"""
+            SELECT [No_], [First Name], [Last Name], [Job Title], [Date Of Leaving]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Status] = 1 AND [Responsibility Center] = 'FLIGHT OPERATIONS';
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+        logger.info("================= Fetching all =========================")
+
+        for no_, first_name, last_name, job_title, date_of_leaving in rows:
+            CrewDocumentsArchive.objects.create(
+                wb_number=int(no_[2:]),
+                crew_name=f"{first_name} {last_name}",
+                date_of_leaving=date_of_leaving,
+                position=job_title,
+                archive_path=f"{int(no_[2:])}",
+                archive_date=date_of_leaving + relativedelta(months=24),
+            )
+
+        logger.info("================ Done Fetching all =========================")
+    # If There are records in the database, fetch all crew who are not in the database
+    else:
+        wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [First Name], [Last Name], [Job Title], [Date Of Leaving]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Status] = 1 AND [Responsibility Center] = 'FLIGHT OPERATIONS' AND LEN([No_]) = 6 AND [No_] NOT IN ({placeholders});
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+        logger.info("================= 2  Fetching new crew who left =========================")
+
+        for no_, first_name, last_name, job_title, date_of_leaving in rows:
+            CrewDocumentsArchive.objects.create(
+                wb_number=int(no_[2:]),
+                crew_name=f"{first_name} {last_name}",
+                date_of_leaving=date_of_leaving.strftime,
+                position=job_title,
+                archive_path=f"{int(no_[2:])}",
+                archive_date=(date_of_leaving + relativedelta(months=24)).strftime('%Y-%m-%d'),
+            )
+        logger.info("================ 2 Done Fetching new crew who left =========================")
+
+from .utils import archive_crew_documents_by_wb, send_archive_complete_email
+import json
+
+@shared_task()
+def archive_crew_who_left():
+    archived_crew = []
+
+    # 0) Get crew who left and the archive date is before today
+    crew_who_left_earlier = CrewDocumentsArchive.objects.filter(archive_date__lt=timezone.now().date(), archived=False).all()
+    count = 1
+    logger.info("================================== Crew who left earlier: %d ==================================", len(crew_who_left_earlier))
+    for crew in crew_who_left_earlier:
+        response = archive_crew_documents_by_wb(f"{int(crew.wb_number):04d}", wrapper_folder="Initial")
+        data = json.loads(response.content)
+        if (data["status"] == "success"):
+            count += 1
+            # archived_crew.append(crew)
+            # 3) Send email to records and coorporate library
+            # send_archive_complete_email(crew)
+
+            # 4) Update the database to Set archived to True
+            crew.archived = True
+            crew.archive_path = f"Initial&&{crew.wb_number}"
+            crew.save()
+
+    # 1) Get crew who left and the archive date is today
+    all_crew_who_left = CrewDocumentsArchive.objects.filter(archive_date__year=timezone.now().year, archive_date__month=timezone.now().month, archive_date__day=timezone.now().day, archived=False).all()
+    logger.info("Crew who left today: %d", len(all_crew_who_left))
+    for crew in all_crew_who_left:
+
+        # 2) Move their files inside the archive folder
+        response = archive_crew_documents_by_wb(f"{crew.wb_number}")
+        data = json.loads(response.content)
+        if (data["status"] == "success"):
+            logger.info("Success archiving crew ", crew.wb_number)
+            archived = True
+    
+            # 3) Send email to records and coorporate library
+            send_archive_complete_email(crew)
+
+            # 4) Update the database to Set archived to True
+            crew.archived = True
+            crew.save()
+    logger.info("done archiving")
+# ============================================================================
+# OPTIONAL: Manual task to update emails for existing crew records
+# ============================================================================
 
 def update_jeppessen_crew_detail(entry, flight_date, crew_email):
     """

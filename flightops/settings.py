@@ -125,6 +125,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'aimsintegration.middleware.ErrorHandlingMiddleware',
+    'aimsintegration.middleware.MediaFileMiddleware',
 ]
 
 ROOT_URLCONF = 'flightops.urls'
@@ -230,6 +231,7 @@ FIRST_EMAIL_RECEIVER = config('FIRST_EMAIL_RECEIVER')
 SECOND_EMAIL_RECEIVER = config('SECOND_EMAIL_RECEIVER')
 THIRD_EMAIL_RECEIVER = config('THIRD_EMAIL_RECEIVER')
 FOURTH_EMAIL_RECEIVER = config('FOURTH_EMAIL_RECEIVER')
+FIFTH_EMAIL_RECEIVER = config('FIFTH_EMAIL_RECEIVER')
 
 EXCHANGE_EMAIL_USER = config('EXCHANGE_EMAIL_USER')
 EXCHANGE_EMAIL_PASSWORD = config('EXCHANGE_EMAIL_PASSWORD')
@@ -239,7 +241,12 @@ EXCHANGE_EMAIL_SERVER = config('EXCHANGE_EMAIL_SERVER')
 AIMS_SERVER_ADDRESS = config('AIMS_SERVER_ADDRESS')
 AIMS_SERVER_USER= config('AIMS_SERVER_USER')
 AIMS_SERVER_PASSWORD= config('AIMS_SERVER_PASSWORD')
+AIMS_SERVER_ADDRESS_DOCS = config('AIMS_SERVER_ADDRESS_DOCS')
+AIMS_SERVER_USER_DOCS= config('AIMS_SERVER_USER_DOCS')
+AIMS_SERVER_PASSWORD_DOCS= config('AIMS_SERVER_PASSWORD_DOCS')
 AIMS_SERVER_DESTINATION_PATH= config('AIMS_SERVER_DESTINATION_PATH')
+AIMS_SERVER_CREW_DOCUMENTS_PATH = config('AIMS_SERVER_CREW_DOCUMENTS_PATH')
+BACKUP_CREW_DOCUMENTS_PATH = os.path.join(BASE_DIR, config('BACKUP_CREW_DOCUMENTS_PATH'))
 AIMS_PORT= config('AIMS_PORT')
 
 
@@ -405,6 +412,41 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute='*/3'),
     },
 
+    # ============================================================================
+    # CREW DOCUMENT SCHEDULES
+    # ============================================================================
+
+    # Crew Documents Backup - Runs every 1:30 hours
+    'backup-crew-documents-every-month': {
+        'task': 'aimsintegration.tasks.monthly_crew_documents_backup_task',
+        'schedule': crontab(day_of_month='1', hour=0, minute=10),  # Every 90 minutes,
+        # 'schedule': crontab(hour=3, minute=22),
+        # 'options': {'run_immediately': True}
+    },
+
+    # Crew Documents Backup - Runs every 1:30 hours
+    'backup-crew-documents-every-week': {
+        'task': 'aimsintegration.tasks.weekly_crew_documents_backup_task',
+        # 'schedule': crontab(minute='*/5'),  # Every 90 minutes,
+        'schedule': crontab(day_of_week=6, hour=22, minute=10),
+        # 'options': {'run_immediately': True}
+    },
+
+    # Get Crew That left WB, runs every month
+    'backup-crew-documents-every-month': {
+        'task': 'aimsintegration.tasks.fetch_crew_who_left',
+        # 'schedule': crontab(day_of_month='1', hour=0, minute=10),  # Every 90 minutes,
+        'schedule': crontab(hour=14, minute=50),
+        # 'options': {'run_immediately': True}
+    },
+
+    # Archive Crew Documents for crew That left WB 24 months ago, runs every day
+    'backup-crew-documents-every-month': {
+        'task': 'aimsintegration.tasks.archive_crew_who_left',
+        'schedule': crontab(hour=14, minute=53),
+        # 'options': {'run_immediately': True}
+    },
+
 
 }
 
@@ -453,6 +495,10 @@ STATICFILES_FINDERS = [
 # Directory where static files are stored for the project
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# X_FRAME_OPTIONS = 'ALLOWALL'
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+
 
 # In your settings.py, add:
 DATA_DIR = os.path.join(BASE_DIR, 'data')
