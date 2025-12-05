@@ -174,6 +174,7 @@ DATABASES = {
         'HOST': config('MSSQL_DB_HOST'),
         'OPTIONS': {
             'driver': 'ODBC Driver 17 for SQL Server',  # Make sure you have this ODBC driver installed
+            'extra_params': 'Encrypt=no;TrustServerCertificate=yes;',
         },
     },
 }
