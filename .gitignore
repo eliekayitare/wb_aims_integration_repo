@@ -28,3 +28,6 @@ qatar_apis/
 
 # Ignore celery beat schedule files
 celerybeat-schedule.*
+celerybeat-schedule.bak
+celerybeat-schedule.dat
+celerybeat-schedule.dir

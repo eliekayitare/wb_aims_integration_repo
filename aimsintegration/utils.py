@@ -3372,8 +3372,8 @@ def archive_crew_documents_by_wb(wb_number, wrapper_folder = None):
             settings.BASE_DIR, 
             "media", 
             "crew_documents", 
-            "weekly", 
-            "Crew Documents"
+            "monthly",
+            "02DEC2025"
         )
 
         if not os.path.exists(source_root):
