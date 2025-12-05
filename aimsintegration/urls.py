@@ -24,6 +24,11 @@ urlpatterns = [
          views.crew_allowance_details, name='crew_allowance_details'),
         
     path('generate_overall_payslip/', views.generate_overall_payslip, name='generate_overall_payslip'),
+    path('generate_training_payslip/', views.generate_training_payslip, name='generate_training_payslip'),
+    path('generate_operations_payslip/', views.generate_operations_payslip, name='generate_operations_payslip'),
+    path('generate_overall_payslip_excel/', views.generate_overall_payslip_excel, name='generate_overall_payslip_excel'),
+    path('generate_training_payslip_excel/', views.generate_training_payslip_excel, name='generate_training_payslip_excel'),
+    path('generate_operations_payslip_excel/', views.generate_operations_payslip_excel, name='generate_operations_payslip_excel'),
     # path("generate_usd_payslip/", views.generate_usd_payslip, name="generate_usd_payslip"),
     # path("generate_others_payslip/", views.generate_others_payslip, name="generate_others_payslip"),
     path('generate_currency_payslips/', views.generate_currency_payslips, name='generate_currency_payslips'),
@@ -35,7 +40,10 @@ urlpatterns = [
     path('generate_all_bank_payslips_zip_email/', views.generate_all_bank_payslips_zip_email, name='generate_all_bank_payslips_zip_email'),
     # Add these to your urlpatterns
     path('generate_individual_payslip/<int:crew_id>/<int:year>/<int:month>/', views.generate_individual_payslip, name='generate_individual_payslip'),
+    path('generate_individual_payslip_excel/<int:crew_id>/<int:year>/<int:month>/', views.generate_individual_payslip_excel, name='generate_individual_payslip_excel'),
     path('email_individual_payslip/<int:crew_id>/<int:year>/<int:month>/', views.email_individual_payslip, name='email_individual_payslip'),
+    path('generate_crew_allowance_excel_rowwise/', views.generate_crew_allowance_excel_rowwise, name='generate_crew_allowance_excel_rowwise'),
+    path('generate_crew_allowance_excel_columnwise/', views.generate_crew_allowance_excel_columnwise, name='generate_crew_allowance_excel_columnwise'),
     path('generate_all_individual_payslips_zip_email/', views.generate_all_individual_payslips_zip_email, name='generate_all_individual_payslips_zip_email'),
     path('layover_setup/', views.layover_setup, name='layover_setup'),
     path('zones/create/', views.create_zone, name='create_zone'),

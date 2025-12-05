@@ -657,10 +657,16 @@ def crew_allowance_list(request):
     Shows a paginated table of only those Invoices for the selected month,
     skipping any that are zero. If the user doesn't pick ?month=,
     we find the most recent month that has at least one invoice > 0.
+    Now supports filtering by flight_type: 'all', 'training', 'operations'
     """
+    from decimal import Decimal
+    from django.db.models import Q, Sum, DecimalField
+    
     month_str = request.GET.get('month')
     sort_order = request.GET.get('sort', 'asc') # default to ascending
     search_query = request.GET.get('search', '').strip() # search by first/last name
+    flight_type = request.GET.get('flight_type', 'all') # default to 'all'
+    
     # ------------------------
     # 1) If user picks a month, parse it
     # ------------------------
@@ -695,6 +701,7 @@ def crew_allowance_list(request):
             'selected_month': None,
             'crew_data_list': [],
             'display_pages': [],
+            'flight_type': flight_type,
         }
         return render(request, 'aimsintegration/crew_allowance.html', context)
 
@@ -710,30 +717,95 @@ def crew_allowance_list(request):
 
      # Apply search filter
     if search_query:
+        # Search by crew info OR by departure airport (through invoice items -> duties)
         invoices_qs = invoices_qs.filter(
             Q(crew__first_name__icontains=search_query) |
             Q(crew__last_name__icontains=search_query) |
             Q(crew__crew_id__icontains=search_query) |
-            Q(crew__position__icontains=search_query)
+            Q(crew__position__icontains=search_query) |
+            Q(invoiceitem__duty__departure_airport__iata_code__icontains=search_query) |
+            Q(invoiceitem__duty__flight_number__icontains=search_query)
+        ).distinct()
+
+    # ------------------------
+    # 4) Apply flight_type filter (Training/Operations/All)
+    # ------------------------
+    if flight_type != 'all':
+        # Use database aggregation for much better performance
+        # This calculates totals directly in the database instead of Python loops
+        # Q, Sum, and DecimalField are already imported at the top of the function
+        
+        year = filter_month.year
+        month = filter_month.month
+        
+        # Build the filter condition for duties based on flight_type
+        # Filter InvoiceItems by their related Duty's flight_number and date
+        if flight_type == 'operations':
+            # Operations: flight_number starts with "WB"
+            duty_filter = Q(
+                invoiceitem__duty__flight_number__startswith='WB',
+                invoiceitem__duty__duty_date__year=year,
+                invoiceitem__duty__duty_date__month=month
+            )
+        elif flight_type == 'training':
+            # Training: flight_number does NOT start with "WB" (or is null/empty)
+            # Use a more efficient query structure
+            duty_filter = (
+                Q(invoiceitem__duty__duty_date__year=year) &
+                Q(invoiceitem__duty__duty_date__month=month) &
+                (
+                    Q(invoiceitem__duty__flight_number__isnull=True) |
+                    Q(invoiceitem__duty__flight_number='') |
+                    ~Q(invoiceitem__duty__flight_number__startswith='WB')
+                )
+            )
+        else:
+            duty_filter = Q()
+        
+        # Annotate invoices with filtered total using database aggregation
+        # This calculates the sum in the database, not in Python - MUCH faster!
+        # Using distinct() to avoid duplicate results from joins
+        invoices_qs = (
+            invoices_qs
+            .annotate(
+                filtered_total=Sum(
+                    'invoiceitem__allowance_amount',
+                    filter=duty_filter,
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                )
+            )
+            .filter(filtered_total__gt=0)  # Only show invoices with filtered_total > 0
+            .distinct()  # Avoid duplicates from joins
         )
+        
+        # Build the list with filtered totals - this is now just iterating results
+        raw_crew_data_list = []
+        for inv in invoices_qs:
+            raw_crew_data_list.append({
+                'crew': inv.crew,
+                'total_amount': inv.filtered_total or Decimal('0.00'),
+                'invoice_id': inv.id,
+                'invoice_month': inv.month,
+            })
+    else:
+        # flight_type == 'all' - show all invoices as before (fast path)
+        raw_crew_data_list = []
+        for inv in invoices_qs:
+            raw_crew_data_list.append({
+                'crew': inv.crew,
+                'total_amount': inv.total_amount,
+                'invoice_id': inv.id,
+                'invoice_month': inv.month,
+            })
 
     # Apply sorting based on the sort order
     if sort_order == 'asc':
-        invoices_qs = invoices_qs.order_by('total_amount')
+        raw_crew_data_list.sort(key=lambda x: x['total_amount'])
     elif sort_order == 'desc':
-        invoices_qs = invoices_qs.order_by('-total_amount')
-
-    raw_crew_data_list = []
-    for inv in invoices_qs:
-        raw_crew_data_list.append({
-            'crew': inv.crew,
-            'total_amount': inv.total_amount,
-            'invoice_id': inv.id,
-            'invoice_month': inv.month,
-        })
+        raw_crew_data_list.sort(key=lambda x: x['total_amount'], reverse=True)
 
     # ------------------------
-    # 4) Paginate
+    # 5) Paginate
     # ------------------------
     paginator = Paginator(raw_crew_data_list, 10)
     page_number = request.GET.get('page', 1)
@@ -745,7 +817,7 @@ def crew_allowance_list(request):
         crew_data_page = paginator.page(paginator.num_pages)
 
     # ------------------------
-    # 5) Windowed page range
+    # 6) Windowed page range
     # ------------------------
     display_pages = get_display_pages(crew_data_page, num_links=2)
 
@@ -753,6 +825,7 @@ def crew_allowance_list(request):
         'selected_month': filter_month,
         'crew_data_list': crew_data_page,
         'display_pages': display_pages,
+        'flight_type': flight_type,
     }
     return render(request, 'aimsintegration/crew_allowance.html', context)
 
@@ -798,8 +871,10 @@ def crew_allowance_details(request, crew_id, year, month):
         invoice = Invoice.objects.select_related('crew').get(crew=cr, month=filter_month)
         
         # Fetch all invoice items with related duties, departure and arrival airports in one query
+        # Also prefetch departure airport zone to check if it exists
         invoice_items = (invoice.invoiceitem_set
                          .select_related('duty__departure_airport', 
+                                        'duty__departure_airport__zone',
                                         'duty__arrival_airport', 
                                         'duty__arrival_airport__zone')
                          .filter(duty__layover_time_minutes__gt=0))
@@ -808,16 +883,21 @@ def crew_allowance_details(request, crew_id, year, month):
         invoice_total = invoice.total_amount
     except Invoice.DoesNotExist:
         # Fallback: no invoice => fetch from Duty with optimized query
+        # Also prefetch departure airport zone to check if it exists
         duties_list = (Duty.objects
-                       .select_related('departure_airport', 'arrival_airport', 'arrival_airport__zone')
+                       .select_related('departure_airport', 'departure_airport__zone',
+                                      'arrival_airport', 'arrival_airport__zone')
                        .filter(crew=cr, duty_date__year=year, duty_date__month=month, 
                               layover_time_minutes__gt=0))
         
         invoice_total = compute_crew_allowance_for_month(cr, filter_month)
 
     # Build data structure more efficiently - avoid repeated calculations
+    # Also calculate separate totals for Training, Operations, and Overall
     duties_data = []
     grand_total = Decimal('0.00')
+    training_total = Decimal('0.00')
+    operations_total = Decimal('0.00')
 
     for d in duties_list:
         layover_hours = Decimal(d.layover_time_minutes) / Decimal(60)
@@ -829,6 +909,18 @@ def crew_allowance_details(request, crew_id, year, month):
 
         line_amount = layover_hours * hourly_rate
         grand_total += line_amount
+        
+        # Determine if this is Training or Operations based on flight_number
+        is_operations = d.flight_number and d.flight_number.startswith('WB')
+        is_training = d.flight_number and not d.flight_number.startswith('WB')
+        
+        if is_operations:
+            operations_total += line_amount
+        elif is_training:
+            training_total += line_amount
+
+        # Check if departure airport has a zone (for flagging)
+        departure_has_zone = d.departure_airport and d.departure_airport.zone is not None
 
         duties_data.append({
             'duty_date': str(d.duty_date) if d.duty_date else "",
@@ -839,9 +931,12 @@ def crew_allowance_details(request, crew_id, year, month):
             'hourly_rate': str(hourly_rate.quantize(Decimal('0.00'))),
             'line_amount': str(line_amount.quantize(Decimal('0.00'))),
             'tail_number': d.tail_number,
+            'is_operations': is_operations,
+            'is_training': is_training,
+            'departure_has_zone': departure_has_zone,  # Flag for missing zone
         })
 
-    # Use invoice_total for consistency
+    # Use invoice_total for consistency (overall total)
     final_total = invoice_total
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -849,6 +944,9 @@ def crew_allowance_details(request, crew_id, year, month):
             'crew_info': f"{cr.crew_id} - {cr.first_name} {cr.last_name}",
             'duties': duties_data,
             'total_amount': str(final_total),
+            'training_total': str(training_total.quantize(Decimal('0.00'))),
+            'operations_total': str(operations_total.quantize(Decimal('0.00'))),
+            'overall_total': str(final_total),
         }
         return JsonResponse(data)
     else:
@@ -857,6 +955,8 @@ def crew_allowance_details(request, crew_id, year, month):
             'filter_month': filter_month,
             'duties_data': duties_data,
             'final_total': final_total,
+            'training_total': training_total.quantize(Decimal('0.00')),
+            'operations_total': operations_total.quantize(Decimal('0.00')),
         }
         return render(request, 'aimsintegration/crew_allowance_details.html', context)
 
@@ -1042,6 +1142,811 @@ def generate_overall_payslip(request):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
+
+@login_required(login_url='login')
+def generate_training_payslip(request):
+    """
+    Generate payslip for Training flights only (non-WB flight numbers).
+    Similar to generate_overall_payslip but filters by training duties.
+    """
+    from django.db.models import Sum, Q, DecimalField
+    
+    # 1) Read ?month=YYYY-MM
+    month_str = request.GET.get('month')
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+
+    # 2) Fetch Invoices for that month, skipping total_amount=0
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    if not invoices.exists():
+        return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+    # 3) Calculate training totals for each invoice using database aggregation
+    year = filter_month.year
+    month = filter_month.month
+    
+    # Filter for training: flight_number does NOT start with "WB"
+    training_filter = Q(
+        invoiceitem__duty__duty_date__year=year,
+        invoiceitem__duty__duty_date__month=month
+    ) & (
+        Q(invoiceitem__duty__flight_number__isnull=True) |
+        Q(invoiceitem__duty__flight_number='') |
+        ~Q(invoiceitem__duty__flight_number__startswith='WB')
+    )
+    
+    # Annotate invoices with training total
+    invoices = invoices.annotate(
+        training_total=Sum(
+            'invoiceitem__allowance_amount',
+            filter=training_filter,
+            output_field=DecimalField(max_digits=12, decimal_places=2)
+        )
+    ).filter(training_total__gt=0).distinct()
+
+    if not invoices.exists():
+        return HttpResponse("No training invoices found for that month.", status=404)
+
+    # 4) Get exchange rate
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    # 5) Fetch bank details
+    crew_ids = list({inv.crew.crew_id for inv in invoices})
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    employee_bank_data = {}
+    
+    if wb_formatted_ids:
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [Bank Name], [Bank Account No]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [No_] IN ({placeholders})
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+
+        for no_, bank_name, bank_account_no in rows:
+            formatted_no = no_.strip()
+            employee_bank_data[formatted_no] = {
+                'bank_name': bank_name.strip() if bank_name else '',
+                'bank_account_no': bank_account_no.strip() if bank_account_no else '',
+            }
+
+    # 6) Build items list with training totals
+    items = []
+    for inv in invoices:
+        wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {
+            'bank_name': '',
+            'bank_account_no': '',
+        })
+
+        usd_amount = inv.training_total or Decimal('0.00')
+        rwf_amount = (usd_amount * exchange_rate).quantize(Decimal('0.00'))
+        bank_name = bank_data['bank_name'].strip() if bank_data['bank_name'] else '-'
+        account_no = bank_data['bank_account_no'].strip() if bank_data['bank_account_no'] else '-'
+
+        items.append({
+            'wb_no': inv.crew.crew_id,
+            'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+            'position': inv.crew.position,
+            'usd_amount': usd_amount,
+            'rwf_amount': f"{rwf_amount:,.2f}",
+            'exchange_rate': exchange_rate,
+            'bank_name': bank_name,
+            'account_no': account_no,
+        })
+
+    # 7) Calculate totals
+    total_usd = sum([inv.training_total or Decimal('0.00') for inv in invoices])
+    total_rwf = sum([((inv.training_total or Decimal('0.00')) * exchange_rate).quantize(Decimal('0.00')) for inv in invoices])
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    # 8) Render to HTML
+    context = {
+        'items': items,
+        'filter_month': filter_month,
+        'exchange_rate': exchange_rate,
+        'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
+        'total_usd': f"{total_usd:,.2f}",
+        'total_rwf': f"{total_rwf:,.2f}",
+        'current_date': current_date,
+        'payslip_type': 'Training',  # Add type indicator
+    }
+    html_string = render_to_string('aimsintegration/payslip_template.html', context)
+        
+    # 9) Convert to PDF
+    pdf_file = convert_html_to_pdf(html_string)
+    if not pdf_file:
+        return HttpResponse("Error generating PDF.", status=500)
+
+    # 10) Email the PDF
+    try:
+        filename = f"Crew_Allowance_Training_Payslip_{filter_month.strftime('%Y-%m')}.pdf"
+        email = EmailMessage(
+            subject=f'Crew Allowance Training Payslip - {filter_month.strftime("%B %Y")}',
+            body=f'Please find attached the Crew Allowance Training Payslip for {filter_month.strftime("%B %Y")}.',
+            from_email=settings.EMAIL_HOST_USER,
+            to=['elie.kayitare@rwandair.com', 'saif.zawahreh@rwandair.com'],
+        )
+        email.attach(filename, pdf_file, 'application/pdf')
+        email.send(fail_silently=False)
+        messages.success(request, f"Training payslip successfully generated and emailed to recipients.")
+    except Exception as e:
+        print(f"Error sending email: {str(e)}")
+        messages.warning(request, f"Training payslip generated but there was an error emailing: {str(e)}")
+
+    # 11) Return PDF response
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required(login_url='login')
+def generate_operations_payslip(request):
+    """
+    Generate payslip for Operations flights only (WB flight numbers).
+    Similar to generate_overall_payslip but filters by operations duties.
+    """
+    from django.db.models import Sum, Q, DecimalField
+    
+    # 1) Read ?month=YYYY-MM
+    month_str = request.GET.get('month')
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+
+    # 2) Fetch Invoices for that month, skipping total_amount=0
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    if not invoices.exists():
+        return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+    # 3) Calculate operations totals for each invoice using database aggregation
+    year = filter_month.year
+    month = filter_month.month
+    
+    # Filter for operations: flight_number starts with "WB"
+    operations_filter = Q(
+        invoiceitem__duty__flight_number__startswith='WB',
+        invoiceitem__duty__duty_date__year=year,
+        invoiceitem__duty__duty_date__month=month
+    )
+    
+    # Annotate invoices with operations total
+    invoices = invoices.annotate(
+        operations_total=Sum(
+            'invoiceitem__allowance_amount',
+            filter=operations_filter,
+            output_field=DecimalField(max_digits=12, decimal_places=2)
+        )
+    ).filter(operations_total__gt=0).distinct()
+
+    if not invoices.exists():
+        return HttpResponse("No operations invoices found for that month.", status=404)
+
+    # 4) Get exchange rate
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    # 5) Fetch bank details
+    crew_ids = list({inv.crew.crew_id for inv in invoices})
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    employee_bank_data = {}
+    
+    if wb_formatted_ids:
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [Bank Name], [Bank Account No]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [No_] IN ({placeholders})
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+
+        for no_, bank_name, bank_account_no in rows:
+            formatted_no = no_.strip()
+            employee_bank_data[formatted_no] = {
+                'bank_name': bank_name.strip() if bank_name else '',
+                'bank_account_no': bank_account_no.strip() if bank_account_no else '',
+            }
+
+    # 6) Build items list with operations totals
+    items = []
+    for inv in invoices:
+        wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {
+            'bank_name': '',
+            'bank_account_no': '',
+        })
+
+        usd_amount = inv.operations_total or Decimal('0.00')
+        rwf_amount = (usd_amount * exchange_rate).quantize(Decimal('0.00'))
+        bank_name = bank_data['bank_name'].strip() if bank_data['bank_name'] else '-'
+        account_no = bank_data['bank_account_no'].strip() if bank_data['bank_account_no'] else '-'
+
+        items.append({
+            'wb_no': inv.crew.crew_id,
+            'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+            'position': inv.crew.position,
+            'usd_amount': usd_amount,
+            'rwf_amount': f"{rwf_amount:,.2f}",
+            'exchange_rate': exchange_rate,
+            'bank_name': bank_name,
+            'account_no': account_no,
+        })
+
+    # 7) Calculate totals
+    total_usd = sum([inv.operations_total or Decimal('0.00') for inv in invoices])
+    total_rwf = sum([((inv.operations_total or Decimal('0.00')) * exchange_rate).quantize(Decimal('0.00')) for inv in invoices])
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    # 8) Render to HTML
+    context = {
+        'items': items,
+        'filter_month': filter_month,
+        'exchange_rate': exchange_rate,
+        'logo_path': request.build_absolute_uri(static('images/rwandair-logo.png')),
+        'total_usd': f"{total_usd:,.2f}",
+        'total_rwf': f"{total_rwf:,.2f}",
+        'current_date': current_date,
+        'payslip_type': 'Operations',  # Add type indicator
+    }
+    html_string = render_to_string('aimsintegration/payslip_template.html', context)
+        
+    # 9) Convert to PDF
+    pdf_file = convert_html_to_pdf(html_string)
+    if not pdf_file:
+        return HttpResponse("Error generating PDF.", status=500)
+
+    # 10) Email the PDF
+    try:
+        filename = f"Crew_Allowance_Operations_Payslip_{filter_month.strftime('%Y-%m')}.pdf"
+        email = EmailMessage(
+            subject=f'Crew Allowance Operations Payslip - {filter_month.strftime("%B %Y")}',
+            body=f'Please find attached the Crew Allowance Operations Payslip for {filter_month.strftime("%B %Y")}.',
+            from_email=settings.EMAIL_HOST_USER,
+            to=['elie.kayitare@rwandair.com', 'saif.zawahreh@rwandair.com'],
+        )
+        email.attach(filename, pdf_file, 'application/pdf')
+        email.send(fail_silently=False)
+        messages.success(request, f"Operations payslip successfully generated and emailed to recipients.")
+    except Exception as e:
+        print(f"Error sending email: {str(e)}")
+        messages.warning(request, f"Operations payslip generated but there was an error emailing: {str(e)}")
+
+    # 11) Return PDF response
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+# Excel Export Functions
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter
+from io import BytesIO
+
+
+def generate_excel_payslip(items, filter_month, exchange_rate, payslip_type='Overall'):
+    """
+    Helper function to generate Excel payslip from items list.
+    Returns a Workbook object.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{payslip_type} Payslip"
+    
+    # Header styling
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    border_side = Side(style='thin')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+    
+    # Title
+    ws.merge_cells('A1:H1')
+    title_cell = ws['A1']
+    title_cell.value = f"RwandAir - Crew Allowance {payslip_type} Payslip - {filter_month.strftime('%B %Y')}"
+    title_cell.font = Font(bold=True, size=14)
+    title_cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Exchange rate info
+    ws.merge_cells('A2:H2')
+    rate_cell = ws['A2']
+    rate_cell.value = f"Exchange Rate: 1 USD = {exchange_rate:,.2f} RWF"
+    rate_cell.alignment = Alignment(horizontal='center')
+    rate_cell.font = Font(size=10)
+    
+    # Column headers
+    headers = ['WB No.', 'Name', 'Position', 'USD Amount', 'RWF Amount', 'Bank Name', 'Account No.']
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col_num)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Data rows
+    row_num = 4
+    total_usd = Decimal('0.00')
+    total_rwf = Decimal('0.00')
+    
+    for item in items:
+        ws.cell(row=row_num, column=1, value=item['wb_no']).border = border
+        ws.cell(row=row_num, column=2, value=item['name']).border = border
+        ws.cell(row=row_num, column=3, value=item.get('position', '')).border = border
+        ws.cell(row=row_num, column=4, value=float(item['usd_amount'])).border = border
+        ws.cell(row=row_num, column=5, value=float(item['usd_amount']) * float(exchange_rate)).border = border
+        ws.cell(row=row_num, column=6, value=item['bank_name']).border = border
+        ws.cell(row=row_num, column=7, value=item['account_no']).border = border
+        
+        # Format USD and RWF columns
+        ws.cell(row=row_num, column=4).number_format = '#,##0.00'
+        ws.cell(row=row_num, column=5).number_format = '#,##0.00'
+        
+        total_usd += Decimal(str(item['usd_amount']))
+        total_rwf += Decimal(str(item['usd_amount'])) * exchange_rate
+        row_num += 1
+    
+    # Total row
+    total_row = row_num
+    ws.cell(row=total_row, column=1, value='TOTAL').font = Font(bold=True)
+    ws.cell(row=total_row, column=1).fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+    ws.cell(row=total_row, column=4, value=float(total_usd)).font = Font(bold=True)
+    ws.cell(row=total_row, column=4).number_format = '#,##0.00'
+    ws.cell(row=total_row, column=5, value=float(total_rwf)).font = Font(bold=True)
+    ws.cell(row=total_row, column=5).number_format = '#,##0.00'
+    
+    for col in range(1, 8):
+        ws.cell(row=total_row, column=col).border = border
+        ws.cell(row=total_row, column=col).fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+    
+    # Adjust column widths
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 25
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 18
+    ws.column_dimensions['F'].width = 20
+    ws.column_dimensions['G'].width = 20
+    
+    return wb
+
+
+@login_required(login_url='login')
+def generate_overall_payslip_excel(request):
+    """Generate Overall payslip in Excel format."""
+    month_str = request.GET.get('month')
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    if not invoices.exists():
+        return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+    # Get exchange rate
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    # Fetch bank details
+    crew_ids = list({inv.crew.crew_id for inv in invoices})
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    employee_bank_data = {}
+    
+    if wb_formatted_ids:
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [Bank Name], [Bank Account No]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [No_] IN ({placeholders})
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+
+        for no_, bank_name, bank_account_no in rows:
+            formatted_no = no_.strip()
+            employee_bank_data[formatted_no] = {
+                'bank_name': bank_name.strip() if bank_name else '',
+                'bank_account_no': bank_account_no.strip() if bank_account_no else '',
+            }
+
+    # Build items list
+    items = []
+    for inv in invoices:
+        wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {
+            'bank_name': '',
+            'bank_account_no': '',
+        })
+
+        usd_amount = inv.total_amount
+        bank_name = bank_data['bank_name'].strip() if bank_data['bank_name'] else '-'
+        account_no = bank_data['bank_account_no'].strip() if bank_data['bank_account_no'] else '-'
+
+        items.append({
+            'wb_no': inv.crew.crew_id,
+            'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+            'position': inv.crew.position,
+            'usd_amount': usd_amount,
+            'rwf_amount': f"{(usd_amount * exchange_rate).quantize(Decimal('0.00')):,.2f}",
+            'exchange_rate': exchange_rate,
+            'bank_name': bank_name,
+            'account_no': account_no,
+        })
+
+    # Generate Excel
+    wb = generate_excel_payslip(items, filter_month, exchange_rate, 'Overall')
+    
+    # Save to response
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Crew_Allowance_Overall_Payslip_{filter_month.strftime('%Y-%m')}.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required(login_url='login')
+def generate_training_payslip_excel(request):
+    """Generate Training payslip in Excel format."""
+    from django.db.models import Sum, Q, DecimalField
+    
+    month_str = request.GET.get('month')
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    if not invoices.exists():
+        return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+    # Calculate training totals
+    year = filter_month.year
+    month = filter_month.month
+    
+    training_filter = Q(
+        invoiceitem__duty__duty_date__year=year,
+        invoiceitem__duty__duty_date__month=month
+    ) & (
+        Q(invoiceitem__duty__flight_number__isnull=True) |
+        Q(invoiceitem__duty__flight_number='') |
+        ~Q(invoiceitem__duty__flight_number__startswith='WB')
+    )
+    
+    invoices = invoices.annotate(
+        training_total=Sum(
+            'invoiceitem__allowance_amount',
+            filter=training_filter,
+            output_field=DecimalField(max_digits=12, decimal_places=2)
+        )
+    ).filter(training_total__gt=0).distinct()
+
+    if not invoices.exists():
+        return HttpResponse("No training invoices found for that month.", status=404)
+
+    # Get exchange rate and bank details
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    crew_ids = list({inv.crew.crew_id for inv in invoices})
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    employee_bank_data = {}
+    
+    if wb_formatted_ids:
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [Bank Name], [Bank Account No]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [No_] IN ({placeholders})
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+
+        for no_, bank_name, bank_account_no in rows:
+            formatted_no = no_.strip()
+            employee_bank_data[formatted_no] = {
+                'bank_name': bank_name.strip() if bank_name else '',
+                'bank_account_no': bank_account_no.strip() if bank_account_no else '',
+            }
+
+    items = []
+    for inv in invoices:
+        wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {
+            'bank_name': '',
+            'bank_account_no': '',
+        })
+
+        usd_amount = inv.training_total or Decimal('0.00')
+        bank_name = bank_data['bank_name'].strip() if bank_data['bank_name'] else '-'
+        account_no = bank_data['bank_account_no'].strip() if bank_data['bank_account_no'] else '-'
+
+        items.append({
+            'wb_no': inv.crew.crew_id,
+            'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+            'position': inv.crew.position,
+            'usd_amount': usd_amount,
+            'rwf_amount': f"{(usd_amount * exchange_rate).quantize(Decimal('0.00')):,.2f}",
+            'exchange_rate': exchange_rate,
+            'bank_name': bank_name,
+            'account_no': account_no,
+        })
+
+    wb = generate_excel_payslip(items, filter_month, exchange_rate, 'Training')
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Crew_Allowance_Training_Payslip_{filter_month.strftime('%Y-%m')}.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required(login_url='login')
+def generate_operations_payslip_excel(request):
+    """Generate Operations payslip in Excel format."""
+    from django.db.models import Sum, Q, DecimalField
+    
+    month_str = request.GET.get('month')
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found at all in the database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+
+    if not invoices.exists():
+        return HttpResponse("No nonzero invoices found for that month.", status=404)
+
+    # Calculate operations totals
+    year = filter_month.year
+    month = filter_month.month
+    
+    operations_filter = Q(
+        invoiceitem__duty__flight_number__startswith='WB',
+        invoiceitem__duty__duty_date__year=year,
+        invoiceitem__duty__duty_date__month=month
+    )
+    
+    invoices = invoices.annotate(
+        operations_total=Sum(
+            'invoiceitem__allowance_amount',
+            filter=operations_filter,
+            output_field=DecimalField(max_digits=12, decimal_places=2)
+        )
+    ).filter(operations_total__gt=0).distinct()
+
+    if not invoices.exists():
+        return HttpResponse("No operations invoices found for that month.", status=404)
+
+    # Get exchange rate and bank details
+    with connections['mssql'].cursor() as cursor:
+        cursor.execute("""
+            SELECT [Relational Exch_ Rate Amount]
+            FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [Currency Code] = %s
+            AND [Starting Date] = (
+                SELECT MAX([Starting Date])
+                FROM [RwandAir].[dbo].[RwandAir$Currency Exchange Rate$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+                WHERE [Currency Code] = %s
+            );
+        """, ['USD', 'USD'])
+        row = cursor.fetchone()
+
+    if not row:
+        return HttpResponse("No exchange rate found from that query.", status=400)
+
+    exchange_rate = Decimal(str(row[0]))
+
+    crew_ids = list({inv.crew.crew_id for inv in invoices})
+    wb_formatted_ids = [f"WB{int(cid):04d}" for cid in crew_ids]
+    employee_bank_data = {}
+    
+    if wb_formatted_ids:
+        placeholders = ", ".join(["%s"] * len(wb_formatted_ids))
+        query = f"""
+            SELECT [No_], [Bank Name], [Bank Account No]
+            FROM [RwandAir].[dbo].[RwandAir$Employee$04be3167-71f9-46b8-93ec-2d5e5e08bf9b]
+            WHERE [No_] IN ({placeholders})
+        """
+        with connections['mssql'].cursor() as cursor:
+            cursor.execute(query, wb_formatted_ids)
+            rows = cursor.fetchall()
+
+        for no_, bank_name, bank_account_no in rows:
+            formatted_no = no_.strip()
+            employee_bank_data[formatted_no] = {
+                'bank_name': bank_name.strip() if bank_name else '',
+                'bank_account_no': bank_account_no.strip() if bank_account_no else '',
+            }
+
+    items = []
+    for inv in invoices:
+        wb_formatted = f"WB{int(inv.crew.crew_id):04d}"
+        bank_data = employee_bank_data.get(wb_formatted, {
+            'bank_name': '',
+            'bank_account_no': '',
+        })
+
+        usd_amount = inv.operations_total or Decimal('0.00')
+        bank_name = bank_data['bank_name'].strip() if bank_data['bank_name'] else '-'
+        account_no = bank_data['bank_account_no'].strip() if bank_data['bank_account_no'] else '-'
+
+        items.append({
+            'wb_no': inv.crew.crew_id,
+            'name': f"{inv.crew.first_name} {inv.crew.last_name}",
+            'position': inv.crew.position,
+            'usd_amount': usd_amount,
+            'rwf_amount': f"{(usd_amount * exchange_rate).quantize(Decimal('0.00')):,.2f}",
+            'exchange_rate': exchange_rate,
+            'bank_name': bank_name,
+            'account_no': account_no,
+        })
+
+    wb = generate_excel_payslip(items, filter_month, exchange_rate, 'Operations')
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Crew_Allowance_Operations_Payslip_{filter_month.strftime('%Y-%m')}.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 # @login_required(login_url='login')
@@ -2254,6 +3159,736 @@ def generate_individual_payslip(request, crew_id, year, month):
         
     except Exception as e:
         return HttpResponse(f"Error generating payslip: {str(e)}", status=500)
+
+
+@login_required(login_url='login')
+def generate_individual_payslip_excel(request, crew_id, year, month):
+    """
+    Generate individual crew payslip in Excel format with Training/Operations/Overall totals.
+    """
+    from decimal import Decimal
+    
+    try:
+        crew = get_object_or_404(Crew, id=crew_id)
+        filter_month = date(int(year), int(month), 1)
+        
+        # Get the invoice for this crew member and month
+        try:
+            invoice = Invoice.objects.get(crew=crew, month=filter_month)
+            if invoice.total_amount <= 0:
+                return HttpResponse("No allowance found for this crew member in this month.", status=404)
+        except Invoice.DoesNotExist:
+            return HttpResponse("No invoice found for this crew member in this month.", status=404)
+        
+        # Get all duties for this invoice
+        invoice_items = invoice.invoiceitem_set.select_related(
+            'duty__departure_airport', 
+            'duty__arrival_airport', 
+            'duty__arrival_airport__zone'
+        ).filter(duty__layover_time_minutes__gt=0).all()
+        
+        duties_list = [item.duty for item in invoice_items]
+        
+        if not duties_list:
+            return HttpResponse("No duties with layover found for this crew member.", status=404)
+        
+        # Build duties data with Training/Operations classification
+        duties_data = []
+        training_total = Decimal('0.00')
+        operations_total = Decimal('0.00')
+        overall_total = Decimal('0.00')
+        
+        for duty in duties_list:
+            layover_hours = Decimal(duty.layover_time_minutes) / Decimal(60)
+            if duty.arrival_airport and duty.arrival_airport.zone:
+                hourly_rate = duty.arrival_airport.zone.hourly_rate
+            else:
+                hourly_rate = Decimal('0.00')
+            
+            line_amount = layover_hours * hourly_rate
+            overall_total += line_amount
+            
+            # Determine if Training or Operations
+            is_operations = duty.flight_number and duty.flight_number.startswith('WB')
+            is_training = duty.flight_number and not duty.flight_number.startswith('WB')
+            
+            if is_operations:
+                operations_total += line_amount
+            elif is_training:
+                training_total += line_amount
+            
+            duties_data.append({
+                'duty_date': duty.duty_date,
+                'flight_number': duty.flight_number or '',
+                'departure': duty.departure_airport.iata_code if duty.departure_airport else '',
+                'arrival': duty.arrival_airport.iata_code if duty.arrival_airport else '',
+                'layover_hours': float(layover_hours.quantize(Decimal('0.00'))),
+                'hourly_rate': float(hourly_rate.quantize(Decimal('0.00'))),
+                'line_amount': float(line_amount.quantize(Decimal('0.00'))),
+                'tail_number': duty.tail_number or '',
+                'is_operations': is_operations,
+                'is_training': is_training,
+            })
+        
+        # Create Excel workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Individual Payslip"
+        
+        # Styling
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        title_font = Font(bold=True, size=14)
+        border_side = Side(style='thin')
+        border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+        
+        # Title
+        ws.merge_cells('A1:I1')
+        title_cell = ws['A1']
+        title_cell.value = f"RwandAir - Individual Crew Allowance Payslip - {filter_month.strftime('%B %Y')}"
+        title_cell.font = title_font
+        title_cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Crew Info
+        ws.merge_cells('A2:I2')
+        crew_info = ws['A2']
+        crew_info.value = f"Crew ID: {crew.crew_id} | Name: {crew.first_name} {crew.last_name} | Position: {crew.position or 'N/A'}"
+        crew_info.font = Font(bold=True, size=11)
+        crew_info.alignment = Alignment(horizontal='center')
+        
+        # Column headers
+        headers = ['Duty Date', 'Flight No.', 'Dep', 'Arr', 'Layover (Hrs)', 'Rate', 'Amount', 'Tail No.']
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = border
+        
+        # Data rows
+        row_num = 4
+        for duty in duties_data:
+            ws.cell(row=row_num, column=1, value=duty['duty_date']).border = border
+            ws.cell(row=row_num, column=2, value=duty['flight_number']).border = border
+            ws.cell(row=row_num, column=3, value=duty['departure']).border = border
+            ws.cell(row=row_num, column=4, value=duty['arrival']).border = border
+            ws.cell(row=row_num, column=5, value=duty['layover_hours']).border = border
+            ws.cell(row=row_num, column=6, value=duty['hourly_rate']).border = border
+            ws.cell(row=row_num, column=7, value=duty['line_amount']).border = border
+            ws.cell(row=row_num, column=8, value=duty['tail_number']).border = border
+            
+            # Format numbers
+            ws.cell(row=row_num, column=5).number_format = '0.00'
+            ws.cell(row=row_num, column=6).number_format = '0.00'
+            ws.cell(row=row_num, column=7).number_format = '0.00'
+            
+            # Color code rows
+            if duty['is_operations']:
+                fill = PatternFill(start_color="E3F2FD", end_color="E3F2FD", fill_type="solid")
+            elif duty['is_training']:
+                fill = PatternFill(start_color="FFF3E0", end_color="FFF3E0", fill_type="solid")
+            else:
+                fill = None
+            
+            if fill:
+                for col in range(1, 9):
+                    ws.cell(row=row_num, column=col).fill = fill
+            
+            row_num += 1
+        
+        # Totals section
+        total_row = row_num + 1
+        ws.cell(row=total_row, column=1, value='TOTALS').font = Font(bold=True, size=12)
+        ws.cell(row=total_row, column=1).fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+        
+        ws.cell(row=total_row + 1, column=1, value='Training Total:').font = Font(bold=True)
+        ws.cell(row=total_row + 1, column=7, value=float(training_total)).font = Font(bold=True)
+        ws.cell(row=total_row + 1, column=7).number_format = '0.00'
+        
+        ws.cell(row=total_row + 2, column=1, value='Operations Total:').font = Font(bold=True)
+        ws.cell(row=total_row + 2, column=7, value=float(operations_total)).font = Font(bold=True)
+        ws.cell(row=total_row + 2, column=7).number_format = '0.00'
+        
+        ws.cell(row=total_row + 3, column=1, value='Overall Total:').font = Font(bold=True, size=12)
+        ws.cell(row=total_row + 3, column=7, value=float(overall_total)).font = Font(bold=True, size=12)
+        ws.cell(row=total_row + 3, column=7).number_format = '0.00'
+        ws.cell(row=total_row + 3, column=1).fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+        ws.cell(row=total_row + 3, column=7).fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+        
+        # Adjust column widths
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 12
+        ws.column_dimensions['C'].width = 8
+        ws.column_dimensions['D'].width = 8
+        ws.column_dimensions['E'].width = 15
+        ws.column_dimensions['F'].width = 12
+        ws.column_dimensions['G'].width = 15
+        ws.column_dimensions['H'].width = 12
+        
+        # Save to response
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"Individual_Payslip_{crew.crew_id}_{filter_month.strftime('%Y-%m')}.xlsx"
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+        
+    except Exception as e:
+        return HttpResponse(f"Error generating Excel payslip: {str(e)}", status=500)
+
+
+@login_required(login_url='login')
+def generate_crew_allowance_excel_rowwise(request):
+    """
+    Generate Excel export in ROW-WISE format:
+    Crew ID | Duty Date | Flight No. | Dep | Arr | Layover (Hrs) | Rate | Amount | Tail No.
+    Each flight is a separate row. Multiple flights for same crew appear in consecutive rows.
+    """
+    from decimal import Decimal
+    from django.db.models import Sum, Q, DecimalField, Max
+    
+    month_str = request.GET.get('month')
+    flight_type = request.GET.get('flight_type', 'all')  # all, training, operations
+    
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found in database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+    
+    # Get invoices based on flight_type filter
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+    
+    year = filter_month.year
+    month = filter_month.month
+    
+    # Apply flight_type filter if needed
+    if flight_type != 'all':
+        if flight_type == 'operations':
+            duty_filter = Q(
+                invoiceitem__duty__flight_number__startswith='WB',
+                invoiceitem__duty__duty_date__year=year,
+                invoiceitem__duty__duty_date__month=month
+            )
+        elif flight_type == 'training':
+            duty_filter = Q(
+                invoiceitem__duty__duty_date__year=year,
+                invoiceitem__duty__duty_date__month=month
+            ) & (
+                Q(invoiceitem__duty__flight_number__isnull=True) |
+                Q(invoiceitem__duty__flight_number='') |
+                ~Q(invoiceitem__duty__flight_number__startswith='WB')
+            )
+        else:
+            duty_filter = Q()
+        
+        invoices = invoices.annotate(
+            filtered_total=Sum(
+                'invoiceitem__allowance_amount',
+                filter=duty_filter,
+                output_field=DecimalField(max_digits=12, decimal_places=2)
+            )
+        ).filter(filtered_total__gt=0).distinct()
+    
+    if not invoices.exists():
+        return HttpResponse("No invoices found for the selected criteria.", status=404)
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{flight_type.title()} Row-wise"
+    
+    # Styling
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    title_font = Font(bold=True, size=14)
+    border_side = Side(style='thin')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+    
+    # Title
+    ws.merge_cells('A1:I1')
+    title_cell = ws['A1']
+    title_text = f"RwandAir - Crew Allowance ({flight_type.title()}) - {filter_month.strftime('%B %Y')} - Row-wise Format"
+    title_cell.value = title_text
+    title_cell.font = title_font
+    title_cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Column headers
+    headers = ['Crew ID', 'Duty Date', 'Flight No.', 'Dep', 'Arr', 'Layover (Hrs)', 'Rate', 'Amount', 'Tail No.']
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=2, column=col_num)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Data rows
+    row_num = 3
+    previous_crew_id = None  # Track previous crew ID to avoid repetition
+    current_crew_totals = {}  # Track totals for current crew: {'training': Decimal, 'operations': Decimal, 'overall': Decimal}
+    current_crew_items = []  # Track items for current crew to calculate totals
+    
+    for inv in invoices:
+        # Get duties for this invoice
+        invoice_items = inv.invoiceitem_set.select_related(
+            'duty__departure_airport',
+            'duty__arrival_airport',
+            'duty__arrival_airport__zone'
+        ).filter(duty__layover_time_minutes__gt=0)
+        
+        if flight_type != 'all':
+            # Filter duties by flight_type
+            filtered_items = []
+            for item in invoice_items:
+                duty = item.duty
+                if flight_type == 'operations':
+                    if duty.flight_number and duty.flight_number.startswith('WB'):
+                        filtered_items.append(item)
+                elif flight_type == 'training':
+                    if duty.flight_number and not duty.flight_number.startswith('WB'):
+                        filtered_items.append(item)
+            invoice_items = filtered_items
+        
+        # Check if this is a new crew (crew ID changed)
+        is_new_crew = (previous_crew_id is None or previous_crew_id != inv.crew.crew_id)
+        
+        # If new crew and we have previous crew totals, write totals row before starting new crew
+        if is_new_crew and previous_crew_id is not None and current_crew_totals:
+            # Write totals row for previous crew
+            total_fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+            total_font = Font(bold=True)
+            
+            # Overall Total row
+            ws.cell(row=row_num, column=1, value='').border = border
+            ws.cell(row=row_num, column=2, value='Total').font = total_font
+            ws.cell(row=row_num, column=2).fill = total_fill
+            ws.cell(row=row_num, column=2).border = border
+            ws.cell(row=row_num, column=3, value='').border = border
+            ws.cell(row=row_num, column=4, value='').border = border
+            ws.cell(row=row_num, column=5, value='').border = border
+            ws.cell(row=row_num, column=6, value='').border = border
+            ws.cell(row=row_num, column=7, value='').border = border
+            ws.cell(row=row_num, column=8, value=float(current_crew_totals['overall'].quantize(Decimal('0.00')))).font = total_font
+            ws.cell(row=row_num, column=8).fill = total_fill
+            ws.cell(row=row_num, column=8).border = border
+            ws.cell(row=row_num, column=8).number_format = '0.00'
+            ws.cell(row=row_num, column=9, value='').border = border
+            row_num += 1
+            
+            # If flight_type is 'all', show Training and Operations totals separately
+            if flight_type == 'all':
+                # Training Total row
+                ws.cell(row=row_num, column=1, value='').border = border
+                ws.cell(row=row_num, column=2, value='Training Total').font = total_font
+                ws.cell(row=row_num, column=2).fill = total_fill
+                ws.cell(row=row_num, column=2).border = border
+                ws.cell(row=row_num, column=3, value='').border = border
+                ws.cell(row=row_num, column=4, value='').border = border
+                ws.cell(row=row_num, column=5, value='').border = border
+                ws.cell(row=row_num, column=6, value='').border = border
+                ws.cell(row=row_num, column=7, value='').border = border
+                ws.cell(row=row_num, column=8, value=float(current_crew_totals['training'].quantize(Decimal('0.00')))).font = total_font
+                ws.cell(row=row_num, column=8).fill = total_fill
+                ws.cell(row=row_num, column=8).border = border
+                ws.cell(row=row_num, column=8).number_format = '0.00'
+                ws.cell(row=row_num, column=9, value='').border = border
+                row_num += 1
+                
+                # Operations Total row
+                ws.cell(row=row_num, column=1, value='').border = border
+                ws.cell(row=row_num, column=2, value='Operations Total').font = total_font
+                ws.cell(row=row_num, column=2).fill = total_fill
+                ws.cell(row=row_num, column=2).border = border
+                ws.cell(row=row_num, column=3, value='').border = border
+                ws.cell(row=row_num, column=4, value='').border = border
+                ws.cell(row=row_num, column=5, value='').border = border
+                ws.cell(row=row_num, column=6, value='').border = border
+                ws.cell(row=row_num, column=7, value='').border = border
+                ws.cell(row=row_num, column=8, value=float(current_crew_totals['operations'].quantize(Decimal('0.00')))).font = total_font
+                ws.cell(row=row_num, column=8).fill = total_fill
+                ws.cell(row=row_num, column=8).border = border
+                ws.cell(row=row_num, column=8).number_format = '0.00'
+                ws.cell(row=row_num, column=9, value='').border = border
+                row_num += 1
+            
+            # Reset totals for new crew
+            current_crew_totals = {'training': Decimal('0.00'), 'operations': Decimal('0.00'), 'overall': Decimal('0.00')}
+            current_crew_items = []
+        
+        # Initialize totals for new crew
+        if is_new_crew:
+            current_crew_totals = {'training': Decimal('0.00'), 'operations': Decimal('0.00'), 'overall': Decimal('0.00')}
+            current_crew_items = []
+        
+        for item in invoice_items:
+            duty = item.duty
+            layover_hours = Decimal(duty.layover_time_minutes) / Decimal(60)
+            
+            if duty.arrival_airport and duty.arrival_airport.zone:
+                hourly_rate = duty.arrival_airport.zone.hourly_rate
+            else:
+                hourly_rate = Decimal('0.00')
+            
+            line_amount = layover_hours * hourly_rate
+            
+            # Track totals
+            current_crew_totals['overall'] += line_amount
+            # Determine if training or operations
+            is_operations = duty.flight_number and duty.flight_number.startswith('WB')
+            if is_operations:
+                current_crew_totals['operations'] += line_amount
+            else:
+                current_crew_totals['training'] += line_amount
+            
+            # Write Crew ID only for the first row of each crew (when crew ID changes)
+            crew_id_cell = ws.cell(row=row_num, column=1)
+            crew_id_cell.border = border
+            if is_new_crew:
+                # Write crew ID and make it bold
+                crew_id_cell.value = inv.crew.crew_id
+                crew_id_cell.font = Font(bold=True)
+                previous_crew_id = inv.crew.crew_id
+                is_new_crew = False  # Mark that we've written the crew ID for this crew
+            else:
+                # Leave crew ID empty for subsequent rows of the same crew
+                crew_id_cell.value = ''
+            
+            # Write other row data
+            ws.cell(row=row_num, column=2, value=duty.duty_date).border = border
+            ws.cell(row=row_num, column=3, value=duty.flight_number or '').border = border
+            ws.cell(row=row_num, column=4, value=duty.departure_airport.iata_code if duty.departure_airport else '').border = border
+            ws.cell(row=row_num, column=5, value=duty.arrival_airport.iata_code if duty.arrival_airport else '').border = border
+            ws.cell(row=row_num, column=6, value=float(layover_hours.quantize(Decimal('0.00')))).border = border
+            ws.cell(row=row_num, column=7, value=float(hourly_rate.quantize(Decimal('0.00')))).border = border
+            ws.cell(row=row_num, column=8, value=float(line_amount.quantize(Decimal('0.00')))).border = border
+            ws.cell(row=row_num, column=9, value=duty.tail_number or '').border = border
+            
+            # Format numbers
+            ws.cell(row=row_num, column=6).number_format = '0.00'
+            ws.cell(row=row_num, column=7).number_format = '0.00'
+            ws.cell(row=row_num, column=8).number_format = '0.00'
+            
+            row_num += 1
+    
+    # Write totals for the last crew
+    if current_crew_totals:
+        total_fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+        total_font = Font(bold=True)
+        
+        # Overall Total row
+        ws.cell(row=row_num, column=1, value='').border = border
+        ws.cell(row=row_num, column=2, value='Total').font = total_font
+        ws.cell(row=row_num, column=2).fill = total_fill
+        ws.cell(row=row_num, column=2).border = border
+        ws.cell(row=row_num, column=3, value='').border = border
+        ws.cell(row=row_num, column=4, value='').border = border
+        ws.cell(row=row_num, column=5, value='').border = border
+        ws.cell(row=row_num, column=6, value='').border = border
+        ws.cell(row=row_num, column=7, value='').border = border
+        ws.cell(row=row_num, column=8, value=float(current_crew_totals['overall'].quantize(Decimal('0.00')))).font = total_font
+        ws.cell(row=row_num, column=8).fill = total_fill
+        ws.cell(row=row_num, column=8).border = border
+        ws.cell(row=row_num, column=8).number_format = '0.00'
+        ws.cell(row=row_num, column=9, value='').border = border
+        row_num += 1
+        
+        # If flight_type is 'all', show Training and Operations totals separately
+        if flight_type == 'all':
+            # Training Total row
+            ws.cell(row=row_num, column=1, value='').border = border
+            ws.cell(row=row_num, column=2, value='Training Total').font = total_font
+            ws.cell(row=row_num, column=2).fill = total_fill
+            ws.cell(row=row_num, column=2).border = border
+            ws.cell(row=row_num, column=3, value='').border = border
+            ws.cell(row=row_num, column=4, value='').border = border
+            ws.cell(row=row_num, column=5, value='').border = border
+            ws.cell(row=row_num, column=6, value='').border = border
+            ws.cell(row=row_num, column=7, value='').border = border
+            ws.cell(row=row_num, column=8, value=float(current_crew_totals['training'].quantize(Decimal('0.00')))).font = total_font
+            ws.cell(row=row_num, column=8).fill = total_fill
+            ws.cell(row=row_num, column=8).border = border
+            ws.cell(row=row_num, column=8).number_format = '0.00'
+            ws.cell(row=row_num, column=9, value='').border = border
+            row_num += 1
+            
+            # Operations Total row
+            ws.cell(row=row_num, column=1, value='').border = border
+            ws.cell(row=row_num, column=2, value='Operations Total').font = total_font
+            ws.cell(row=row_num, column=2).fill = total_fill
+            ws.cell(row=row_num, column=2).border = border
+            ws.cell(row=row_num, column=3, value='').border = border
+            ws.cell(row=row_num, column=4, value='').border = border
+            ws.cell(row=row_num, column=5, value='').border = border
+            ws.cell(row=row_num, column=6, value='').border = border
+            ws.cell(row=row_num, column=7, value='').border = border
+            ws.cell(row=row_num, column=8, value=float(current_crew_totals['operations'].quantize(Decimal('0.00')))).font = total_font
+            ws.cell(row=row_num, column=8).fill = total_fill
+            ws.cell(row=row_num, column=8).border = border
+            ws.cell(row=row_num, column=8).number_format = '0.00'
+            ws.cell(row=row_num, column=9, value='').border = border
+            row_num += 1
+    
+    # Adjust column widths
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 8
+    ws.column_dimensions['E'].width = 8
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 12
+    ws.column_dimensions['H'].width = 15
+    ws.column_dimensions['I'].width = 12
+    
+    # Save to response
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Crew_Allowance_{flight_type.title()}_Rowwise_{filter_month.strftime('%Y-%m')}.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required(login_url='login')
+def generate_crew_allowance_excel_columnwise(request):
+    """
+    Generate Excel export in COLUMN-WISE format:
+    Crew ID | Flight 1 Date | Flight 1 No. | Flight 1 Dep | Flight 1 Arr | ... | Flight 2 Date | Flight 2 No. | ...
+    Each crew member gets one row with all flights in columns.
+    """
+    from decimal import Decimal
+    from django.db.models import Sum, Q, DecimalField, Max
+    
+    month_str = request.GET.get('month')
+    flight_type = request.GET.get('flight_type', 'all')  # all, training, operations
+    
+    if not month_str:
+        last_invoice = (
+            Invoice.objects
+            .filter(total_amount__gt=0)
+            .aggregate(max_month=Max('month'))
+        )
+        filter_month = last_invoice['max_month']
+        if not filter_month:
+            return HttpResponse("No invoices found in database.", status=404)
+    else:
+        year, mo = map(int, month_str.split('-'))
+        filter_month = date(year, mo, 1)
+    
+    # Get invoices based on flight_type filter
+    invoices = (
+        Invoice.objects
+        .filter(month=filter_month, total_amount__gt=0)
+        .select_related('crew')
+        .order_by('crew__crew_id')
+    )
+    
+    year = filter_month.year
+    month = filter_month.month
+    
+    # Apply flight_type filter if needed
+    if flight_type != 'all':
+        if flight_type == 'operations':
+            duty_filter = Q(
+                invoiceitem__duty__flight_number__startswith='WB',
+                invoiceitem__duty__duty_date__year=year,
+                invoiceitem__duty__duty_date__month=month
+            )
+        elif flight_type == 'training':
+            duty_filter = Q(
+                invoiceitem__duty__duty_date__year=year,
+                invoiceitem__duty__duty_date__month=month
+            ) & (
+                Q(invoiceitem__duty__flight_number__isnull=True) |
+                Q(invoiceitem__duty__flight_number='') |
+                ~Q(invoiceitem__duty__flight_number__startswith='WB')
+            )
+        else:
+            duty_filter = Q()
+        
+        invoices = invoices.annotate(
+            filtered_total=Sum(
+                'invoiceitem__allowance_amount',
+                filter=duty_filter,
+                output_field=DecimalField(max_digits=12, decimal_places=2)
+            )
+        ).filter(filtered_total__gt=0).distinct()
+    
+    if not invoices.exists():
+        return HttpResponse("No invoices found for the selected criteria.", status=404)
+    
+    # Find maximum number of flights per crew to determine column count
+    max_flights = 0
+    crew_duties_map = {}
+    
+    for inv in invoices:
+        invoice_items = inv.invoiceitem_set.select_related(
+            'duty__departure_airport',
+            'duty__arrival_airport',
+            'duty__arrival_airport__zone'
+        ).filter(duty__layover_time_minutes__gt=0)
+        
+        if flight_type != 'all':
+            filtered_items = []
+            for item in invoice_items:
+                duty = item.duty
+                if flight_type == 'operations':
+                    if duty.flight_number and duty.flight_number.startswith('WB'):
+                        filtered_items.append(item)
+                elif flight_type == 'training':
+                    if duty.flight_number and not duty.flight_number.startswith('WB'):
+                        filtered_items.append(item)
+            invoice_items = filtered_items
+        
+        duties_list = [item.duty for item in invoice_items]
+        crew_duties_map[inv.crew.id] = duties_list
+        max_flights = max(max_flights, len(duties_list))
+    
+    if max_flights == 0:
+        return HttpResponse("No duties found for the selected criteria.", status=404)
+    
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{flight_type.title()} Column-wise"
+    
+    # Styling
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    title_font = Font(bold=True, size=14)
+    border_side = Side(style='thin')
+    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+    
+    # Title
+    total_cols = 1 + (max_flights * 8) + 1  # Crew ID + (8 fields per flight) + Total Amount column
+    ws.merge_cells(f'A1:{get_column_letter(total_cols)}1')
+    title_cell = ws['A1']
+    title_text = f"RwandAir - Crew Allowance ({flight_type.title()}) - {filter_month.strftime('%B %Y')} - Column-wise Format"
+    title_cell.value = title_text
+    title_cell.font = title_font
+    title_cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Column headers
+    col_num = 1
+    ws.cell(row=2, column=col_num, value='Crew ID').fill = header_fill
+    ws.cell(row=2, column=col_num).font = header_font
+    ws.cell(row=2, column=col_num).border = border
+    col_num += 1
+    
+    # Headers for each flight (up to max_flights)
+    for flight_num in range(1, max_flights + 1):
+        headers = ['Date', 'Flight', 'Dep', 'Arr', 'Layover', 'Rate', 'Amount', 'Tail']
+        for header in headers:
+            ws.cell(row=2, column=col_num, value=f'F{flight_num} {header}').fill = header_fill
+            ws.cell(row=2, column=col_num).font = header_font
+            ws.cell(row=2, column=col_num).border = border
+            ws.cell(row=2, column=col_num).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            col_num += 1
+    
+    # Add Total Amount header
+    ws.cell(row=2, column=col_num, value='Total Amount').fill = header_fill
+    ws.cell(row=2, column=col_num).font = header_font
+    ws.cell(row=2, column=col_num).border = border
+    ws.cell(row=2, column=col_num).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    
+    # Data rows
+    row_num = 3
+    for inv in invoices:
+        duties_list = crew_duties_map.get(inv.crew.id, [])
+        
+        col_num = 1
+        # Crew ID
+        ws.cell(row=row_num, column=col_num, value=inv.crew.crew_id).border = border
+        col_num += 1
+        
+        # Calculate total amount for this crew
+        crew_total = Decimal('0.00')
+        
+        # Flight data in columns
+        for duty in duties_list:
+            layover_hours = Decimal(duty.layover_time_minutes) / Decimal(60)
+            
+            if duty.arrival_airport and duty.arrival_airport.zone:
+                hourly_rate = duty.arrival_airport.zone.hourly_rate
+            else:
+                hourly_rate = Decimal('0.00')
+            
+            line_amount = layover_hours * hourly_rate
+            crew_total += line_amount  # Accumulate total
+            
+            ws.cell(row=row_num, column=col_num, value=duty.duty_date).border = border
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=duty.flight_number or '').border = border
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=duty.departure_airport.iata_code if duty.departure_airport else '').border = border
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=duty.arrival_airport.iata_code if duty.arrival_airport else '').border = border
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=float(layover_hours.quantize(Decimal('0.00')))).border = border
+            ws.cell(row=row_num, column=col_num).number_format = '0.00'
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=float(hourly_rate.quantize(Decimal('0.00')))).border = border
+            ws.cell(row=row_num, column=col_num).number_format = '0.00'
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=float(line_amount.quantize(Decimal('0.00')))).border = border
+            ws.cell(row=row_num, column=col_num).number_format = '0.00'
+            col_num += 1
+            ws.cell(row=row_num, column=col_num, value=duty.tail_number or '').border = border
+            col_num += 1
+        
+        # Fill empty columns if crew has fewer flights than max (but not the Total Amount column)
+        while col_num < total_cols:
+            ws.cell(row=row_num, column=col_num, value='').border = border
+            col_num += 1
+        
+        # Write Total Amount in the last column (bold)
+        total_cell = ws.cell(row=row_num, column=col_num, value=float(crew_total.quantize(Decimal('0.00'))))
+        total_cell.font = Font(bold=True)
+        total_cell.border = border
+        total_cell.number_format = '0.00'
+        
+        row_num += 1
+    
+    # Adjust column widths
+    ws.column_dimensions['A'].width = 12
+    for col in range(2, total_cols + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 10
+    
+    # Save to response
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Crew_Allowance_{flight_type.title()}_Columnwise_{filter_month.strftime('%Y-%m')}.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required(login_url='login')

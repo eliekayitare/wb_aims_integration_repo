@@ -562,7 +562,7 @@
         <div class="search-filter-container">
           <input
             type="text"
-            placeholder="Search Crew"
+            placeholder="Search Crew, Flight No., or Departure"
             class="search-input"
             id="search-input"
           />
@@ -571,6 +571,13 @@
             <option value="month">Month</option>
           </select>
           <input type="month" id="month-picker" style="display: none" />
+          
+          <!-- Flight Type Filter -->
+          <select class="filter-select" id="flight-type-select">
+            <option value="all" {% if flight_type == 'all' %}selected{% endif %}>All Flights</option>
+            <option value="operations" {% if flight_type == 'operations' %}selected{% endif %}>Operations (WB)</option>
+            <option value="training" {% if flight_type == 'training' %}selected{% endif %}>Training (Non-WB)</option>
+          </select>
 
           <button
             type="button"
@@ -585,11 +592,31 @@
           <div style="display: flex; align-items: center; gap: 10px;">
             <select id="invoice-type-select">
               <option value="overall">Generate Overall Payslip</option>
+              <option value="training">Generate Training Payslip</option>
+              <option value="operations">Generate Operations Payslip</option>
               <option value="payment_mode">Generate Payslip by Payment Mode</option>
               <option value="by_bank">Generate Payslip by Bank</option>
               <option value="all_individual">Generate Individual Payslip</option>
               <option value="simple_csv">📄 Export CSV</option>
             </select>
+            
+            <!-- Format Selection (PDF/Excel) - Only show for payslip types -->
+            <div id="format-select-container" style="display: none; align-items: center; gap: 5px;">
+              <label for="format-select" style="font-weight: bold; white-space: nowrap;">Format:</label>
+              <select id="format-select" style="height: 38px; padding: 0 12px; border-radius: 6px; border: 2px solid #dee2e6; font-size: 14px;">
+                <option value="pdf">PDF</option>
+                <option value="excel">Excel</option>
+              </select>
+            </div>
+            
+            <!-- Layout Selection (Row-wise/Column-wise) - Only show for Excel exports -->
+            <div id="layout-select-container" style="display: none; align-items: center; gap: 5px;">
+              <label for="layout-select" style="font-weight: bold; white-space: nowrap;">Layout:</label>
+              <select id="layout-select" style="height: 38px; padding: 0 12px; border-radius: 6px; border: 2px solid #dee2e6; font-size: 14px;">
+                <option value="rowwise">Row-wise</option>
+                <option value="columnwise">Column-wise</option>
+              </select>
+            </div>
           
             {% comment %} <button type="button" class="btn-action go-button" onclick="handleGenerateInvoice()">
               Go
@@ -647,7 +674,7 @@
           <!-- "First" -->
           {% if crew_data_list.number > 1 %}
           
-           <a href="?page=1{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+           <a href="?page=1{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}{% if flight_type != 'all' %}&flight_type={{ flight_type }}{% endif %}"
             class="btn-action"
           >
             First
@@ -659,7 +686,7 @@
           <!-- "Previous" -->
           {% if crew_data_list.has_previous %}
           
-           <a href="?page={{ crew_data_list.previous_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+           <a href="?page={{ crew_data_list.previous_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}{% if flight_type != 'all' %}&flight_type={{ flight_type }}{% endif %}"
             class="btn-action"
           >
             &laquo; Prev
@@ -675,7 +702,7 @@
           <span class="current">{{ pg }}</span>
           {% else %}
           
-           <a href="?page={{ pg }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+           <a href="?page={{ pg }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}{% if flight_type != 'all' %}&flight_type={{ flight_type }}{% endif %}"
           >
             {{ pg }}
           </a>
@@ -684,7 +711,7 @@
           <!-- "Next" -->
           {% if crew_data_list.has_next %}
           
-           <a href="?page={{ crew_data_list.next_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+           <a href="?page={{ crew_data_list.next_page_number }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}{% if flight_type != 'all' %}&flight_type={{ flight_type }}{% endif %}"
             class="btn-action"
           >
             Next &raquo;
@@ -696,7 +723,7 @@
           <!-- "Last" -->
           {% if crew_data_list.number < crew_data_list.paginator.num_pages %}
           
-           <a href="?page={{ crew_data_list.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}"
+           <a href="?page={{ crew_data_list.paginator.num_pages }}{% if selected_month %}&month={{ selected_month|date:'Y-m' }}{% endif %}{% if flight_type != 'all' %}&flight_type={{ flight_type }}{% endif %}"
             class="btn-action"
           >
             Last
@@ -759,6 +786,20 @@
       <h3 id="modal-crew-details"></h3>
     </div>
     <div class="modal-body">
+      <!-- Sorting Controls -->
+      <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <label for="sort-select" style="font-weight: bold;">Sort by:</label>
+        <select id="sort-select" style="height: 38px; padding: 0 12px; border-radius: 6px; border: 2px solid #dee2e6; font-size: 14px;">
+          <option value="date">Date</option>
+          <option value="flight">Flight No.</option>
+          <option value="departure">Departure</option>
+          <option value="arrival">Arrival</option>
+        </select>
+        <button type="button" onclick="applySorting()" class="btn-action" style="height: 38px; padding: 0 15px;">
+          Sort
+        </button>
+      </div>
+      
       <table class="crew-table">
         <thead>
           <tr>
@@ -778,26 +819,47 @@
           <!-- Inserted by JavaScript -->
         </tbody>
       </table>
-      <!-- We'll place the total at the bottom -->
-      <div style="margin-top: 10px; text-align: right">
-        <strong>Total Amount: <span id="modal-total-amount">0.00</span></strong>
+      <!-- We'll place the totals at the bottom -->
+      <div style="margin-top: 10px; text-align: right; display: flex; flex-direction: column; gap: 5px;">
+        <div><strong>Training Total: $<span id="modal-training-total">0.00</span></strong></div>
+        <div><strong>Operations Total: $<span id="modal-operations-total">0.00</span></strong></div>
+        <div style="border-top: 1px solid #ddd; padding-top: 5px; margin-top: 5px;">
+          <strong>Overall Total: $<span id="modal-total-amount">0.00</span></strong>
+        </div>
       </div>
       
       <!-- New buttons for individual payslip actions -->
       <div class="modal-actions" style="margin-top: 20px; text-align: center; border-top: 1px solid #ddd; padding-top: 15px;">
-        <button 
-          type="button" 
-          class="btn-action modal-btn" 
-          onclick="printIndividualPayslip()" 
-          id="print-payslip-btn"
-          style="margin-right: 10px;"
-        >
-          📄 Print Payslip
-        </button>
-        <button 
-          type="button" 
-          class="btn-action modal-btn email-btn" 
-          onclick="emailIndividualPayslip()" 
+        <div style="margin-bottom: 15px;">
+          <label for="individual-format-select" style="font-weight: bold; margin-right: 10px;">Format:</label>
+          <select id="individual-format-select" style="height: 38px; padding: 0 12px; border-radius: 6px; border: 2px solid #dee2e6; font-size: 14px; margin-right: 10px;">
+            <option value="pdf">PDF</option>
+            <option value="excel">Excel</option>
+          </select>
+          <button 
+            type="button" 
+            class="btn-action modal-btn" 
+            onclick="generateIndividualPayslip()" 
+            id="generate-individual-payslip-btn"
+            style="margin-right: 10px;"
+          >
+            📄 Generate Payslip
+          </button>
+        </div>
+        <div>
+          <button 
+            type="button" 
+            class="btn-action modal-btn" 
+            onclick="printIndividualPayslip()" 
+            id="print-payslip-btn"
+            style="margin-right: 10px;"
+          >
+            🖨️ Print Payslip
+          </button>
+          <button 
+            type="button" 
+            class="btn-action modal-btn email-btn" 
+            onclick="emailIndividualPayslip()" 
           id="email-payslip-btn"
         >
           📧 Email to Crew
@@ -876,6 +938,42 @@
   });
 
   // =========================================
+  // 2) Format Selector Visibility
+  // =========================================
+  const formatSelect = document.getElementById("format-select");
+  const layoutSelect = document.getElementById("layout-select");
+  const formatSelectContainer = document.getElementById("format-select-container");
+  const layoutSelectContainer = document.getElementById("layout-select-container");
+  
+  // Function to update layout selector visibility
+  function updateLayoutSelectorVisibility() {
+    if (formatSelect.value === "excel" && formatSelectContainer.style.display !== "none") {
+      layoutSelectContainer.style.display = "flex";
+    } else {
+      layoutSelectContainer.style.display = "none";
+    }
+  }
+  
+  // Handle format change to show/hide layout selector
+  formatSelect.addEventListener("change", function() {
+    updateLayoutSelectorVisibility();
+  });
+  
+  // Handle invoice type change to show/hide format selector
+  document.getElementById("invoice-type-select").addEventListener("change", function () {
+    // Show format selector only for payslip generation options
+    const payslipOptions = ["overall", "training", "operations"];
+    if (payslipOptions.includes(this.value)) {
+      formatSelectContainer.style.display = "flex";
+      // Update layout selector visibility based on current format value
+      updateLayoutSelectorVisibility();
+    } else {
+      formatSelectContainer.style.display = "none";
+      layoutSelectContainer.style.display = "none";
+    }
+  });
+
+  // =========================================
   // 2) Search & Filter
   // =========================================
 // Debounce timer
@@ -890,6 +988,11 @@ document.getElementById("filter-select").addEventListener("change", function () 
     monthPicker.value = "";
     searchCrewAllowances(); // Immediate search when clearing month filter
   }
+});
+
+// Flight Type Filter Change Handler
+document.getElementById("flight-type-select").addEventListener("change", function () {
+  searchCrewAllowances();
 });
 
 // Add debounced search for text input
@@ -911,6 +1014,7 @@ document.getElementById("month-picker").addEventListener("change", searchCrewAll
 function searchCrewAllowances() {
   const query = document.getElementById("search-input").value;
   const selectedMonth = document.getElementById("month-picker").value;
+  const flightType = document.getElementById("flight-type-select").value;
   
   // Build URL parameters correctly
   const params = new URLSearchParams();
@@ -923,6 +1027,11 @@ function searchCrewAllowances() {
   // Add month parameter
   if (selectedMonth) {
     params.append('month', selectedMonth);
+  }
+  
+  // Add flight_type parameter (always include, default is 'all')
+  if (flightType && flightType !== 'all') {
+    params.append('flight_type', flightType);
   }
   
   // Construct the URL
@@ -938,6 +1047,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const urlParams = new URLSearchParams(window.location.search);
   const currentSearch = urlParams.get('search');
   const currentMonth = urlParams.get('month');
+  const currentFlightType = urlParams.get('flight_type') || 'all';
   
   if (currentSearch) {
     document.getElementById('search-input').value = currentSearch;
@@ -948,6 +1058,23 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('month-picker').style.display = 'inline-block';
     document.getElementById('filter-select').value = 'month';
   }
+  
+  // Set flight type filter
+  document.getElementById('flight-type-select').value = currentFlightType;
+  
+  // Initialize format selector visibility based on current payslip type
+  const invoiceTypeSelect = document.getElementById("invoice-type-select");
+  const formatSelectContainer = document.getElementById("format-select-container");
+  const layoutSelectContainer = document.getElementById("layout-select-container");
+  const formatSelect = document.getElementById("format-select");
+  const payslipOptions = ["overall", "training", "operations"];
+  if (payslipOptions.includes(invoiceTypeSelect.value)) {
+    formatSelectContainer.style.display = "flex";
+    // Check if Excel is selected and show layout selector
+    if (formatSelect.value === "excel") {
+      layoutSelectContainer.style.display = "flex";
+    }
+  }
 });
 
 
@@ -955,6 +1082,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // 3) Crew Duties Modal
   // =========================================
   function viewCrewDetails(crewId, year, month) {
+    // Store the current crew details for use in other functions
+    currentCrewId = crewId;
+    currentCrewYear = year;
+    currentCrewMonth = month;
+    
     const detailUrl = `/aims/c-all/details/${crewId}/${year}/${month}/`;
 
     fetch(detailUrl, {
@@ -972,44 +1104,41 @@ document.addEventListener('DOMContentLoaded', function() {
       tbody.innerHTML = "";
 
       if (data.duties && data.duties.length > 0) {
-        data.duties.forEach(d => {
-          const row = document.createElement("tr");
-          /*
-             We expect these fields from the JSON:
-               - duty_date
-               - flight_number
-               - departure
-               - arrival
-               - layover_hours    (string)
-               - hourly_rate      (string)
-               - line_amount      (string)
-               - tail_number
-          */
-          row.innerHTML = `
-            <td>${d.duty_date}</td>
-            <td>${d.flight_number}</td>
-            <td>${d.departure}</td>
-            <td>${d.arrival}</td>
-            <td>${d.layover_hours}</td>
-            <td>${d.hourly_rate}</td>
-            <td>${d.line_amount}</td>
-            <td>${d.tail_number}</td>
-          `;
-          tbody.appendChild(row);
-        });
+        // Store duties data for sorting
+        currentCrewDuties = data.duties;
+        
+        // Render duties
+        renderDutiesTable(data.duties);
 
-        // Show final total in the bottom "Total Amount" area
-        if (data.total_amount) {
+        // Show separate totals for Training, Operations, and Overall
+        if (data.training_total !== undefined) {
+          document.getElementById("modal-training-total").textContent = data.training_total || "0.00";
+        } else {
+          document.getElementById("modal-training-total").textContent = "0.00";
+        }
+        
+        if (data.operations_total !== undefined) {
+          document.getElementById("modal-operations-total").textContent = data.operations_total || "0.00";
+        } else {
+          document.getElementById("modal-operations-total").textContent = "0.00";
+        }
+        
+        if (data.overall_total !== undefined) {
+          document.getElementById("modal-total-amount").textContent = data.overall_total || data.total_amount || "0.00";
+        } else if (data.total_amount) {
           document.getElementById("modal-total-amount").textContent = data.total_amount;
         } else {
           document.getElementById("modal-total-amount").textContent = "0.00";
         }
       } else {
+        currentCrewDuties = [];
         tbody.innerHTML = `
           <tr>
             <td colspan="8" style="text-align:center;">No duties found.</td>
           </tr>
         `;
+        document.getElementById("modal-training-total").textContent = "0.00";
+        document.getElementById("modal-operations-total").textContent = "0.00";
         document.getElementById("modal-total-amount").textContent = "0.00";
       }
       document.getElementById("crewModal").style.display = "block";
@@ -1230,22 +1359,109 @@ function handleGenerateInvoice() {
     // Set loading state using enhanced function
     setButtonLoading(true);
     
+    // Get format selection (PDF or Excel)
+    const formatSelect = document.getElementById("format-select");
+    const layoutSelect = document.getElementById("layout-select");
+    const formatSelectContainer = document.getElementById("format-select-container");
+    const layoutSelectContainer = document.getElementById("layout-select-container");
+    const format = formatSelectContainer.style.display !== "none" ? formatSelect.value : "pdf";
+    const layout = layoutSelectContainer.style.display !== "none" ? layoutSelect.value : "rowwise";
+    
     if (typeSelect.value === "overall") {
-        let pdfUrl = "/aims/generate_overall_payslip/";
-        if (monthParam) {
-            pdfUrl += `?month=${monthParam}`;
+        let url;
+        if (format === "excel") {
+            // Use layout selection for Excel
+            if (layout === "rowwise") {
+                url = "/aims/generate_crew_allowance_excel_rowwise/";
+            } else {
+                url = "/aims/generate_crew_allowance_excel_columnwise/";
+            }
+            if (monthParam) {
+                url += `?month=${monthParam}&flight_type=all`;
+            } else {
+                url += `?flight_type=all`;
+            }
+        } else {
+            url = "/aims/generate_overall_payslip/";
+            if (monthParam) {
+                url += `?month=${monthParam}`;
+            }
         }
         
-        showToast("Generating overall payslip, please wait...", "info");
+        showToast(`Generating overall payslip (${format.toUpperCase()}${format === "excel" ? ` - ${layout}` : ""}), please wait...`, "info");
         
         // For direct downloads, use a longer timeout to allow for generation
         setTimeout(() => {
             setButtonLoading(false);
             setButtonSuccess();
-            showToast("Payslip should be downloading shortly!", "success");
+            showToast(`Payslip (${format.toUpperCase()}) should be downloading shortly!`, "success");
         }, 5000);
         
-        window.location.href = pdfUrl;
+        window.location.href = url;
+
+    } else if (typeSelect.value === "training") {
+        let url;
+        if (format === "excel") {
+            // Use layout selection for Excel
+            if (layout === "rowwise") {
+                url = "/aims/generate_crew_allowance_excel_rowwise/";
+            } else {
+                url = "/aims/generate_crew_allowance_excel_columnwise/";
+            }
+            if (monthParam) {
+                url += `?month=${monthParam}&flight_type=training`;
+            } else {
+                url += `?flight_type=training`;
+            }
+        } else {
+            url = "/aims/generate_training_payslip/";
+            if (monthParam) {
+                url += `?month=${monthParam}`;
+            }
+        }
+        
+        showToast(`Generating training payslip (${format.toUpperCase()}${format === "excel" ? ` - ${layout}` : ""}), please wait...`, "info");
+        
+        // For direct downloads, use a longer timeout to allow for generation
+        setTimeout(() => {
+            setButtonLoading(false);
+            setButtonSuccess();
+            showToast(`Training payslip (${format.toUpperCase()}) should be downloading shortly!`, "success");
+        }, 5000);
+        
+        window.location.href = url;
+
+    } else if (typeSelect.value === "operations") {
+        let url;
+        if (format === "excel") {
+            // Use layout selection for Excel
+            if (layout === "rowwise") {
+                url = "/aims/generate_crew_allowance_excel_rowwise/";
+            } else {
+                url = "/aims/generate_crew_allowance_excel_columnwise/";
+            }
+            if (monthParam) {
+                url += `?month=${monthParam}&flight_type=operations`;
+            } else {
+                url += `?flight_type=operations`;
+            }
+        } else {
+            url = "/aims/generate_operations_payslip/";
+            if (monthParam) {
+                url += `?month=${monthParam}`;
+            }
+        }
+        
+        showToast(`Generating operations payslip (${format.toUpperCase()}${format === "excel" ? ` - ${layout}` : ""}), please wait...`, "info");
+        
+        // For direct downloads, use a longer timeout to allow for generation
+        setTimeout(() => {
+            setButtonLoading(false);
+            setButtonSuccess();
+            showToast(`Operations payslip (${format.toUpperCase()}) should be downloading shortly!`, "success");
+        }, 5000);
+        
+        window.location.href = url;
 
     } else if (typeSelect.value === "payment_mode") {
         let combinedUrl = "/aims/generate_combined_payslips_email/";
@@ -1498,6 +1714,7 @@ function setButtonError() {
 let currentCrewId = null;
 let currentCrewYear = null;
 let currentCrewMonth = null;
+let currentCrewDuties = []; // Store duties data for sorting
 
 // Update the viewCrewDetails function to store crew info
 function viewCrewDetails(crewId, year, month) {
@@ -1523,23 +1740,28 @@ function viewCrewDetails(crewId, year, month) {
       tbody.innerHTML = "";
 
       if (data.duties && data.duties.length > 0) {
-        data.duties.forEach(d => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${d.duty_date}</td>
-            <td>${d.flight_number}</td>
-            <td>${d.departure}</td>
-            <td>${d.arrival}</td>
-            <td>${d.layover_hours}</td>
-            <td>${d.hourly_rate}</td>
-            <td>${d.line_amount}</td>
-            <td>${d.tail_number}</td>
-          `;
-          tbody.appendChild(row);
-        });
+        // Store duties data for sorting
+        currentCrewDuties = data.duties;
+        
+        // Render duties
+        renderDutiesTable(data.duties);
 
-        // Show final total in the bottom "Total Amount" area
-        if (data.total_amount) {
+        // Show separate totals for Training, Operations, and Overall
+        if (data.training_total !== undefined) {
+          document.getElementById("modal-training-total").textContent = data.training_total || "0.00";
+        } else {
+          document.getElementById("modal-training-total").textContent = "0.00";
+        }
+        
+        if (data.operations_total !== undefined) {
+          document.getElementById("modal-operations-total").textContent = data.operations_total || "0.00";
+        } else {
+          document.getElementById("modal-operations-total").textContent = "0.00";
+        }
+        
+        if (data.overall_total !== undefined) {
+          document.getElementById("modal-total-amount").textContent = data.overall_total || data.total_amount || "0.00";
+        } else if (data.total_amount) {
           document.getElementById("modal-total-amount").textContent = data.total_amount;
         } else {
           document.getElementById("modal-total-amount").textContent = "0.00";
@@ -1550,6 +1772,8 @@ function viewCrewDetails(crewId, year, month) {
             <td colspan="8" style="text-align:center;">No duties found.</td>
           </tr>
         `;
+        document.getElementById("modal-training-total").textContent = "0.00";
+        document.getElementById("modal-operations-total").textContent = "0.00";
         document.getElementById("modal-total-amount").textContent = "0.00";
       }
       document.getElementById("crewModal").style.display = "block";
@@ -1629,6 +1853,113 @@ function emailIndividualPayslip() {
         emailBtn.classList.remove("loading");
         emailBtn.disabled = false;
     });
+}
+
+// Function to render duties table
+function renderDutiesTable(duties) {
+    const tbody = document.getElementById("crew-duties-body");
+    tbody.innerHTML = "";
+    
+    duties.forEach(d => {
+        const row = document.createElement("tr");
+        // Add background color based on flight type
+        let rowClass = '';
+        if (d.is_operations) {
+            rowClass = 'style="background-color: #e3f2fd;"'; // Light blue for operations
+        } else if (d.is_training) {
+            rowClass = 'style="background-color: #fff3e0;"'; // Light orange for training
+        }
+        
+        row.innerHTML = `
+            <td ${rowClass}>${d.duty_date}</td>
+            <td ${rowClass}>${d.flight_number}</td>
+            <td ${rowClass}>${d.departure || '-'}</td>
+            <td ${rowClass}>${d.arrival || '-'}</td>
+            <td ${rowClass}>${d.layover_hours}</td>
+            <td ${rowClass}>${d.hourly_rate}</td>
+            <td ${rowClass}>${d.line_amount}</td>
+            <td ${rowClass}>${d.tail_number || '-'}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Function to apply sorting
+function applySorting() {
+    if (!currentCrewDuties || currentCrewDuties.length === 0) {
+        showToast("No data to sort", "info");
+        return;
+    }
+    
+    const sortBy = document.getElementById("sort-select").value;
+    let sortedDuties = [...currentCrewDuties];
+    
+    switch(sortBy) {
+        case 'date':
+            sortedDuties.sort((a, b) => {
+                const dateA = new Date(a.duty_date);
+                const dateB = new Date(b.duty_date);
+                return dateA - dateB;
+            });
+            break;
+        case 'flight':
+            sortedDuties.sort((a, b) => {
+                const flightA = (a.flight_number || '').toUpperCase();
+                const flightB = (b.flight_number || '').toUpperCase();
+                return flightA.localeCompare(flightB);
+            });
+            break;
+        case 'departure':
+            sortedDuties.sort((a, b) => {
+                const depA = (a.departure || '').toUpperCase();
+                const depB = (b.departure || '').toUpperCase();
+                return depA.localeCompare(depB);
+            });
+            break;
+        case 'arrival':
+            sortedDuties.sort((a, b) => {
+                const arrA = (a.arrival || '').toUpperCase();
+                const arrB = (b.arrival || '').toUpperCase();
+                return arrA.localeCompare(arrB);
+            });
+            break;
+    }
+    
+    renderDutiesTable(sortedDuties);
+    showToast(`Sorted by ${sortBy}`, "success");
+}
+
+// Function to generate individual payslip (PDF or Excel)
+function generateIndividualPayslip() {
+    if (!currentCrewId || !currentCrewYear || !currentCrewMonth) {
+        showToast("Error: No crew member selected", "error");
+        return;
+    }
+    
+    const formatSelect = document.getElementById("individual-format-select");
+    const format = formatSelect.value;
+    const generateBtn = document.getElementById("generate-individual-payslip-btn");
+    
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Generating...";
+    
+    let url;
+    if (format === 'excel') {
+        url = `/aims/generate_individual_payslip_excel/${currentCrewId}/${currentCrewYear}/${currentCrewMonth}/`;
+    } else {
+        url = `/aims/generate_individual_payslip/${currentCrewId}/${currentCrewYear}/${currentCrewMonth}/`;
+    }
+    
+    showToast(`Generating ${format.toUpperCase()} payslip, please wait...`, "info");
+    
+    // Open in new window for download
+    window.location.href = url;
+    
+    setTimeout(() => {
+        generateBtn.disabled = false;
+        generateBtn.textContent = "📄 Generate Payslip";
+        showToast(`${format.toUpperCase()} payslip should be downloading shortly!`, "success");
+    }, 2000);
 }
 
   function sortTable(order) {
