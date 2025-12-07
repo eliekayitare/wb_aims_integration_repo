@@ -78,7 +78,7 @@ LOGGING = {
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['10.0.0.120', 'localhost', '127.0.0.1','wbhub.rwandair.com']
 
@@ -433,17 +433,17 @@ CELERY_BEAT_SCHEDULE = {
     },
 
     # Get Crew That left WB, runs every month
-    'backup-crew-documents-every-month': {
+    'fetch-crew-who-left-every-month': {
         'task': 'aimsintegration.tasks.fetch_crew_who_left',
         # 'schedule': crontab(day_of_month='1', hour=0, minute=10),  # Every 90 minutes,
-        'schedule': crontab(hour=11, minute=34),
+        'schedule': crontab(hour=17, minute=32),
         # 'options': {'run_immediately': True}
     },
 
     # Archive Crew Documents for crew That left WB 24 months ago, runs every day
-    'backup-crew-documents-every-month': {
+    'archive_crew_who_left-every-day': {
         'task': 'aimsintegration.tasks.archive_crew_who_left',
-        'schedule': crontab(hour=11, minute=37),
+        'schedule': crontab(hour=17, minute=37),
         # 'options': {'run_immediately': True}
     },
 

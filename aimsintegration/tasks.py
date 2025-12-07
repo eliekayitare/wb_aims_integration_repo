@@ -2793,6 +2793,7 @@ from .models import CrewDocumentsArchive
 def fetch_crew_who_left():
     all_crew_who_left = CrewDocumentsArchive.objects.all()
     crew_ids = [crew.wb_number for crew in all_crew_who_left]
+    logger.info(" ============== Fetching Crew who left ====================")
 
     # If There are no records in the database, fetch all crew who left
     if len(crew_ids) == 0:

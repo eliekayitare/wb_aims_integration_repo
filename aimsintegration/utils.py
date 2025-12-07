@@ -3370,10 +3370,10 @@ def archive_crew_documents_by_wb(wb_number, wrapper_folder = None):
     try:
         source_root = os.path.join(
             settings.BASE_DIR, 
-            "media", 
+            "media",
             "crew_documents", 
-            "monthly",
-            "02DEC2025"
+            "weekly",
+            "Crew Documents"
         )
 
         if not os.path.exists(source_root):
