@@ -6648,6 +6648,7 @@ def format_time_since(backup):
     return "Just now"
 
 
+@login_required(login_url='/')
 def backup_view(request):
     # Path to your static folder's subdirectory
     backup_type = request.GET.get("type", "monthly").lower().strip()
@@ -6696,6 +6697,7 @@ def backup_view(request):
     }
     return render(request, 'aimsintegration/backup.html', context)
 
+@login_required(login_url='/')
 def backup_folder_view(request, folder_name):
     # Path to your static folder's subdirectory
     backup_type = request.GET.get("type", "").lower().strip()
@@ -6785,6 +6787,7 @@ def preview_file(request, file_path):
 from io import BytesIO
 import zipfile
 
+@login_required(login_url='/')
 def download_folder_zip(request, folder_name):
     """Download all files in a folder as a ZIP file (or only searched files if q parameter exists)"""
     backup_type = request.GET.get("type", "").lower().strip()
@@ -6854,6 +6857,7 @@ def download_folder_zip(request, folder_name):
     
     return response
 
+@login_required(login_url='/')
 def download_one_file(request, file_path):
     """Download a single file"""
     full_path = os.path.join(settings.BASE_DIR, file_path)
@@ -6874,6 +6878,7 @@ from django.http import JsonResponse, Http404
 from django.conf import settings
 
 
+@login_required(login_url='/')
 def archive_crew_documents_by_wb(request, wb_number):
     """
     Archive crew documents that match a given wb_number.
@@ -6935,6 +6940,7 @@ def archive_crew_documents_by_wb(request, wb_number):
         "count": len(copied_files),
     })
 
+@login_required(login_url='/')
 def archive_view(request):
     left_crew_members = []
 
@@ -6982,6 +6988,7 @@ def archive_view(request):
     }
     return render(request, 'aimsintegration/archive.html', context)
 
+@login_required(login_url='/')
 def archive_folder_view(request):
     folder_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, 'archive')
     files=[]
@@ -7003,6 +7010,7 @@ def archive_folder_view(request):
     }
     return render(request, 'aimsintegration/archives_view.html', context)
 
+@login_required(login_url='/')
 def archive_single_folder_view(request, folder_name):
     folders = folder_name.split("&&")
     folder_path = os.path.join(settings.BACKUP_CREW_DOCUMENTS_PATH, 'archive', *folders)
