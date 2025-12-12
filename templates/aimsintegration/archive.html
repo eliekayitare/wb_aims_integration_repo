@@ -340,7 +340,7 @@
 
   <!-- First page -->
   {% if page > 1 %}
-    <a href="?page=1{% if query %}&query={{ query }}{% endif %}"
+    <a href="?page=1{% if query %}&query={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
        style="text-decoration:none; color:#00529b; font-weight:bold;">
       « First
     </a>
@@ -350,7 +350,7 @@
 
   <!-- Previous -->
   {% if page > 1 %}
-    <a href="?page={{ page|add:"-1" }}{% if query %}&query={{ query }}{% endif %}"
+    <a href="?page={{ page|add:"-1" }}{% if query %}&query={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
        style="text-decoration:none; color:#00529b; font-weight:bold;">
       ‹ Prev
     </a>
@@ -363,7 +363,7 @@
 
   <!-- Next -->
   {% if page < pages %}
-    <a href="?page={{ page|add:"1" }}{% if query %}&query={{ query }}{% endif %}"
+    <a href="?page={{ page|add:"1" }}{% if query %}&query={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
        style="text-decoration:none; color:#00529b; font-weight:bold;">
       Next ›
     </a>
@@ -373,7 +373,7 @@
 
   <!-- Last page -->
   {% if page < pages %}
-    <a href="?page={{ pages }}{% if query %}&query={{ query }}{% endif %}"
+    <a href="?page={{ pages }}{% if query %}&query={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
        style="text-decoration:none; color:#00529b; font-weight:bold;">
       Last »
     </a>

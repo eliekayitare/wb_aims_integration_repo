@@ -329,7 +329,7 @@
         <div style="width: 100%; margin-right: 30px; height: 35px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
            {% include 'components/search_input.html' with input_id="backupSearch" handler_function="searchBackupFiles()" value=q placeholder="Search files..." %}
          </div>
-         <button onclick="downloadBackupFiles()" class="download-btn">
+         <button title="Download" onclick="downloadBackupFiles()" class="download-btn">
            <img style="height: 15px; width: 15px;" src="{% static 'icons/download.svg' %}" alt="Download Icon">
          </button>
         <img src="{% static 'icons/rows.svg' %}" alt="List View" id="list-view" class="icon list-icon active">
