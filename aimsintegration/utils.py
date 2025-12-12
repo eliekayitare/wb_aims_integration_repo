@@ -3266,7 +3266,7 @@ def send_backup_complete_email(backup, type, size):
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
                 settings.FIRST_EMAIL_RECEIVER,
-                settings.THIRD_EMAIL_RECEIVER,
+                settings.FOURTH_EMAIL_RECEIVER,
                 settings.FIFTH_EMAIL_RECEIVER,
             ],
             fail_silently=False,
@@ -3302,7 +3302,6 @@ def send_backup_failed_email(backup, type):
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[
                 settings.FIRST_EMAIL_RECEIVER,
-                settings.THIRD_EMAIL_RECEIVER,
                 settings.FIFTH_EMAIL_RECEIVER,
             ],
             fail_silently=False,
@@ -3449,7 +3448,7 @@ def send_archive_complete_email(archive):
         # Plain text version (fallback)
         text_content = (
             f"Dear Team,\n\n"
-            f"Crew Documents for {archive.crew_name} who left was archived successfully.\n\n"
+            f"Crew Documents for {archive.crew_name} were archived successfully.\n\n"
         )
         
         # HTML version with table
@@ -3502,7 +3501,7 @@ def send_archive_complete_email(archive):
             <div class="container">
                 <p>Dear Team,</p>
                 
-                <p>Crew Documents for {archive.crew_name} who left were archived successfully</p>
+                <p>Crew Documents for {archive.crew_name} were archived successfully</p>
                 
                 <table>
                     <thead>
@@ -3521,7 +3520,7 @@ def send_archive_complete_email(archive):
                             <td>{archive.date_of_leaving}</td>
                             <td>{archive.archive_date}</td>
                             <td>
-                                <a href="https://wbhub.rwandair.com/aims/archives/{archive.wb_number}" class="link">Soft copy link</a>
+                                <a href="https://wbhub.rwandair.com/aims/archives/{archive.wb_number}" class="link">Link</a>
                             </td>
                         </tr>
                     </tbody>
@@ -3544,8 +3543,9 @@ def send_archive_complete_email(archive):
             from_email=settings.EMAIL_HOST_USER,
             to=[
                 settings.FIRST_EMAIL_RECEIVER,
-                settings.THIRD_EMAIL_RECEIVER,
+                settings.FOURTH_EMAIL_RECEIVER,
                 settings.FIFTH_EMAIL_RECEIVER,
+                settings.CORPORATE_LIBRARY_EMAIL
             ]
         )
         
